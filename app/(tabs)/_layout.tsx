@@ -1,45 +1,120 @@
-import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
-
-import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { Tabs, useRouter } from 'expo-router';
+import { Pressable, Platform } from 'react-native';
+import { colors } from '@/constants/colors';
+import { 
+  Home, 
+  QrCode, 
+  Newspaper, 
+  Calendar, 
+  Award,
+  User,
+  Store
+} from 'lucide-react-native';
+import { NotificationProvider } from "@/context/notification-context"
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+  const router = useRouter();
+  
+  const navigateToProfile = () => {
+    router.push('../user_profile');
+  };
+  
   return (
+    <NotificationProvider>
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
-          },
-          default: {},
-        }),
-      }}>
+        headerTransparent: true,
+        headerTitleAlign: "center",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          ...Platform.select({
+            ios: {
+              height: 85,
+            },
+            android: {
+              height: 65,
+            },
+            }),
+        },
+        headerStyle: {
+          backgroundColor: colors.card,
+          elevation: 3,
+          shadowColor: "black",
+          shadowOffset: { width: 0, height: 2 },
+          ...Platform.select({
+            ios: {
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              height: 100,
+            },
+            android: {
+              elevation: 3,
+            },
+          }),
+        },
+        headerTitleStyle: {
+          color: colors.text,
+          fontWeight: '600',
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          paddingTop: 3,
+           ...Platform.select({
+              ios: {
+              marginTop: 4,
+              }
+              }),
+        },
+        headerRight: () => (
+          <Pressable 
+            onPress={navigateToProfile}
+            style={{ marginRight: 16 }}
+          >
+            <User size={24} color={colors.primary} />
+          </Pressable>
+        ),
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="qr-scanner"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'QR Code',
+          tabBarIcon: ({ color, size }) => <QrCode size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="news"
+        options={{
+          title: 'News',
+          tabBarIcon: ({ color, size }) => <Newspaper size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: 'Calendar',
+          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="rewards"
+        options={{
+          title: 'Team Store',
+          tabBarIcon: ({ color, size }) => <Store size={size} color={color} />,
         }}
       />
     </Tabs>
+    </NotificationProvider>
   );
 }
