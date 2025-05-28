@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    paddingTop: Platform.OS === "ios" ? 0 : 74, // Adjust for Android status bar
   },
   backgroundImage: {
     position: "absolute",
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
         top: -10,
       },
       android: {
-        top: 30,
+        top: -35,
       },
     }),
   },

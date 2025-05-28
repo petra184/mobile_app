@@ -164,7 +164,7 @@ export default function SignupScreen() {
             <TouchableOpacity onPress={goHome} style={styles.backButton}>
                <Entypo name="chevron-left" size={24} color="black" />
             </TouchableOpacity>
-            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.title}>Create an Account</Text>
             <Text style={styles.subtitle}>Sign up to start earning rewards at campus events</Text>
           </View>
           <ScrollView contentContainerStyle={styles.scrollContainer}>

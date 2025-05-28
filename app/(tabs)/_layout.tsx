@@ -29,7 +29,7 @@ export default function TabLayout() {
           borderTopColor: colors.border,
           ...Platform.select({
             ios: {
-              height: 85,
+              height: 80,
             },
             android: {
               height: 65,
@@ -83,7 +83,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="qr-scanner"
+        name="qr_code"
         options={{
           title: 'QR Code',
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="qrcode-scan" size={24} color={color} />,
@@ -104,7 +104,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="rewards"
+        name="store"
         options={{
           title: 'Team Store',
           tabBarIcon: ({ color, size }) => <MaterialIcons name="storefront" size={24} color={color} />,
