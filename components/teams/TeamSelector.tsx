@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { View, Text, StyleSheet, FlatList, Pressable, Image } from "react-native"
 import type { Team } from "@/app/actions/teams"
 import { colors } from "@/constants/colors"
-import { useUserStore } from "@/store/userStore"
+import { useUserStore } from '@/hooks/userStore';
 import { Heart } from "lucide-react-native"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue } from "react-native-reanimated"
 

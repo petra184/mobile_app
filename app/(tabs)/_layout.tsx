@@ -2,15 +2,11 @@ import React from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Pressable, Platform } from 'react-native';
 import { colors } from '@/constants/colors';
-import { 
-  Home, 
-  QrCode, 
-  Newspaper, 
-  Calendar, 
-  Award,
-  User,
-  Store
-} from 'lucide-react-native';
+import AntDesign from '@expo/vector-icons/AntDesign';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'; 
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Feather from '@expo/vector-icons/Feather';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { NotificationProvider } from "@/context/notification-context"
 
 export default function TabLayout() {
@@ -74,7 +70,7 @@ export default function TabLayout() {
             onPress={navigateToProfile}
             style={{ marginRight: 16 }}
           >
-            <User size={24} color={colors.primary} />
+            <Feather name="user" size={24} color={colors.primary} />
           </Pressable>
         ),
       }}
@@ -83,35 +79,35 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <AntDesign name="home" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="qr-scanner"
         options={{
           title: 'QR Code',
-          tabBarIcon: ({ color, size }) => <QrCode size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="qrcode-scan" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="news"
         options={{
           title: 'News',
-          tabBarIcon: ({ color, size }) => <Newspaper size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="newspaper-outline" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendar',
-          tabBarIcon: ({ color, size }) => <Calendar size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <AntDesign name="calendar" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
         name="rewards"
         options={{
           title: 'Team Store',
-          tabBarIcon: ({ color, size }) => <Store size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <MaterialIcons name="storefront" size={24} color={color} />,
         }}
       />
     </Tabs>

@@ -1,9 +1,19 @@
 import { Stack, useRouter } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
-import { NotificationProvider } from "@/context/notification-context"; // Adjust path as needed
+import { NotificationProvider } from "@/context/notification-context";
+import { useUserStore } from "@/hooks/userStore";
+import { useEffect } from "react";
+
 
 function RootLayoutNav() {
     const router = useRouter();
+    const { userId, isUserLoggedIn, initializeUser } = useUserStore();
+    
+    useEffect(() => {
+      if (userId && isUserLoggedIn()) {
+        initializeUser(userId);
+      }
+    }, [userId]);
+
     return (
       <Stack>
             <Stack.Screen 

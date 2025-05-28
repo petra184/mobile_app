@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef } f
 import { View, Text, StyleSheet, Animated, Pressable, Dimensions } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
-import { CheckCircle, AlertCircle, Info, X, Bell, AlertTriangle } from "lucide-react-native"
+import Feather from '@expo/vector-icons/Feather';
 
 // Types
 export type NotificationType = "success" | "error" | "warning" | "info" | "default"
@@ -127,15 +127,15 @@ const ToastItem: React.FC<{
   const getIcon = () => {
     switch (notification.type) {
       case "success":
-        return <CheckCircle size={20} color={colors.success || "#10B981"} />
+        return <Feather name="check-circle" size={20} color={colors.success || "#10B981"} />
       case "error":
-        return <AlertCircle size={20} color={colors.error || "#EF4444"} />
+        return <Feather name="alert-circle" size={20} color={colors.error || "#EF4444"} />
       case "warning":
-        return <AlertTriangle size={20} color={colors.warning || "#F59E0B"} />
+        return <Feather name="alert-triangle" size={20} color={colors.error || "#EF4444"} />
       case "info":
-        return <Info size={20} color={colors.info || "#3B82F6"} />
+        return <Feather name="info" size={20} color={colors.info || "#3B82F6"} />
       default:
-        return <Bell size={20} color={colors.primary} />
+        return <Feather name="bell" size={20} color={colors.primary} />
     }
   }
 
@@ -196,7 +196,7 @@ const ToastItem: React.FC<{
           onPress={handleDismiss}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <X size={18} color={colors.textSecondary} />
+          <Feather name="x" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
 

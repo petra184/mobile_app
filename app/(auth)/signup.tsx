@@ -19,7 +19,7 @@ import { useRouter } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
 import { signUpWithEmail, upsertProfile } from "@/app/actions/main_actions"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { ChevronLeft } from "lucide-react-native"
+import Entypo from '@expo/vector-icons/Entypo';
 import { useNotifications } from "@/context/notification-context"
 import { colors } from "@/constants/colors"
 
@@ -162,7 +162,7 @@ export default function SignupScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoid}>
           <View style={styles.header}>
             <TouchableOpacity onPress={goHome} style={styles.backButton}>
-              <ChevronLeft color="black"/>
+               <Entypo name="chevron-left" size={24} color="black" />
             </TouchableOpacity>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>Sign up to start earning rewards at campus events</Text>

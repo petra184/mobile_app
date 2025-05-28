@@ -17,53 +17,58 @@ import {
 } from "react-native"
 import { useRouter } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
-import { ChevronLeft } from "lucide-react-native"
+import Entypo from '@expo/vector-icons/Entypo';
 import { signInWithEmailOrUsername } from "@/app/actions/main_actions"
 import { useNotifications } from "@/context/notification-context"
-
+import { useUserStore } from "@/hooks/userStore"
+import { colors } from "@/constants/colors"
 // Define the main color from the logo
-const MAIN_COLOR = "#035e32"
 
 export default function LoginScreen() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [identifier, setIdentifier] = useState("")
-  const [password, setPassword] = useState("")
+    const router = useRouter()
+    const [loading, setLoading] = useState(false)
+    const [showPassword, setShowPassword] = useState(false)
+    const [identifier, setIdentifier] = useState("")
+    const [password, setPassword] = useState("")
+    
+    // Initialize notifications and user store
+    const { showSuccess, showError, showWarning } = useNotifications()
+    const { setUser } = useUserStore()
   
-  // Initialize notifications
-  const { showSuccess, showError, showWarning } = useNotifications()
-
-  const goHome = () => {
-    router.push("/")
-  }
-
-  async function handleLogin() {
-    if (!identifier || !password) {
-      showWarning("Missing Fields", "Please enter both email/username and password")
-      return
+    const goHome = () => {
+      router.push("/")
     }
-
-    setLoading(true)
-    try {
-      const { success, message, user } = await signInWithEmailOrUsername(identifier, password)
-
-      if (success && user) {
-        showSuccess("Welcome back!", "You have successfully logged in")
-        // Small delay to show the success message before navigation
-        setTimeout(() => {
-          router.push("/(tabs)")
-        }, 1000)
-      } else {
-        showError("Login Failed", message || "Invalid credentials. Please check your email/username and password.")
+  
+    async function handleLogin() {
+      if (!identifier || !password) {
+        showWarning("Missing Fields", "Please enter both email/username and password")
+        return
       }
-    } catch (error) {
-      console.error("Login error:", error)
-      showError("Connection Error", "Unable to connect to the server. Please check your internet connection and try again.")
-    } finally {
-      setLoading(false)
+  
+      setLoading(true)
+      try {
+        const { success, message, user } = await signInWithEmailOrUsername(identifier, password)
+  
+        if (success && user) {
+          showSuccess("Welcome back!", "You have successfully logged in")
+          
+          // Initialize user store with user data
+          await setUser(user.id, user.email)
+          
+          // Small delay to show the success message before navigation
+          setTimeout(() => {
+            router.push("/(tabs)")
+          }, 1000)
+        } else {
+          showError("Login Failed", message || "Invalid credentials. Please check your email/username and password.")
+        }
+      } catch (error) {
+        console.error("Login error:", error)
+        showError("Connection Error", "Unable to connect to the server. Please check your internet connection and try again.")
+      } finally {
+        setLoading(false)
+      }
     }
-  }
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -75,7 +80,7 @@ export default function LoginScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoid}>
           <View style={styles.header}>
             <TouchableOpacity onPress={goHome} style={styles.backButton}>
-              <ChevronLeft color="black"/>
+                <Entypo name="chevron-left" size={24} color="black" />
             </TouchableOpacity>
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Log in to your account</Text>
@@ -150,7 +155,7 @@ const styles = StyleSheet.create({
         top: -10,
       },
       android: {
-        top: -20,
+        top: 30,
       },
     }),
   },
@@ -212,17 +217,17 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   forgotPasswordText: {
-    color: MAIN_COLOR,
+    color: colors.primary,
     fontSize: 14,
     fontWeight: "600",
   },
   loginButton: {
-    backgroundColor: MAIN_COLOR,
+    backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
     marginTop: 8,
-    shadowColor: MAIN_COLOR,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -246,7 +251,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   signupText: {
-    color: MAIN_COLOR,
+    color: colors.primary,
     fontSize: 16,
     fontWeight: "600",
   },
