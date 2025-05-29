@@ -13,10 +13,15 @@ import {
   getUserPreferences 
 } from '@/app/actions/users';
 
+// Import auth actions to get user metadata as fallback
+import { getCurrentUser } from '@/app/actions/main_actions';
+
 interface UserState {
   // Data
   userId: string | null;
   userEmail: string | null;
+  first_name: string | null;
+  last_name: string | null;
   points: number;
   scanHistory: QRCodeScan[];
   preferences: UserPreferences;
@@ -37,6 +42,13 @@ interface UserState {
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   clearUserData: () => void;
   isUserLoggedIn: () => boolean;
+  getUserName: () => string;
+}
+
+function capitalize(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export const useUserStore = create<UserState>()(
@@ -45,6 +57,8 @@ export const useUserStore = create<UserState>()(
       // Initial state
       userId: null,
       userEmail: null,
+      first_name: null,
+      last_name: null,
       points: 0,
       scanHistory: [],
       preferences: {
@@ -54,6 +68,21 @@ export const useUserStore = create<UserState>()(
       isLoading: false,
       isPointsLoading: false,
       isScanHistoryLoading: false,
+      
+      // Get user's full name (capitalized)
+      getUserName: () => {
+        const { first_name, last_name } = get();
+        
+        if (first_name && last_name) {
+          return `${capitalize(first_name)} ${capitalize(last_name)}`;
+        } else if (first_name) {
+          return capitalize(first_name);
+        } else if (last_name) {
+          return capitalize(last_name);
+        }
+        
+        return 'User';
+      },
       
       // Set user and initialize data
       setUser: async (userId: string, email?: string) => {
@@ -67,13 +96,27 @@ export const useUserStore = create<UserState>()(
         
         try {
           // Fetch user data from database
-          const [userProfile, scanHistory, userPreferences] = await Promise.all([
+          const [userProfile, scanHistory, userPreferences, authUserData] = await Promise.all([
             getUserProfile(userId),
             getUserScanHistory(userId),
-            getUserPreferences(userId)
+            getUserPreferences(userId),
+            getCurrentUser() // Get auth metadata as fallback
           ]);
           
+          console.log('=== DEBUG USER DATA ===');
+          console.log('User profile from getUserProfile:', userProfile);
+          console.log('Auth user metadata from getCurrentUser:', authUserData);
+          console.log('========================');
+          
+          // Try to get names from userProfile first, then fallback to auth metadata
+          const firstName = userProfile?.first_name || authUserData?.first_name || null;
+          const lastName = userProfile?.last_name || authUserData?.last_name || null;
+          
+          console.log('Final names - firstName:', firstName, 'lastName:', lastName);
+          
           set({
+            first_name: firstName,
+            last_name: lastName,
             points: userProfile?.points || 0,
             scanHistory: scanHistory || [],
             preferences: userPreferences || {
@@ -101,8 +144,25 @@ export const useUserStore = create<UserState>()(
         if (!userId) return;
         
         try {
-          const userProfile = await getUserProfile(userId);
-          set({ points: userProfile?.points || 0 });
+          const [userProfile, authUserData] = await Promise.all([
+            getUserProfile(userId),
+            getCurrentUser()
+          ]);
+          
+          console.log('=== REFRESH DEBUG ===');
+          console.log('Refreshed user profile:', userProfile);
+          console.log('Refreshed auth metadata:', authUserData);
+          console.log('====================');
+          
+          // Try to get names from userProfile first, then fallback to auth metadata
+          const firstName = userProfile?.first_name || authUserData?.first_name || null;
+          const lastName = userProfile?.last_name || authUserData?.last_name || null;
+          
+          set({ 
+            first_name: firstName,
+            last_name: lastName,
+            points: userProfile?.points || 0 
+          });
         } catch (error) {
           console.error('Failed to refresh user data:', error);
         }
@@ -270,6 +330,8 @@ export const useUserStore = create<UserState>()(
         set({
           userId: null,
           userEmail: null,
+          first_name: null,
+          last_name: null,
           points: 0,
           scanHistory: [],
           preferences: {
@@ -289,6 +351,8 @@ export const useUserStore = create<UserState>()(
       partialize: (state) => ({
         userId: state.userId,
         userEmail: state.userEmail,
+        first_name: state.first_name,
+        last_name: state.last_name,
         points: state.points,
         scanHistory: state.scanHistory,
         preferences: state.preferences,

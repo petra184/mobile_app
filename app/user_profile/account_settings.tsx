@@ -3,18 +3,11 @@
 // import { SafeAreaView } from 'react-native-safe-area-context';
 // import { colors } from '@/constants/colors';
 // import { useUserStore } from '@/hooks/userStore';
-// import { 
-//   Bell, 
-//   Lock, 
-//   Mail, 
-//   Smartphone, 
-//   Globe, 
-//   HelpCircle, 
-//   FileText, 
-//   Shield, 
-//   Trash2 
-// } from 'lucide-react-native';
 // import { useRouter } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather'; //<Feather name="bell" size={24} color="black" />
+//lock, mail, globe, help-circle, file-text, shield, trash-2
+import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons'; //<SimpleLineIcons name="screen-smartphone" size={24} color="black" />
+
 
 
 // export default function AccountSettingsScreen() {

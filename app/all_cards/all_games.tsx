@@ -1,7 +1,17 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, ScrollView } from "react-native"
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  Pressable,
+  ActivityIndicator,
+  ScrollView,
+  FlatList,
+  Platform,
+} from "react-native"
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -11,9 +21,8 @@ import { getUpcomingGames, getPastGames, getLiveGames } from "@/app/actions/game
 import { useNotifications } from "@/context/notification-context"
 import type { Team } from "@/app/actions/teams"
 import type { Game } from "@/types/game"
-import { LinearGradient } from "expo-linear-gradient"
 import Feather from "@expo/vector-icons/Feather"
-import Animated, { FadeIn, SlideInDown } from "react-native-reanimated"
+import Animated, { FadeIn, SlideInRight, SlideInUp, SlideOutDown } from "react-native-reanimated"
 
 export default function AllGamesScreen() {
   const router = useRouter()
@@ -22,6 +31,7 @@ export default function AllGamesScreen() {
   const [allGames, setAllGames] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState<"all" | "upcoming" | "live" | "completed">("all")
+  const [showFilters, setShowFilters] = useState(false)
 
   // Fetch all games on component mount
   useEffect(() => {
@@ -60,13 +70,22 @@ export default function AllGamesScreen() {
 
   const handleGamePress = (game: Game) => {
     router.push({
-      pathname: "../game-details",
-      params: { id: game.id },
-    })
+        pathname: "./game_details",
+        params: { id: game.id },
+      })
   }
 
   const handleNotifyPress = (game: Game) => {
     showSuccess("Notification Set", `You'll be notified about ${game.homeTeam.name} vs ${game.awayTeam.name}`)
+  }
+
+  const handleTeamPress = (team: Team) => {
+    console.log("Team pressed:", team)
+    // Implement your navigation logic here
+  }
+
+  const toggleFilters = () => {
+    setShowFilters(!showFilters)
   }
 
   // Filter games based on selected team and active filter
@@ -143,24 +162,30 @@ export default function AllGamesScreen() {
     )
   }
 
-  const renderGameSection = (title: string, games: Game[], icon: string, color: string) => {
-    if (games.length === 0) return null
+  const renderGameSection = (section: {
+    id: string
+    title: string
+    games: Game[]
+    icon: string
+    color: string
+  }) => {
+    if (section.games.length === 0) return null
 
     return (
-      <Animated.View entering={FadeIn.duration(600)} style={styles.gameSection}>
+      <Animated.View key={section.id} entering={FadeIn.duration(600)} style={styles.gameSection}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleContainer}>
-            <View style={[styles.sectionIcon, { backgroundColor: `${color}20` }]}>
-              <Feather name={icon as any} size={18} color={color} />
+            <View style={[styles.sectionIcon, { backgroundColor: `${section.color}20` }]}>
+              <Feather name={section.icon as any} size={18} color={section.color} />
             </View>
             <View>
-              <Text style={styles.sectionTitle}>{title}</Text>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
               <Text style={styles.sectionSubtitle}>
-                {games.length} game{games.length !== 1 ? "s" : ""}
+                {section.games.length} game{section.games.length !== 1 ? "s" : ""}
               </Text>
             </View>
           </View>
-          {title === "Live Now" && (
+          {section.title === "Live Now" && (
             <View style={styles.liveIndicator}>
               <View style={styles.livePulse} />
               <Text style={styles.liveText}>LIVE</Text>
@@ -168,8 +193,8 @@ export default function AllGamesScreen() {
           )}
         </View>
         <View style={styles.gamesContainer}>
-          {games.map((game, index) => (
-            <Animated.View key={game.id} entering={SlideInDown.duration(400).delay(index * 100)}>
+          {section.games.map((game, index) => (
+            <Animated.View key={game.id} entering={SlideInRight.duration(300).delay(index * 50)}>
               <GameCard game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
             </Animated.View>
           ))}
@@ -178,93 +203,141 @@ export default function AllGamesScreen() {
     )
   }
 
-  return (
-    <SafeAreaView style={styles.container} edges={["left"]}>
-      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+  const renderFilters = () => {
+    if (!showFilters) return null
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <LinearGradient colors={["rgba(255,255,255,0.98)", "rgba(255,255,255,0.95)"]} style={styles.header}>
+    return (
+      <Animated.View
+        entering={SlideInUp.duration(300)}
+        exiting={SlideOutDown.duration(300)}
+        style={styles.filtersContainer}
+      >
+        {/* Status Filters - First */}
+        <View style={styles.statusFiltersContainer}>
+          <Text style={styles.filterLabel2}>Filter by Type</Text>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={[
+              { id: "all", label: "All", icon: "calendar", count: sortedGames.length },
+              { id: "live", label: "Live", icon: "radio", count: liveGames.length },
+              { id: "upcoming", label: "Upcoming", icon: "clock", count: upcomingGames.length },
+              { id: "completed", label: "Past", icon: "check-circle", count: completedGames.length },
+            ]}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) =>
+              renderFilterButton(
+                item.id as "all" | "upcoming" | "live" | "completed",
+                item.label,
+                item.icon,
+                item.count,
+              )
+            }
+            contentContainerStyle={styles.statusFilters}
+          />
+        </View>
 
-
-          {/* Team Filter */}
-          <View style={styles.teamFilterContainer}>
-            <Text style={styles.filterLabel}>Filter by Team</Text>
+        {/* Team Filter - Second with proper spacing */}
+        <View style={styles.teamFilterContainer}>
+          <Text style={styles.filterLabel}>Filter by Team</Text>
+          <View style={styles.teamSelectorWrapper}>
             <TeamSelector
               onSelectTeam={handleTeamSelect}
-              onTeamPress={handleTeamSelect}
+              onTeamPress={handleTeamPress}
               showFavorites={true}
               horizontal={true}
               showSearch={false}
               showFilters={false}
             />
           </View>
-
-          {/* Status Filters */}
-          <View style={styles.statusFiltersContainer}>
-            <Text style={styles.filterLabel}>Game Status</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statusFilters}>
-              {renderFilterButton("all", "All", "calendar", sortedGames.length)}
-              {renderFilterButton("live", "Live", "radio", liveGames.length)}
-              {renderFilterButton("upcoming", "Upcoming", "clock", upcomingGames.length)}
-              {renderFilterButton("completed", "Results", "check-circle", completedGames.length)}
-            </ScrollView>
-          </View>
-        </LinearGradient>
-
-        {/* Content */}
-        <View style={styles.content}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading games...</Text>
-            </View>
-          ) : sortedGames.length > 0 ? (
-            <View style={styles.gamesContent}>
-              {activeFilter === "all" ? (
-                <>
-                  {renderGameSection("Live Now", liveGames, "radio", "#EF4444")}
-                  {renderGameSection("Upcoming Games", upcomingGames, "clock", colors.primary)}
-                  {renderGameSection("Recent Results", completedGames, "check-circle", "#10B981")}
-                </>
-              ) : (
-                <>
-                  {activeFilter === "live" && renderGameSection("Live Games", liveGames, "radio", "#EF4444")}
-                  {activeFilter === "upcoming" &&
-                    renderGameSection("Upcoming Games", upcomingGames, "clock", colors.primary)}
-                  {activeFilter === "completed" &&
-                    renderGameSection("Game Results", completedGames, "check-circle", "#10B981")}
-                </>
-              )}
-            </View>
-          ) : (
-            <Animated.View entering={FadeIn.duration(600)} style={styles.emptyContainer}>
-              <View style={styles.emptyIconContainer}>
-                <Feather name="search" size={48} color="#D1D5DB" />
-              </View>
-              <Text style={styles.emptyTitle}>No games found</Text>
-              <Text style={styles.emptyText}>
-                {selectedTeam
-                  ? `No ${activeFilter !== "all" ? activeFilter : ""} games found for ${selectedTeam.name}`
-                  : `No ${activeFilter !== "all" ? activeFilter : ""} games available`}
-              </Text>
-              <Pressable
-                style={styles.resetButton}
-                onPress={() => {
-                  setSelectedTeam(null)
-                  setActiveFilter("all")
-                }}
-              >
-                <Feather name="refresh-ccw" size={16} color="white" />
-                <Text style={styles.resetButtonText}>Reset Filters</Text>
-              </Pressable>
-            </Animated.View>
-          )}
         </View>
+      </Animated.View>
+    )
+  }
 
-        {/* Bottom Spacing */}
-        <View style={styles.bottomSpacing} />
-      </ScrollView>
+  // Prepare sections data
+  const sections =
+    activeFilter === "all"
+      ? [
+          { id: "live", title: "Live Now", games: liveGames, icon: "radio", color: "#EF4444" },
+          {
+            id: "upcoming",
+            title: "Upcoming Games",
+            games: upcomingGames,
+            icon: "clock",
+            color: colors.primary,
+          },
+          {
+            id: "completed",
+            title: "Recent Games",
+            games: completedGames,
+            icon: "check-circle",
+            color: "#10B981",
+          },
+        ].filter((section) => section.games.length > 0)
+      : [
+          {
+            id: activeFilter,
+            title:
+              activeFilter === "live" ? "Live Games" : activeFilter === "upcoming" ? "Upcoming Games" : "Game Results",
+            games: activeFilter === "live" ? liveGames : activeFilter === "upcoming" ? upcomingGames : completedGames,
+            icon: activeFilter === "live" ? "radio" : activeFilter === "upcoming" ? "clock" : "check-circle",
+            color: activeFilter === "live" ? "#EF4444" : activeFilter === "upcoming" ? colors.primary : "#10B981",
+          },
+        ]
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+
+      {/* Toggle button at top */}
+      <Pressable style={styles.toggleButton} onPress={toggleFilters}>
+        <View style={styles.toggleButtonInner}>
+          <Feather name={showFilters ? "chevron-down" : "chevron-up"} size={24} color={colors.primary} />
+        </View>
+      </Pressable>
+
+      {/* Render filters if visible */}
+      {renderFilters()}
+
+      {/* Content */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading games...</Text>
+        </View>
+      ) : sortedGames.length > 0 ? (
+        <FlatList
+          data={sections}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => renderGameSection(item)}
+          contentContainerStyle={styles.gamesContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={<View style={styles.bottomSpacing} />}
+        />
+      ) : (
+        <ScrollView contentContainerStyle={styles.emptyScrollContent}>
+          <Animated.View entering={FadeIn.duration(600)} style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <Feather name="search" size={48} color="#D1D5DB" />
+            </View>
+            <Text style={styles.emptyTitle}>No games found</Text>
+            <Text style={styles.emptyText}>
+              {selectedTeam
+                ? `No ${activeFilter !== "all" ? activeFilter : ""} games found for ${selectedTeam.name}`
+                : `No ${activeFilter !== "all" ? activeFilter : ""} games available`}
+            </Text>
+            <Pressable
+              style={styles.resetButton}
+              onPress={() => {
+                setSelectedTeam(null)
+                setActiveFilter("all")
+              }}
+            >
+            </Pressable>
+          </Animated.View>
+        </ScrollView>
+      )}
     </SafeAreaView>
   )
 }
@@ -272,6 +345,7 @@ export default function AllGamesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    top:0,
     backgroundColor: colors.background,
   },
   backgroundImage: {
@@ -281,57 +355,41 @@ const styles = StyleSheet.create({
     opacity: 0.03,
     zIndex: 0,
   },
-  scrollView: {
-    flex: 1,
-    zIndex: 1,
-  },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  titleContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: colors.text,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: "500",
-  },
-  teamFilterContainer: {
-    marginBottom: 24,
-  },
-  filterLabel: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 12,
-    paddingHorizontal: 20,
-    marginLeft: 4,
-  },
-  statusFiltersContainer: {
+  filtersContainer: {
+    borderBottomWidth: 1,
+    paddingBottom: 20,
+    ...Platform.select({
+        android: {
+            top: -15,}
+    }),
+    borderBottomColor: "rgba(0,0,0,0.05)",
   },
   statusFilters: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+  },
+  statusFiltersContainer: {
+    marginBottom: 20, // Add space between sections
+  },
+  teamFilterContainer: {
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 8, // Increased margin
+    paddingLeft: 20,
+  },
+  filterLabel2: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 10,
+    paddingLeft: 20,
   },
   filterButton: {
     backgroundColor: "rgba(107, 114, 128, 0.08)",
-    borderRadius: 16,
-    marginRight: 12,
+    borderRadius: 12,
+    marginRight: 10,
     borderWidth: 1,
     borderColor: "rgba(107, 114, 128, 0.1)",
   },
@@ -342,8 +400,8 @@ const styles = StyleSheet.create({
   filterButtonContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
   filterButtonText: {
     fontSize: 14,
@@ -357,60 +415,63 @@ const styles = StyleSheet.create({
   },
   filterBadge: {
     backgroundColor: "rgba(107, 114, 128, 0.15)",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    minWidth: 24,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 20,
     alignItems: "center",
   },
   activeFilterBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
   filterBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.text,
   },
   activeFilterBadgeText: {
     color: "white",
   },
-  content: {
-    flex: 1,
-    paddingTop: 24,
+  teamSelectorWrapper: {
+    marginTop: 0,
+    minHeight: 85, // Increased minimum height
+    paddingBottom: 8, // Add bottom padding to prevent clipping
   },
   gamesContent: {
     paddingHorizontal: 4,
+    paddingTop: 16,
+    paddingBottom: 30,
   },
   gameSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   sectionTitleContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
   sectionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 10,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   sectionSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     fontWeight: "500",
   },
@@ -418,30 +479,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(239, 68, 68, 0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
   },
   livePulse: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: "#EF4444",
     marginRight: 6,
   },
   liveText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: "#EF4444",
   },
   gamesContainer: {
-    gap: 8,
+    gap: 6,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 80,
+    paddingVertical: 60,
   },
   loadingText: {
     fontSize: 16,
@@ -452,51 +513,81 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
-    paddingHorizontal: 40,
+    paddingVertical: 50,
+    paddingHorizontal: 30,
     marginHorizontal: 20,
     backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(0, 0, 0, 0.05)",
   },
   emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: "rgba(107, 114, 128, 0.1)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: "#374151",
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 15,
     color: "#6B7280",
     textAlign: "center",
-    marginBottom: 24,
-    lineHeight: 24,
+    marginBottom: 20,
+    lineHeight: 22,
   },
   resetButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   resetButtonText: {
     color: "white",
     fontWeight: "600",
-    fontSize: 16,
+    fontSize: 15,
     marginLeft: 8,
   },
   bottomSpacing: {
-    height: 40,
+    height: 30,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    ...Platform.select({
+      android: {
+        top:0,
+      },
+    }),
+    justifyContent: "center",
+  },
+  toggleButton: {
+    position: "absolute",
+    top: 0,
+    alignSelf: "center",
+    zIndex: 100,
+  },
+  toggleButtonInner: {
+    width: 50,
+    height: 30,
+    backgroundColor: "white",
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.05)",
   },
 })

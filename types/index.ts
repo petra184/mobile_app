@@ -47,6 +47,7 @@ export interface TeamForUI {
 // Transform database team to UI team
 export function transformTeamForUI(dbTeam: Team): TeamForUI {
   return {
+    ...dbTeam,
     id: dbTeam.id,
     name: dbTeam.name,
     shortName: dbTeam.short_name,

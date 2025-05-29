@@ -30,6 +30,8 @@ export interface UserProfile {
   last_scan_date?: string;
   created_at: string;
   updated_at: string;
+  first_name?: string;
+  last_name?: string;
 }
 
 export interface QRCodeScan {
@@ -77,6 +79,8 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     last_scan_date: data.last_scan_date || undefined,
     created_at: data.created_at || '',
     updated_at: data.updated_at || '',
+    first_name: data.first_name || undefined,
+    last_name: data.last_name || undefined
   };
 }
 

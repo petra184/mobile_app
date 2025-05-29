@@ -4,8 +4,7 @@
 // import { colors } from '@/constants/colors';
 // import { useUserStore } from '@/hooks/userStore';
 // //import { scanHistory } from '@/types/index';
-// import { Clock, Award } from 'lucide-react-native';
-
+import Feather from '@expo/vector-icons/Feather'; //clock, award
 
 // export default function ActivityHistoryScreen() {
 //   const { points } = useUserStore();

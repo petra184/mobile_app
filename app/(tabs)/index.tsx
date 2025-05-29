@@ -96,9 +96,10 @@ export default function HomeScreen() {
   }
 
   const handleGamePress = (game: Game) => {
-    showInfo("Game Details", `Viewing ${game.homeTeam.name} vs ${game.awayTeam.name}`)
-    // You can navigate to a game details page here
-    // router.push(`/game/${game.id}`)
+    router.push({
+        pathname: "../all_cards/game_details",
+        params: { id: game.id },
+      })
   }
 
   const handleNotifyPress = (game: Game) => {

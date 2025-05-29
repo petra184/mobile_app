@@ -138,6 +138,24 @@ function RootLayoutNav() {
           },
         }} 
       />
+       <Stack.Screen 
+        name="all_cards/game_details" 
+        options={{ 
+          title: "",
+          headerStyle: { 
+            backgroundColor: colors.primary,
+          },
+          headerBackTitle: "Back",
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Entypo name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+          headerShown: false,
+        }} 
+      />
       </Stack>
     )
 }
