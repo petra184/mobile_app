@@ -73,6 +73,8 @@ export const useUserStore = create<UserState>()(
       getUserName: () => {
         const { first_name, last_name } = get();
         
+        console.log('getUserName called - first_name:', first_name, 'last_name:', last_name); // Debug log
+        
         if (first_name && last_name) {
           return `${capitalize(first_name)} ${capitalize(last_name)}`;
         } else if (first_name) {
@@ -106,6 +108,7 @@ export const useUserStore = create<UserState>()(
           console.log('=== DEBUG USER DATA ===');
           console.log('User profile from getUserProfile:', userProfile);
           console.log('Auth user metadata from getCurrentUser:', authUserData);
+          console.log('User preferences:', userPreferences);
           console.log('========================');
           
           // Try to get names from userProfile first, then fallback to auth metadata
@@ -265,7 +268,7 @@ export const useUserStore = create<UserState>()(
         }
       },
       
-      // Toggle favorite team with database sync
+      // Toggle favorite team with database sync - FIXED VERSION
       toggleFavoriteTeam: async (teamId: string) => {
         const { userId, preferences } = get();
         if (!userId) return;
@@ -284,18 +287,30 @@ export const useUserStore = create<UserState>()(
           // Optimistically update UI
           set({ preferences: newPreferences });
           
-          // Update database
+          // Update database using UPSERT logic
           await updateUserPreferences(userId, newPreferences);
           
         } catch (error) {
           console.error('Failed to toggle favorite team:', error);
           
-          // Revert optimistic update
-          await get().refreshUserData();
+          // Revert optimistic update by refreshing preferences from database
+          try {
+            const userPreferences = await getUserPreferences(userId);
+            set({ 
+              preferences: userPreferences || {
+                favoriteTeams: [],
+                notificationsEnabled: true,
+              }
+            });
+          } catch (refreshError) {
+            console.error('Failed to refresh preferences after error:', refreshError);
+          }
+          
+          throw error; // Re-throw to show error to user
         }
       },
       
-      // Set notifications enabled with database sync
+      // Set notifications enabled with database sync - FIXED VERSION
       setNotificationsEnabled: async (enabled: boolean) => {
         const { userId, preferences } = get();
         if (!userId) return;
@@ -309,7 +324,7 @@ export const useUserStore = create<UserState>()(
           // Optimistically update UI
           set({ preferences: newPreferences });
           
-          // Update database
+          // Update database using UPSERT logic
           await updateUserPreferences(userId, newPreferences);
           
         } catch (error) {
@@ -322,6 +337,8 @@ export const useUserStore = create<UserState>()(
               notificationsEnabled: !enabled,
             },
           }));
+          
+          throw error; // Re-throw to show error to user
         }
       },
       

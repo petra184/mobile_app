@@ -41,7 +41,7 @@ export interface TeamForUI {
   name: string;
   shortName: string;
   primaryColor: string;
-  logo: string;
+  logo: string | null;
 }
 
 // Transform database team to UI team
@@ -52,6 +52,6 @@ export function transformTeamForUI(dbTeam: Team): TeamForUI {
     name: dbTeam.name,
     shortName: dbTeam.short_name,
     primaryColor: dbTeam.color || '#000000',
-    logo: dbTeam.photo || "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Manhattan_Jaspers_logo.svg/1200px-Manhattan_Jaspers_logo.svg.png",
+    logo: dbTeam.photo || null || "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Manhattan_Jaspers_logo.svg/1200px-Manhattan_Jaspers_logo.svg.png",
   };
 }

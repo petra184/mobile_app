@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/supabase'; // Import your generated types
+import * as FileSystem from 'expo-file-system';
 
 // Extract types from the generated Database type
 type Tables = Database['public']['Tables'];
@@ -178,52 +179,52 @@ export async function addUserScan(userId: string, scan: QRCodeScan): Promise<voi
 
 // Get user preferences - now fully typed
 export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
-  const { data, error } = await supabase
-    .from('user_preferences')
-    .select('favorite_teams, notifications_enabled')
-    .eq('user_id', userId)
-    .single();
-    
-  if (error && error.code !== 'PGRST116') { // Not found error
-    console.error('Error fetching user preferences:', error);
-    throw new Error(`Failed to fetch preferences: ${error.message}`);
-  }
+    try {
+      const { data, error } = await supabase.from("user_preferences").select("*").eq("user_id", userId).single()
   
-  if (!data) {
-    // Return default preferences if none exist
-    return {
-      favoriteTeams: [],
-      notificationsEnabled: true
-    };
-  }
+      if (error) {
+        if (error.code === "PGRST116") {
+          // No rows returned
+          console.log("No user preferences found for user:", userId)
+          return null
+        }
+        throw error
+      }
   
-  return {
-    favoriteTeams: data.favorite_teams || [],
-    notificationsEnabled: data.notifications_enabled ?? true
-  };
-}
+      return {
+        favoriteTeams: data.favorite_teams || [],
+        notificationsEnabled: data.notifications_enabled ?? true,
+      }
+    } catch (error) {
+      console.error("Error getting user preferences:", error)
+      return null
+    }
+  }
 
 // Update user preferences - now fully typed
-export async function updateUserPreferences(
-  userId: string, 
-  preferences: UserPreferences
-): Promise<void> {
-  const updateData: UserPreferencesUpdate = {
-    user_id: userId,
-    favorite_teams: preferences.favoriteTeams,
-    notifications_enabled: preferences.notificationsEnabled,
-    updated_at: new Date().toISOString()
-  };
-
-  const { error } = await supabase
-    .from('user_preferences')
-    .upsert(updateData);
-    
-  if (error) {
-    console.error('Error updating user preferences:', error);
-    throw new Error(`Failed to update preferences: ${error.message}`);
+export async function updateUserPreferences(userId: string, preferences: UserPreferences): Promise<void> {
+    const updateData: UserPreferences = {
+      favoriteTeams: preferences.favoriteTeams,
+      notificationsEnabled: preferences.notificationsEnabled,
+    }
+  
+    const { error } = await supabase.from("user_preferences").upsert(
+      {
+        user_id: userId,
+        favorite_teams: preferences.favoriteTeams,
+        notifications_enabled: preferences.notificationsEnabled,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "user_id", // Add this line to specify which column to check for conflicts
+      },
+    )
+  
+    if (error) {
+      console.error("Error updating user preferences:", error)
+      throw new Error(`Failed to update preferences: ${error.message}`)
+    }
   }
-}
 
 // Get leaderboard - now fully typed
 export async function getUserLeaderboard(limit: number = 10): Promise<LeaderboardEntry[]> {
@@ -326,3 +327,159 @@ export async function getRewards(teamId?: string): Promise<Tables['rewards']['Ro
   
   return data || [];
 }
+
+export async function uploadProfileImage(userId: string, imageUri: string): Promise<string | undefined> {
+    try {
+      // Get file info
+      const fileInfo = await FileSystem.getInfoAsync(imageUri);
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist');
+      }
+  
+      // Create a unique filename
+      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `profile-images/${fileName}`;
+  
+      // Read the file as base64
+      const base64 = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+  
+      // Convert base64 to blob
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: `image/${fileExt}` });
+  
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('profile-images')
+        .upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+  
+      if (error) {
+        console.error('Error uploading image:', error);
+        throw new Error(`Failed to upload image: ${error.message}`);
+      }
+  
+      // Get the public URL
+      const { data: urlData } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+  
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error in uploadProfileImage:', error);
+      return undefined;
+    }
+  }
+  
+  /**
+   * Update user profile with new data including profile image
+   */
+  export async function updateUserProfile(
+    userId: string,
+    updates: {
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+      phone_number?: string;
+      profile_image_url?: string;
+    }
+  ): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+  
+      if (error) {
+        console.error('Error updating user profile:', error);
+        throw new Error(`Failed to update profile: ${error.message}`);
+      }
+  
+      return true;
+    } catch (error) {
+      console.error('Unexpected error updating user profile:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Delete old profile image from storage
+   */
+  export async function deleteProfileImage(imageUrl: string): Promise<boolean> {
+    try {
+      // Extract the file path from the URL
+      const urlParts = imageUrl.split('/');
+      const fileName = urlParts[urlParts.length - 1];
+      const filePath = `profile-images/${fileName}`;
+  
+      const { error } = await supabase.storage
+        .from('profile-images')
+        .remove([filePath]);
+  
+      if (error) {
+        console.error('Error deleting image:', error);
+        return false;
+      }
+  
+      return true;
+    } catch (error) {
+      console.error('Error in deleteProfileImage:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Update profile with image upload
+   */
+  export async function updateProfileWithImage(
+    userId: string,
+    profileData: {
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+      phone_number?: string;
+    },
+    imageUri?: string,
+    oldImageUrl?: string
+  ): Promise<boolean> {
+    try {
+      let profileImageUrl: string | undefined = oldImageUrl;
+  
+      // Upload new image if provided
+      if (imageUri) {
+        // Delete old image if it exists
+        if (oldImageUrl) {
+          await deleteProfileImage(oldImageUrl);
+        }
+  
+        // Upload new image
+        profileImageUrl = await uploadProfileImage(userId, imageUri);
+        if (!profileImageUrl) {
+          throw new Error('Failed to upload profile image');
+        }
+      }
+  
+      // Update user profile
+      const success = await updateUserProfile(userId, {
+        ...profileData,
+        profile_image_url: profileImageUrl,
+      });
+  
+      return success;
+    } catch (error) {
+      console.error('Error updating profile with image:', error);
+      return false;
+    }
+  }

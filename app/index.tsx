@@ -19,7 +19,7 @@ const { width, height } = Dimensions.get('window')
 
 export default function IndexScreen() {
   const router = useRouter();
-
+  
   return (
     <>
       <StatusBar barStyle="dark-content" />

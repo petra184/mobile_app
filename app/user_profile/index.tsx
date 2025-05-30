@@ -73,10 +73,10 @@ export default function ProfileScreen() {
   const navigateToAccountSettings = () => {
     router.push('/user_profile/account_settings');
   };
-  
+
   return (
     <>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['left']}>
         <Image
           source={require('../../IMAGES/crowd.jpg')}
           style={styles.backgroundImage}
@@ -119,9 +119,6 @@ export default function ProfileScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Favorite Teams</Text>
-                <Pressable onPress={() => setIsEditing(!isEditing)}>
-                  <Text style={styles.editButton}>{isEditing ? 'Done' : 'Edit'}</Text>
-                </Pressable>
               </View>
               
               {loadingTeams ? (
@@ -138,7 +135,7 @@ export default function ProfileScreen() {
                         style={styles.teamLogo} 
                       />
                       <View style={styles.teamInfo}>
-                        <Text style={styles.teamName}>{team.name}</Text>
+                        <Text style={styles.teamName}>{team.shortName}</Text>
                         <Text style={styles.teamSport}>{team.gender} {team.sport}</Text>
                       </View>
                       {isEditing && (
@@ -196,7 +193,7 @@ export default function ProfileScreen() {
               </View>
 
               {/* Logout Button */}
-              <Pressable 
+            <Pressable 
                 style={styles.logoutButton} 
                 onPress={async () => {
                   try {
@@ -246,6 +243,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     ...Platform.select({
         android:{
+            top: -55,
+        },
+        ios:{
             top: -60,
         }
     }),
@@ -264,6 +264,9 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         paddingTop: 65,
+      },
+      android: {
+        paddingTop: 50,
       },
     }),
     backgroundColor: colors.card,
@@ -432,7 +435,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    marginHorizontal: 16,
     marginVertical: 24,
     paddingVertical: 12,
     borderRadius: 8,

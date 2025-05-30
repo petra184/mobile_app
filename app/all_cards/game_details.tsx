@@ -175,7 +175,7 @@ export default function GameDetailsScreen() {
             <View style={styles.teamContainer}>
               <View style={[styles.logoContainer, { borderColor: homeTeamColor }]}>
                 <Image
-                  source={{ uri: game.homeTeam.logo }}
+                  source={{ uri: game.homeTeam.logo}}
                   style={styles.teamLogo}
                   resizeMode="contain"
                   defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
@@ -385,8 +385,6 @@ const styles = StyleSheet.create({
   backgroundImage: {
     position: "absolute",
     bottom: 0,
-    width: "100%",
-    height: "100%",
     resizeMode: "cover",
     opacity: 0.1,
     zIndex: 0,

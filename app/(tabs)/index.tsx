@@ -18,7 +18,7 @@ import type { Game } from "@/types/game"
 
 export default function HomeScreen() {
   const router = useRouter()
-  const { points, preferences } = useUserStore()
+  const { points, preferences, getUserName } = useUserStore()
   const { showSuccess, showInfo } = useNotifications()
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [allGames, setAllGames] = useState<Game[]>([])
@@ -90,16 +90,19 @@ export default function HomeScreen() {
     showSuccess("Team Selected", `You selected ${team.name}`)
   }
 
+  // Fixed: Navigate to team details screen with the team ID
   const handleTeamPress = (team: Team) => {
-    showInfo("Team Details", `Viewing ${team.name} details`)
-    router.push(`..`)
+    router.push({
+      pathname: "../teams",
+      params: { id: team.id },
+    })
   }
 
   const handleGamePress = (game: Game) => {
     router.push({
-        pathname: "../all_cards/game_details",
-        params: { id: game.id },
-      })
+      pathname: "../all_cards/game_details",
+      params: { id: game.id },
+    })
   }
 
   const handleNotifyPress = (game: Game) => {
@@ -107,7 +110,7 @@ export default function HomeScreen() {
   }
 
   const handleViewAllTeams = () => {
-    router.push("..")
+    router.push("../teams")
   }
 
   const handleViewAllGames = () => {
@@ -117,6 +120,49 @@ export default function HomeScreen() {
   const handleFilterChange = (filters: GameFilterOptions) => {
     setGameFilters(filters)
     showInfo("Filters Applied", "Games filtered successfully")
+  }
+
+  const getTimeBasedGreeting = () => {
+    const currentHour = new Date().getHours()
+
+    if (currentHour >= 5 && currentHour < 12) {
+      return "Good Morning"
+    } else if (currentHour >= 12 && currentHour < 17) {
+      return "Good Afternoon"
+    } else if (currentHour >= 17 && currentHour < 22) {
+      return "Good Evening"
+    } else {
+      return "Good Night"
+    }
+  }
+
+  const getPersonalizedMessage = () => {
+    const currentHour = new Date().getHours()
+    const userName = getUserName()
+
+    if (currentHour >= 5 && currentHour < 12) {
+      return "Ready to start your day with some exciting games?"
+    } else if (currentHour >= 12 && currentHour < 17) {
+      return "Hope you're having a great day! Check out today's updates."
+    } else if (currentHour >= 17 && currentHour < 22) {
+      return "Perfect time to catch up on your favorite teams!"
+    } else {
+      return "Late night sports fan? We've got you covered."
+    }
+  }
+
+  const getTimeIcon = () => {
+    const currentHour = new Date().getHours()
+
+    if (currentHour >= 5 && currentHour < 12) {
+      return "sunrise"
+    } else if (currentHour >= 12 && currentHour < 17) {
+      return "sun"
+    } else if (currentHour >= 17 && currentHour < 22) {
+      return "sunset"
+    } else {
+      return "moon"
+    }
   }
 
   // Apply filters to games
@@ -152,6 +198,20 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
       <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
+        {/* Enhanced Welcome Card */}
+        <View style={styles.welcomeCard}>
+          <View style={styles.welcomeHeader}>
+            <View style={styles.welcomeContent}>
+              <Text style={styles.greetingText}>{getTimeBasedGreeting()},</Text>
+              <Text style={styles.nameText}>{getUserName()}</Text>
+              <Text style={styles.personalizedMessage}>{getPersonalizedMessage()}</Text>
+            </View>
+            <View style={styles.timeIcon}>
+              <Feather name={getTimeIcon()} size={24} color={colors.primary} />
+            </View>
+          </View>
+        </View>
+
         {/* Points Card with Greeting */}
         <Pressable onPress={() => router.push("../points/page")}>
           <PointsCard points={points} />
@@ -410,5 +470,44 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 40,
+  },
+  welcomeCard: {
+    marginHorizontal: 20,
+    borderRadius: 20,
+  },
+  welcomeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    paddingTop: 20,
+  },
+  welcomeContent: {
+    flex: 1,
+  },
+  greetingText: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  nameText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  personalizedMessage: {
+    fontSize: 16,
+    color: "#6B7280",
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  timeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 })

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, Pressable, Alert, Image, ScrollView,
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
-//import * as ImagePicker from "expo-image-picker"
+import * as ImagePicker from "expo-image-picker"
 import Feather from '@expo/vector-icons/Feather'
 import { useUserStore } from '@/hooks/userStore'
 import { getCurrentUser } from '@/app/actions/main_actions'
@@ -56,18 +56,18 @@ export default function EditProfileScreen() {
   }, [storeFirstName, storeLastName])
 
   // Function to handle image selection
-  // const pickImage = async () => {
-  //   // const result = await ImagePicker.launchImageLibraryAsync({
-  //   //   mediaTypes: ImagePicker.MediaTypeOptions.Images,
-  //   //   allowsEditing: true,
-  //   //   quality: 1,
-  //   //   aspect: [1, 1], // Square crop
-  //   // })
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 1,
+      aspect: [1, 1], // Square crop
+    })
 
-  //   if (!result.canceled) {
-  //     setProfileImage(result.assets[0].uri)
-  //   }
-  // }
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri)
+    }
+  }
 
   const handleSave = async () => {
     // Validate inputs
@@ -132,9 +132,9 @@ export default function EditProfileScreen() {
               )}
 
               {/* Circular Edit (Pencil) Button */}
-              {/* <Pressable style={styles.editPhotoButton}> </View>onPress={pickImage}>
+              <Pressable style={styles.editPhotoButton} onPress={pickImage}>
                 <Feather name="edit-2" size={16} color="white" />
-              </Pressable> */}
+              </Pressable>
             </View>
           </View>
 
@@ -243,7 +243,10 @@ const styles = StyleSheet.create({
     left: 16,
     ...Platform.select({
       ios: {
-        marginTop: 18,
+        marginTop: 30,
+      },
+      android: {
+        marginTop: 20,
       },
     }),
     top: "5%",
@@ -275,7 +278,7 @@ const styles = StyleSheet.create({
         paddingTop: 75,
       },
       android: {
-        paddingTop: 55,
+        paddingTop: 65,
       },
     }),
     backgroundColor: colors.card,

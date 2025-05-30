@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/constants/colors';
@@ -20,6 +20,7 @@ export default function ManageFavoriteTeamsScreen() {
     try {
       setLoadingTeams(true);
       const fetchedTeams = await getTeams();
+      console.log('Fetched teams:', fetchedTeams); // Debug log
       setTeams(fetchedTeams);
     } catch (error) {
       console.error('Error loading teams:', error);
@@ -32,12 +33,25 @@ export default function ManageFavoriteTeamsScreen() {
     loadTeams();
   }, []);
   
+  // Filter teams based on search query
+  const filteredTeams = teams.filter(team => {
+    if (!searchQuery.trim()) return true;
+    
+    const query = searchQuery.toLowerCase();
+    return (
+      team.name.toLowerCase().includes(query) ||
+      team.sport.toLowerCase().includes(query) ||
+      team.gender.toLowerCase().includes(query)
+    );
+  });
+  
   const handleToggleFavorite = async (teamId: string) => {
     try {
       setUpdatingFavorites(prev => [...prev, teamId]);
       await toggleFavoriteTeam(teamId);
     } catch (error) {
       console.error('Error toggling favorite team:', error);
+      // You could show an alert here if needed
     } finally {
       setUpdatingFavorites(prev => prev.filter(id => id !== teamId));
     }
@@ -51,7 +65,7 @@ export default function ManageFavoriteTeamsScreen() {
       <View style={styles.teamItem}>
         <Image 
           source={{ 
-            uri: item.logo || "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Manhattan_Jaspers_logo.svg/1200px-Manhattan_Jaspers_logo.svg.png" 
+            uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Manhattan_Jaspers_logo.svg/1200px-Manhattan_Jaspers_logo.svg.png" 
           }} 
           style={styles.teamLogo} 
         />
@@ -60,21 +74,17 @@ export default function ManageFavoriteTeamsScreen() {
           <Text style={styles.teamSport}>{item.gender} {item.sport}</Text>
         </View>
         <Pressable
-          style={[
-            styles.favoriteButton,
-            isFavorite && styles.favoriteButtonActive
-          ]}
+          style={styles.favoriteButton}
           onPress={() => handleToggleFavorite(item.id)}
           disabled={isUpdating}
         >
           {isUpdating ? (
-            <ActivityIndicator size="small" color={isFavorite ? '#FFFFFF' : colors.primary} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
             <Feather 
-              name={isFavorite ? 'heart' : 'heart'}
+              name="heart"
               size={20}
-              color={isFavorite ? '#FFFFFF' : colors.primary}
-              fill={isFavorite ? '#FFFFFF' : 'none'}
+              color={isFavorite ? '#EF4444' : colors.textSecondary} // Red when favorite, gray when not
             />
           )}
         </Pressable>
@@ -105,34 +115,73 @@ export default function ManageFavoriteTeamsScreen() {
           style={styles.backgroundImage}
         />
         
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Feather name="chevron-left" size={24} color={colors.primary} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Manage Favorite Teams</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        
-        {/* Search Bar (non-functional in this example) */}
+        {/* Functional Search Bar */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBar}>
             <Feather name='search' size={20} color={colors.textSecondary} />
-            <Text style={styles.searchPlaceholder}>Search teams...</Text>
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search teams..."
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <Feather name="x" size={16} color={colors.textSecondary} />
+              </Pressable>
+            )}
           </View>
         </View>
         
-        <Text style={styles.instructions}>
-          Tap the heart icon to add or remove teams from your favorites
-        </Text>
+        {/* Results info */}
+        <View style={styles.resultsContainer}>
+          <Text style={styles.resultsText}>
+            {searchQuery.trim() 
+              ? `${filteredTeams.length} team${filteredTeams.length !== 1 ? 's' : ''} found`
+              : `${teams.length} total teams`
+            }
+          </Text>
+          <Text style={styles.instructions}>
+            Tap the heart icon to add or remove teams from your favorites
+          </Text>
+        </View>
         
-        <FlatList
-          data={teams}
-          renderItem={renderTeamItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        {/* Teams List */}
+        {teams.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="users" size={48} color={colors.textSecondary} />
+            <Text style={styles.emptyTitle}>No teams available</Text>
+            <Text style={styles.emptySubtitle}>
+              Teams will appear here when they are added to the database
+            </Text>
+            <Pressable onPress={loadTeams} style={styles.retryButton}>
+              <Feather name="refresh-cw" size={16} color={colors.primary} />
+              <Text style={styles.retryText}>Refresh</Text>
+            </Pressable>
+          </View>
+        ) : filteredTeams.length === 0 && searchQuery.trim() ? (
+          <View style={styles.emptyContainer}>
+            <Feather name="search" size={48} color={colors.textSecondary} />
+            <Text style={styles.emptyTitle}>No teams found</Text>
+            <Text style={styles.emptySubtitle}>
+              Try adjusting your search terms or browse all teams
+            </Text>
+            <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+              <Text style={styles.clearSearchText}>Show all teams</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredTeams}
+            renderItem={renderTeamItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </SafeAreaView>
     </>
   );
@@ -194,17 +243,75 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  searchPlaceholder: {
+  searchInput: {
+    flex: 1,
     fontSize: 16,
-    color: colors.textSecondary,
+    color: colors.text,
     marginLeft: 12,
+    marginRight: 8,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  resultsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  resultsText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: 4,
   },
   instructions: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
-    paddingVertical: 12,
+    lineHeight: 20,
+  },
+  clearSearchButton: {
+    marginTop: 16,
+    paddingVertical: 8,
     paddingHorizontal: 16,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 8,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 8,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    marginLeft: 8,
   },
   listContent: {
     padding: 16,
@@ -245,11 +352,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    backgroundColor: 'transparent', // Removed background color
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  favoriteButtonActive: {
-    backgroundColor: colors.primary,
   },
 });

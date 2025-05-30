@@ -13,7 +13,7 @@ export interface Team {
   name: string
   shortName: string
   primaryColor: string
-  logo: string
+  logo: string,
   sport: string
   gender: string
   additionalInfo?: string

@@ -5,7 +5,8 @@ import { useEffect } from "react";
 import { Pressable } from "react-native";
 import Entypo from '@expo/vector-icons/Entypo';
 import { colors } from "@/constants/colors";
-
+import { Feather } from '@expo/vector-icons';
+import { Image } from "react-native";
 function RootLayoutNav() {
     const router = useRouter();
     const { userId, isUserLoggedIn, initializeUser } = useUserStore();
@@ -156,6 +157,145 @@ function RootLayoutNav() {
           headerShown: false,
         }} 
       />
+      <Stack.Screen 
+        name="all_cards/news_details" 
+        options={{ 
+          title: "News",
+          headerBackTitle: "Back",
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          )
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/team-details" 
+        options={{ 
+          title: "",
+          headerShown: false,
+          headerTitle: () => (
+            <Image 
+              source={require('@/IMAGES/logo_sports.png')}
+              style={{ 
+                width: 100, height: 40, resizeMode: 'cover', 
+              }}
+            />
+          ),
+          headerTitleAlign: "center",
+          headerStyle: { 
+            backgroundColor: "#00703c",
+          },
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="white" />
+            </Pressable>
+          )
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/InfoTab" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/index" 
+        options={{ 
+          title: "",
+          headerShown: false,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/RosterTab" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/ScheduleTab" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/SMTab" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+       <Stack.Screen 
+        name="teams/Coaches" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+      <Stack.Screen 
+        name="teams/Players" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+
       </Stack>
     )
 }
