@@ -196,10 +196,13 @@ export async function getTeamsByGender(gender: "men" | "women"): Promise<Team[]>
       return []
     }
 
+    // Convert the input to match database format
+    const dbGender = gender === "men" ? "Men's" : "Women's"
+
     const { data, error } = await supabase
       .from("teams")
       .select('*')
-      .eq('gender', gender) // Use exact gender match instead of ilike
+      .eq('gender', dbGender) // Use the converted format
       .order("name")
 
     if (error) {

@@ -9,7 +9,7 @@ import type { Team } from "@/app/actions/teams"
 import type { Team as DbTeam } from "@/types"
 import type { Game } from "@/types/game"
 import { CalendarView } from "@/components/games/CalendarView"
-import { GameCard } from "@/components/games/gameCard"
+import { GameCard } from "@/components/games/game-card"
 import { Dropdown } from "@/components/ui/dropdown"
 import { Feather } from "@expo/vector-icons"
 import { getTeams } from "@/app/actions/teams"
@@ -108,20 +108,15 @@ export default function CalendarScreen() {
   ]
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={styles.container} edges={["left"]}>
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
 
         {/* Filters Section */}
         <View style={styles.filtersSection}>
-          <Pressable style={styles.filtersHeader} onPress={() => setFiltersVisible(!filtersVisible)}>
-          <Feather name={filtersVisible ? "chevron-up" : "chevron-down"} size={20} color={colors.textSecondary} />
-            <Text style={styles.filtersHeaderText}>Filters</Text>
-          </Pressable>
 
           {filtersVisible && (
             <View style={styles.filtersGrid}>
               <View style={styles.filterItem}>
-                <Text style={styles.filterLabel}>Team</Text>
                 <Dropdown
                   options={teamOptions}
                   selectedValue={selectedTeam?.id || null}
@@ -131,7 +126,6 @@ export default function CalendarScreen() {
               </View>
 
               <View style={styles.filterItem}>
-                <Text style={styles.filterLabel}>Game Location</Text>
                 <Dropdown
                   options={locationOptions}
                   selectedValue={locationType}
@@ -211,10 +205,10 @@ const styles = StyleSheet.create({
     flex: 1,
     ...Platform.select({
       ios: {
-        marginTop: 40,
+        marginTop: 80,
       },
       android: {
-        marginTop: 75,
+        marginTop: 105,
       },
     }),
   },
@@ -223,6 +217,7 @@ const styles = StyleSheet.create({
   filtersSection: {
     paddingHorizontal: 20,
     marginBottom: 24,
+    marginTop: 16,
   },
   filtersGrid: {
     flexDirection: "row",
@@ -268,11 +263,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   gamesSection: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     marginBottom: 24,
   },
   gamesSectionHeader: {
     marginBottom: 16,
+    paddingLeft: 10
   },
   gamesHeaderContent: {
     paddingBottom: 16,

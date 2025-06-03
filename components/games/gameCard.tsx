@@ -1,8 +1,6 @@
 import type React from "react"
 import { View, Text, StyleSheet, Pressable, Image } from "react-native"
-import { LinearGradient } from "expo-linear-gradient"
 import { colors } from "@/constants/colors"
-import { getRelativeTimeDescription } from "@/utils/dateUtils"
 import type { Game } from "@/types/game"
 import Feather from "@expo/vector-icons/Feather"
 
@@ -10,13 +8,86 @@ interface GameCardProps {
   game: Game
   onPress?: (game: Game) => void
   onNotifyPress?: (game: Game) => void
-  compact?: boolean
+  onQRScanPress?: (game: Game) => void
 }
 
-export const GameCard: React.FC<GameCardProps> = ({ game, onPress, onNotifyPress, compact = false }) => {
+export const GameCard: React.FC<GameCardProps> = ({ game, onPress, onNotifyPress, onQRScanPress }) => {
+  // Format date properly
+  const formatGameDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }
+    return date.toLocaleDateString("en-US", options)
+  }
+
+  // Format time properly
+  const formatGameTime = (timeString?: string) => {
+    if (!timeString) return "TBD"
+
+    try {
+      let date: Date
+
+      if (timeString.includes(":")) {
+        const [hours, minutes] = timeString.split(":")
+        date = new Date()
+        date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
+      } else {
+        date = new Date(timeString)
+      }
+
+      return date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+    } catch (error) {
+      return timeString
+    }
+  }
+
   const isCompleted = game.status === "completed"
   const isLive = game.status === "live"
-  const isUpcoming = game.status === "scheduled"
+  const isUpcoming = game.status === "scheduled" || (!isCompleted && !isLive)
+  const isPastGame = isCompleted && !isLive
+
+  // Check if game is today
+  const gameDate = new Date(game.date)
+  const isToday = new Date().toDateString() === gameDate.toDateString()
+
+  // Get team logo or placeholder
+  const getTeamLogo = (team: any) => {
+    return team?.photo || team?.logo || null
+  }
+
+  // Get team primary color or default
+  const getTeamColor = () => {
+    return game.homeTeam?.primaryColor || colors.primary
+  }
+
+  // Add this utility function if you don't have it already
+  const hexToRgba = (hex: string, alpha = 1): string => {
+    if (!hex) return `rgba(0, 0, 0, ${alpha})`
+
+    hex = hex.replace("#", "")
+
+    if (hex.length === 3) {
+      hex = hex
+        .split("")
+        .map((char) => char + char)
+        .join("")
+    }
+
+    const r = Number.parseInt(hex.substring(0, 2), 16)
+    const g = Number.parseInt(hex.substring(2, 4), 16)
+    const b = Number.parseInt(hex.substring(4, 6), 16)
+
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+
+  const teamColor = getTeamColor()
 
   const handlePress = () => {
     if (onPress) {
@@ -31,269 +102,290 @@ export const GameCard: React.FC<GameCardProps> = ({ game, onPress, onNotifyPress
     }
   }
 
-  const getStatusText = () => {
-    switch (game.status) {
-      case "live":
-        return "LIVE"
-      case "completed":
-        return "FINAL"
-      case "postponed":
-        return "POSTPONED"
-      case "canceled":
-        return "CANCELED"
-      default:
-        return getRelativeTimeDescription(new Date(game.date))
+  const handleQRScanPress = (e: any) => {
+    e.stopPropagation()
+    if (onQRScanPress) {
+      onQRScanPress(game)
     }
-  }
-
-  const getStatusColor = () => {
-    switch (game.status) {
-      case "live":
-        return "#EF4444"
-      case "completed":
-        return "#10B981"
-      case "postponed":
-      case "canceled":
-        return "#F59E0B"
-      default:
-        return colors.primary
-    }
-  }
-
-  const getSportDisplayName = () => {
-    return game.sport?.display_name || game.sport?.name || "GAME"
-  }
-
-  const getTeamColor = () => {
-    return game.homeTeam.primaryColor || colors.primary
   }
 
   return (
-    <Pressable style={styles.container} onPress={handlePress}>
-      <LinearGradient colors={["rgba(255, 255, 255, 0.95)", "rgba(255, 255, 255, 1)"]} style={styles.cardGradient}>
-        {/* Header with Sport and Status */}
-        <View style={styles.header}>
-          <View style={styles.sportContainer}>
-            <View style={[styles.sportLine, { backgroundColor: getTeamColor() }]} />
-            <Text style={styles.sportName}>{getSportDisplayName()}</Text>
-          </View>
+    <Pressable onPress={handlePress} style={styles.container}>
+      {/* Today Badge */}
+      {isToday && !isPastGame && (
+        <View style={styles.todayBadge}>
+          <Text style={styles.todayText}>TODAY</Text>
+        </View>
+      )}
 
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-            <Text style={styles.statusText}>{getStatusText()}</Text>
-            {isLive && <View style={styles.livePulse} />}
+      {/* Live Badge */}
+      {isLive && (
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>LIVE</Text>
+        </View>
+      )}
+
+      {/* Teams Container */}
+      <View style={styles.teamsContainer}>
+        {/* Home Team */}
+        <View style={styles.teamColumn}>
+          <View style={[styles.logoContainer]}>
+            {getTeamLogo(game.homeTeam) ? (
+              <Image source={{ uri: getTeamLogo(game.homeTeam) }} style={styles.logo} />
+            ) : (
+              <Feather name="home" size={32} color={isPastGame ? "#6b7280" : teamColor} />
+            )}
           </View>
+          <Text style={[styles.teamName, { color: isPastGame ? "#6b7280" : colors.text }]}>
+            {game.homeTeam?.name || "Home"}
+          </Text>
+          {isCompleted && game.score?.home !== null && game.score?.home !== undefined && (
+            <Text style={[styles.score, { color: isPastGame ? "#6b7280" : "#10B981" }]}>{game.score.home}</Text>
+          )}
         </View>
 
-        {/* Teams Container */}
-        <View style={styles.teamsContainer}>
-          {/* Home Team */}
-          <View style={styles.teamContainer}>
-            <View style={styles.teamLogoContainer}>
-              <Image source={require("@/IMAGES/MAIN_LOGO.png")} style={styles.teamLogo} />
-            </View>
-            <Text style={styles.teamName} numberOfLines={1}>
-              {game.homeTeam.name}
-            </Text>
-            {isCompleted && game.score && <Text style={styles.score}>{game.score.home}</Text>}
-          </View>
-
-          {/* VS Separator */}
-          <View style={styles.vsContainer}>
-            <Text style={styles.vs}>VS</Text>
-            {isUpcoming && <Text style={styles.gameTime}>{game.time}</Text>}
-          </View>
-
-          {/* Away Team */}
-          <View style={styles.teamContainer}>
-            <View style={styles.teamLogoContainer}>
-              <Image
-                source={{ uri: game.awayTeam.logo }}
-                style={styles.teamLogo}
-                defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
-              />
-            </View>
-            <Text style={styles.teamName} numberOfLines={1}>
-              {game.awayTeam.shortName || game.awayTeam.name}
-            </Text>
-            {isCompleted && game.score && <Text style={styles.score}>{game.score.away}</Text>}
-          </View>
+        {/* VS Container */}
+        <View style={styles.vsContainer}>
+          <Text style={[styles.vsText, { color: isPastGame ? "#6b7280" : colors.textSecondary }]}>VS</Text>
+          {isCompleted && game.score && (
+            <Text style={[styles.finalText, { color: isPastGame ? "#6b7280" : "#10B981" }]}>FINAL</Text>
+          )}
         </View>
 
-        {/* Location - Only for upcoming games */}
-        {isUpcoming && (
-          <View style={styles.locationContainer}>
-            <Feather name="map-pin" size={12} color={colors.textSecondary} />
-            <Text style={styles.location}>{game.location}</Text>
+        {/* Away Team */}
+        <View style={styles.teamColumn}>
+          <View style={[styles.logoContainer]}>
+            {getTeamLogo(game.awayTeam) ? (
+              <Image source={{ uri: getTeamLogo(game.awayTeam) }} style={styles.logo} />
+            ) : (
+              <Feather name="users" size={32} color={isPastGame ? "#6b7280" : colors.textSecondary} />
+            )}
+          </View>
+          <Text style={[styles.teamName, { color: isPastGame ? "#6b7280" : colors.text }]}>
+            {game.awayTeam?.shortName || game.awayTeam?.name || "Away"}
+          </Text>
+          {isCompleted && game.score?.away !== null && game.score?.away !== undefined && (
+            <Text style={[styles.score, { color: isPastGame ? "#6b7280" : colors.text }]}>{game.score.away}</Text>
+          )}
+        </View>
+      </View>
 
-            {/* Notify Button for Upcoming Games */}
-            <Pressable style={styles.notifyButton} onPress={handleNotifyPress}>
-              <Feather name="bell" size={14} color={colors.primary} />
+      {/* Details Container */}
+      <View style={styles.detailsContainer}>
+        <View style={styles.detailRow}>
+          <Feather name="calendar" size={16} color={isPastGame ? "#6b7280" : colors.textSecondary} />
+          <Text style={[styles.detailText, { color: isPastGame ? "#6b7280" : colors.textSecondary }]}>
+            {isToday ? "Today" : formatGameDate(game.date)}, {formatGameTime(game.time)}
+          </Text>
+        </View>
+
+        {game.location && (
+          <View style={styles.detailRow}>
+            <Feather name="map-pin" size={16} color={isPastGame ? "#6b7280" : colors.textSecondary} />
+            <Text style={[styles.detailText, { color: isPastGame ? "#6b7280" : colors.textSecondary }]}>
+              {game.location}
+            </Text>
+          </View>
+        )}
+
+        {game.points && game.points > 0 && (
+          <View style={styles.detailRow}>
+            <Feather name="award" size={16} color={isPastGame ? "#6b7280" : colors.secondary} />
+            <Text style={[styles.detailText, styles.pointsText, { color: isPastGame ? "#6b7280" : colors.secondary }]}>
+              {game.points} points for attending
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Action Buttons - Only for upcoming games */}
+      {isUpcoming && (
+        <View style={styles.buttonsContainer}>
+          {onNotifyPress && (
+            <Pressable style={[styles.actionButton, styles.notifyButton]} onPress={handleNotifyPress}>
+              <Feather name="bell" size={16} color={teamColor} />
+              <Text style={[styles.buttonText, { color: teamColor }]}>Notify Me</Text>
             </Pressable>
-          </View>
-        )}
+          )}
 
-        {/* Live Indicator */}
-        {isLive && (
-          <View style={styles.liveIndicator}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LIVE NOW</Text>
-          </View>
-        )}
-      </LinearGradient>
+          {onQRScanPress && (
+            <Pressable
+              style={[styles.actionButton, styles.scanButton, { backgroundColor: teamColor }]}
+              onPress={handleQRScanPress}
+            >
+              <Feather name="camera" size={16} color="white" />
+              <Text style={[styles.buttonText, { color: "white" }]}>Check In</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* Single Check In Button for past games or when no specific actions */}
+      {(isPastGame || (!onNotifyPress && !onQRScanPress)) && (
+        <View style={[styles.attendButton, { backgroundColor: isPastGame ? "#6b7280" : teamColor }]}>
+          <Text style={styles.attendButtonText}>{isPastGame ? "Game Completed" : "Check In"}</Text>
+        </View>
+      )}
     </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
     marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    marginVertical: 8,
     elevation: 3,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    position: "relative",
   },
-  cardGradient: {
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.05)",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  sportContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sportLine: {
-    width: 3,
-    height: 16,
-    borderRadius: 1.5,
-    marginRight: 8,
-  },
-  sportName: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.text,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  statusBadge: {
+  todayBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: colors.secondary,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
+    borderRadius: 12,
+    zIndex: 1,
   },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "white",
-    letterSpacing: 0.5,
-  },
-  livePulse: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "white",
-    marginLeft: 4,
-  },
-  teamsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-  },
-  teamContainer: {
-    flex: 2,
-    alignItems: "center",
-  },
-  teamLogoContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-    overflow: "hidden",
-  },
-  teamLogo: {
-    width: 60,
-    height: 50,
-    resizeMode: "cover",
-  },
-  teamName: {
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "center",
+  todayText: {
     color: colors.text,
-  },
-  vsContainer: {
-    flex: 1,
-    alignItems: "center",
-  },
-  vs: {
     fontSize: 12,
-    fontWeight: "700",
-    color: colors.textSecondary,
-    marginBottom: 2,
+    fontWeight: "bold",
   },
-  gameTime: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.primary,
-  },
-  score: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#10B981",
-    marginTop: 2,
-  },
-  locationContainer: {
+  liveBadge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0, 0, 0, 0.05)",
-  },
-  location: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginLeft: 4,
-    fontWeight: "500",
-    flex: 1,
-  },
-  notifyButton: {
-    padding: 6,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    borderRadius: 8,
-  },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0, 0, 0, 0.05)",
+    zIndex: 1,
   },
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#EF4444",
-    marginRight: 6,
-    opacity: 0.8,
+    backgroundColor: "white",
+    marginRight: 4,
   },
   liveText: {
-    fontSize: 11,
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  teamsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  teamColumn: {
+    alignItems: "center",
+    flex: 2,
+  },
+  logoContainer: {
+    width: "100%",
+    height: 70,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  logo: {
+    width: 80,
+    height: 70,
+  },
+  teamName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  score: {
+    fontSize: 24,
     fontWeight: "700",
-    color: "#EF4444",
+    marginTop: 4,
+  },
+  vsContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  vsText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: colors.textSecondary,
+  },
+  finalText: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  detailsContainer: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 8,
+  },
+  pointsText: {
+    fontWeight: "500",
+  },
+  buttonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
+  },
+  notifyButton: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  scanButton: {
+    // backgroundColor set dynamically with teamColor
+  },
+  buttonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  attendButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  attendButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 })
 

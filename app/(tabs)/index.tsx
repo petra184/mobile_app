@@ -8,7 +8,7 @@ import { colors } from "@/constants/colors"
 import PointsCard from "@/components/rewards/main_card"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
-import { TeamSelector } from "@/components/teams/TeamSelector"
+import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
 import { GameCard } from "@/components/games/gameCard"
 import { GameFilter, type GameFilterOptions } from "@/components/games/GameFilter"
 import Feather from "@expo/vector-icons/Feather"
@@ -18,7 +18,7 @@ import type { Game } from "@/types/game"
 
 export default function HomeScreen() {
   const router = useRouter()
-  const { points, preferences, getUserName } = useUserStore()
+  const { points, preferences, getUserFirstName } = useUserStore()
   const { showSuccess, showInfo } = useNotifications()
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [allGames, setAllGames] = useState<Game[]>([])
@@ -110,7 +110,7 @@ export default function HomeScreen() {
   }
 
   const handleViewAllTeams = () => {
-    router.push("../teams")
+    router.push("../all_cards/all_teams")
   }
 
   const handleViewAllGames = () => {
@@ -138,7 +138,7 @@ export default function HomeScreen() {
 
   const getPersonalizedMessage = () => {
     const currentHour = new Date().getHours()
-    const userName = getUserName()
+    const userName = getUserFirstName()
 
     if (currentHour >= 5 && currentHour < 12) {
       return "Ready to start your day with some exciting games?"
@@ -203,7 +203,7 @@ export default function HomeScreen() {
           <View style={styles.welcomeHeader}>
             <View style={styles.welcomeContent}>
               <Text style={styles.greetingText}>{getTimeBasedGreeting()},</Text>
-              <Text style={styles.nameText}>{getUserName()}</Text>
+              <Text style={styles.nameText}>{getUserFirstName()}</Text>
               <Text style={styles.personalizedMessage}>{getPersonalizedMessage()}</Text>
             </View>
             <View style={styles.timeIcon}>
@@ -213,8 +213,13 @@ export default function HomeScreen() {
         </View>
 
         {/* Points Card with Greeting */}
-        <Pressable onPress={() => router.push("../points/page")}>
-          <PointsCard points={points} />
+        <Pressable onPress={() => router.push("../all_cards/points")}>
+        <PointsCard
+            points={points}
+            rank="Gold" // or dynamically set it
+            gamesAttended={12}
+            streakDays={11}
+          />
         </Pressable>
 
         {/* Teams Section */}
@@ -223,7 +228,7 @@ export default function HomeScreen() {
             <View style={styles.sectionTitleContainer}>
               <View style={[styles.sectionTitleAccent, { backgroundColor: colors.accent }]} />
               <View>
-                <Text style={styles.sectionTitle}>Discover Teams</Text>
+                <Text style={styles.sectionTitle}>Teams</Text>
                 <Text style={styles.sectionSubtitle}>Get to know our teams!</Text>
               </View>
             </View>
@@ -237,8 +242,6 @@ export default function HomeScreen() {
             onTeamPress={handleTeamPress}
             showFavorites={true}
             horizontal={true}
-            showSearch={false}
-            showFilters={false}
           />
         </View>
 
@@ -248,7 +251,7 @@ export default function HomeScreen() {
             <View style={styles.sectionTitleContainer}>
               <View style={[styles.sectionTitleAccent, { backgroundColor: colors.primary }]} />
               <View>
-                <Text style={styles.sectionTitle}>View Games</Text>
+                <Text style={styles.sectionTitle}>Games</Text>
                 <Text style={styles.sectionSubtitle}>{loading ? "Loading..." : `${filteredGames.length} games`}</Text>
               </View>
             </View>
@@ -352,7 +355,7 @@ const styles = StyleSheet.create({
     }),
   },
   section: {
-    marginTop: 24,
+    marginTop: 34,
   },
   sectionHeader: {
     flexDirection: "row",

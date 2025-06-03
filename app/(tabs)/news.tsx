@@ -251,7 +251,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   teamSelectorRow: {
-    paddingHorizontal: 16,
   },
   controlsRow: {
     flexDirection: "row",

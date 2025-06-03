@@ -161,9 +161,6 @@ export default function TeamDetailsScreen() {
 
           <View style={styles.centeredTeamName}>
             <Text style={styles.teamName}>{team.name}</Text>
-            <Text style={styles.teamSubtitle}>
-              {team.gender} {team.sport}
-            </Text>
           </View>
         </View>
       </Animated.View>
@@ -249,6 +246,7 @@ const styles = StyleSheet.create({
   backButton: {
     borderRadius: 20,
     alignItems: "center",
+    marginBottom: 3
   },
   teamName: {
     fontSize: 22,

@@ -5,10 +5,10 @@ import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking } from "r
 import { colors } from "@/constants/colors"
 import type { Team } from "@/app/actions/teams"
 import { Feather } from "@expo/vector-icons"
-import Animated, { FadeIn, FadeInDown } from "react-native-reanimated"
+import Animated, { FadeInDown } from "react-native-reanimated"
 import AntDesign from '@expo/vector-icons/AntDesign';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 interface TeamInfoTabProps {
   teamId: string
   team: Team
@@ -37,6 +37,49 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
       <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+
+        {/* Social Media Links */}
+        {(team.socialMedia?.facebook || team.socialMedia?.instagram || team.socialMedia?.twitter || team.socialMedia?.website) && (
+          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection2}>
+                      <View style={styles.circularButtonsContainer}>
+                        {team.socialMedia?.facebook && (
+                          <Pressable
+                            style={[styles.circularButton, styles.facebookButton]}
+                            onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
+                          >
+                            <Feather name="facebook" size={22} color="#FFFFFF" />
+                          </Pressable>
+                        )}
+            
+                        {team.socialMedia?.instagram && (
+                          <Pressable
+                            style={[styles.circularButton, styles.instagramButton]}
+                            onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
+                          >
+                            <Feather name="instagram" size={22} color="#FFFFFF" />
+                          </Pressable>
+                        )}
+            
+                        {team.socialMedia?.twitter && (
+                          <Pressable
+                            style={[styles.circularButton, styles.twitterButton]}
+                            onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
+                          >
+                            <FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />
+                          </Pressable>
+                        )}
+            
+                        {team.socialMedia?.website && (
+                          <Pressable
+                            style={[styles.circularButton, styles.websiteButton]}
+                            onPress={() => handleSocialPress(team.socialMedia?.website || null)}
+                          >
+                            <Feather name="globe" size={22} color="#FFFFFF" />
+                          </Pressable>
+                        )}
+                      </View>
+          </Animated.View>
+        )}
 
         {/* Team Record */}
         <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.detailsSection}>
@@ -74,84 +117,14 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           </View>
         </Animated.View>
 
-        {/* Team Information */}
-        <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.detailsSection}>
-          <Text style={styles.sectionTitle}>Team Information</Text>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Sport</Text>
-            <Text style={styles.infoValue}>{team.sport}</Text>
-          </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Gender</Text>
-            <Text style={styles.infoValue}>{team.gender}</Text>
-          </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoLabel}>Team ID</Text>
-            <Text style={styles.infoValue}>{team.id}</Text>
-          </View>
-
-          {team.shortName && (
-            <View style={styles.infoCard}>
-              <Text style={styles.infoLabel}>Short Name</Text>
-              <Text style={styles.infoValue}>{team.shortName}</Text>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Social Media Links */}
-        {(team.socialMedia?.facebook || team.socialMedia?.instagram || team.socialMedia?.twitter || team.socialMedia?.website) && (
-          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>Connect With Us</Text>
-                      <View style={styles.circularButtonsContainer}>
-                        {team.socialMedia?.facebook && (
-                          <Pressable
-                            style={[styles.circularButton, styles.facebookButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
-                          >
-                            <Feather name="facebook" size={22} color="#FFFFFF" />
-                          </Pressable>
-                        )}
-            
-                        {team.socialMedia?.instagram && (
-                          <Pressable
-                            style={[styles.circularButton, styles.instagramButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
-                          >
-                            <Feather name="instagram" size={22} color="#FFFFFF" />
-                          </Pressable>
-                        )}
-            
-                        {team.socialMedia?.twitter && (
-                          <Pressable
-                            style={[styles.circularButton, styles.twitterButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
-                          >
-                            <Feather name="twitter" size={22} color="#FFFFFF" />
-                          </Pressable>
-                        )}
-            
-                        {team.socialMedia?.website && (
-                          <Pressable
-                            style={[styles.circularButton, styles.websiteButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.website || null)}
-                          >
-                            <Feather name="globe" size={22} color="#FFFFFF" />
-                          </Pressable>
-                        )}
-                      </View>
+        {team.additionalInfo && team.additionalInfo.trim() !== '' && (
+          <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
+            <Text style={styles.sectionTitle}>About the Team</Text>
+            <Text style={styles.aboutText}>{team.additionalInfo}</Text>
           </Animated.View>
         )}
 
-        {/* Additional Information */}
-        {/* {team.socialMedia?.additional_info && (
-          <Animated.View entering={FadeInDown.duration(400).delay(400)} style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>About the Team</Text>
-            <Text style={styles.aboutText}>{team.socialMedia?.additional_info || null}</Text>
-          </Animated.View>
-        )} */}
+      
       </ScrollView>
     </View>
   )
@@ -208,16 +181,16 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   facebookButton: {
-    backgroundColor: "#1877F2",
+    backgroundColor: "#1558D6",
   },
   instagramButton: {
-    backgroundColor: "#E1306C",
+    backgroundColor: "#C02CBE",
   },
   twitterButton: {
-    backgroundColor: "#1DA1F2",
+    backgroundColor: "black",
   },
   websiteButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: "rgba(0, 103, 0, 0.8)",
   },
   teamLogo: {
     width: 80,
@@ -256,6 +229,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  detailsSection2: {
+    marginBottom: 24,
+    borderRadius: 12,
+    padding: 16,
   },
   sectionTitle: {
     fontSize: 18,

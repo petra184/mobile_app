@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, ScrollView, Image, Pressable, Platform, ActivityIndicator } from "react-native"
-import { Stack, useLocalSearchParams, useRouter } from "expo-router"
+import { useLocalSearchParams, useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import { getNewsById, type NewsArticle } from "@/app/actions/news"
@@ -57,12 +57,6 @@ export default function NewsDetailsScreen() {
   if (loading) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title: "News",
-            headerBackTitle: "Back",
-          }}
-        />
         <SafeAreaView style={styles.container} edges={["left"]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -77,12 +71,6 @@ export default function NewsDetailsScreen() {
   if (error || !article) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title: "News",
-            headerBackTitle: "Back",
-          }}
-        />
         <SafeAreaView style={styles.container} edges={["left"]}>
           <View style={styles.notFoundContainer}>
             <Feather name="alert-circle" size={48} color={colors.textSecondary} />
@@ -103,13 +91,6 @@ export default function NewsDetailsScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "News",
-          headerBackTitle: "Back",
-        }}
-      />
-
       <SafeAreaView style={styles.container} edges={["left"]}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* Article Image */}
@@ -167,14 +148,7 @@ export default function NewsDetailsScreen() {
               )}
             </View>
 
-            {/* Article Footer */}
-            <View style={styles.footer}>
               <View style={styles.footerDivider} />
-              <View style={styles.footerContent}>
-                <Text style={styles.footerText}>Published by {article.author}</Text>
-                <Text style={styles.footerDate}>{formatDate(article.createdAt)}</Text>
-              </View>
-            </View>
           </View>
         </ScrollView>
       </SafeAreaView>

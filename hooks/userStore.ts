@@ -43,6 +43,7 @@ interface UserState {
   clearUserData: () => void;
   isUserLoggedIn: () => boolean;
   getUserName: () => string;
+  getUserFirstName: () => string;
 }
 
 function capitalize(name: string) {
@@ -68,12 +69,20 @@ export const useUserStore = create<UserState>()(
       isLoading: false,
       isPointsLoading: false,
       isScanHistoryLoading: false,
+
+      getUserFirstName:() => {
+        const { first_name } = get();
+        
+        if (first_name) {
+          return capitalize(first_name);
+        }
+        
+        return 'User';
+      },
       
       // Get user's full name (capitalized)
       getUserName: () => {
         const { first_name, last_name } = get();
-        
-        console.log('getUserName called - first_name:', first_name, 'last_name:', last_name); // Debug log
         
         if (first_name && last_name) {
           return `${capitalize(first_name)} ${capitalize(last_name)}`;

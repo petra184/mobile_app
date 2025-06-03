@@ -2,10 +2,10 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, Animated, Pressable, Dimensions, Platform } from "react-native"
+import { View, Text, StyleSheet, Animated, Pressable, Platform } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import Feather from '@expo/vector-icons/Feather';
-import { BlurView } from 'expo-blur';
+import Feather from "@expo/vector-icons/Feather"
+import { BlurView } from "expo-blur"
 
 // Types
 export type NotificationType = "success" | "error" | "warning" | "info" | "default"
@@ -42,6 +42,8 @@ interface NotificationContextType {
   showToast: (notification: Omit<ToastNotification, "id">) => void
   hideToast: (id: string) => void
   clearAllToasts: () => void
+  // Quick notification function (for compatibility)
+  showNotification: (message: string, type?: NotificationType) => void
 
   // In-app notifications
   notifications: InAppNotification[]
@@ -159,15 +161,15 @@ const ToastItem: React.FC<{
   const getGradientColors = () => {
     switch (notification.type) {
       case "success":
-        return ['rgba(16, 185, 129, 0.1)', 'rgba(16, 185, 129, 0.05)']
+        return ["rgba(16, 185, 129, 0.1)", "rgba(16, 185, 129, 0.05)"]
       case "error":
-        return ['rgba(239, 68, 68, 0.1)', 'rgba(239, 68, 68, 0.05)']
+        return ["rgba(239, 68, 68, 0.1)", "rgba(239, 68, 68, 0.05)"]
       case "warning":
-        return ['rgba(245, 158, 11, 0.1)', 'rgba(245, 158, 11, 0.05)']
+        return ["rgba(245, 158, 11, 0.1)", "rgba(245, 158, 11, 0.05)"]
       case "info":
-        return ['rgba(59, 130, 246, 0.1)', 'rgba(59, 130, 246, 0.05)']
+        return ["rgba(59, 130, 246, 0.1)", "rgba(59, 130, 246, 0.05)"]
       default:
-        return ['rgba(107, 114, 128, 0.1)', 'rgba(107, 114, 128, 0.05)']
+        return ["rgba(107, 114, 128, 0.1)", "rgba(107, 114, 128, 0.05)"]
     }
   }
 
@@ -183,23 +185,24 @@ const ToastItem: React.FC<{
     >
       {/* Glassmorphism background */}
       <BlurView intensity={20} style={styles.blurBackground}>
-        <View style={[styles.gradientOverlay, { 
-          backgroundColor: getGradientColors()[0] 
-        }]} />
-        
+        <View
+          style={[
+            styles.gradientOverlay,
+            {
+              backgroundColor: getGradientColors()[0],
+            },
+          ]}
+        />
+
         {/* Accent border */}
-      <View style={[styles.accentBorder, { backgroundColor: getAccentColor() }]} />
-        
+        <View style={[styles.accentBorder, { backgroundColor: getAccentColor() }]} />
+
         <View style={styles.toastContent}>
-          <View style={styles.iconContainer}>
-            {getIcon()}
-          </View>
+          <View style={styles.iconContainer}>{getIcon()}</View>
 
           <View style={styles.textContainer}>
             <Text style={styles.toastTitle}>{notification.title}</Text>
-            {notification.message && (
-              <Text style={styles.toastMessage}>{notification.message}</Text>
-            )}
+            {notification.message && <Text style={styles.toastMessage}>{notification.message}</Text>}
           </View>
 
           <Pressable
@@ -213,13 +216,11 @@ const ToastItem: React.FC<{
 
         {notification.action && (
           <View style={styles.actionContainer}>
-            <Pressable 
-              style={[styles.actionButton, { borderColor: getAccentColor() }]} 
+            <Pressable
+              style={[styles.actionButton, { borderColor: getAccentColor() }]}
               onPress={notification.action.onPress}
             >
-              <Text style={[styles.actionText, { color: getAccentColor() }]}>
-                {notification.action.label}
-              </Text>
+              <Text style={[styles.actionText, { color: getAccentColor() }]}>{notification.action.label}</Text>
             </Pressable>
           </View>
         )}
@@ -238,10 +239,7 @@ const ToastContainer: React.FC<{
   return (
     <View style={[styles.toastWrapper, { top: insets.top + 16 }]} pointerEvents="box-none">
       {toasts.map((toast, index) => (
-        <Animated.View 
-          key={toast.id} 
-          style={[styles.toastItemWrapper, { zIndex: 1000 - index }]}
-        >
+        <Animated.View key={toast.id} style={[styles.toastItemWrapper, { zIndex: 1000 - index }]}>
           <ToastItem notification={toast} onDismiss={onDismiss} />
         </Animated.View>
       ))}
@@ -257,14 +255,17 @@ export const NotificationBadge: React.FC<{
   if (count === 0) return null
 
   return (
-    <View style={[styles.badge, { 
-      width: Math.max(size, count > 9 ? size + 4 : size), 
-      height: size, 
-      borderRadius: size / 2 
-    }]}>
-      <Text style={[styles.badgeText, { fontSize: size * 0.55 }]}>
-        {count > 99 ? "99+" : count}
-      </Text>
+    <View
+      style={[
+        styles.badge,
+        {
+          width: Math.max(size, count > 9 ? size + 4 : size),
+          height: size,
+          borderRadius: size / 2,
+        },
+      ]}
+    >
+      <Text style={[styles.badgeText, { fontSize: size * 0.55 }]}>{count > 99 ? "99+" : count}</Text>
     </View>
   )
 }
@@ -292,6 +293,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const clearAllToasts = useCallback(() => {
     setToasts([])
   }, [])
+
+  // Quick notification function (for compatibility)
+  const showNotification = useCallback(
+    (message: string, type: NotificationType = "default") => {
+      showToast({ type, title: message })
+    },
+    [showToast],
+  )
 
   // In-app notification functions
   const addNotification = useCallback((notification: Omit<InAppNotification, "id" | "timestamp" | "read">) => {
@@ -357,6 +366,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     showToast,
     hideToast,
     clearAllToasts,
+    showNotification, // Add this line
     notifications,
     unreadCount,
     addNotification,
@@ -387,7 +397,6 @@ export const useNotifications = () => {
   return context
 }
 
-
 const styles = StyleSheet.create({
   toastWrapper: {
     position: "absolute",
@@ -414,7 +423,7 @@ const styles = StyleSheet.create({
   blurBackground: {
     borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
   },
   gradientOverlay: {
     position: "absolute",
@@ -440,8 +449,9 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     ...Platform.select({
-      android: { // Adjust for Android alignment
-      }
+      android: {
+        // Adjust for Android alignment
+      },
     }),
     marginRight: 16,
     marginTop: 2,
@@ -470,7 +480,7 @@ const styles = StyleSheet.create({
   dismissButton: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(107, 114, 128, 0.1)',
+    backgroundColor: "rgba(107, 114, 128, 0.1)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -484,7 +494,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 16,
     borderWidth: 1.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
     alignItems: "center",
   },
   actionText: {

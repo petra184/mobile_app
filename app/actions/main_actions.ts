@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-
+import { checkBothAvailability } from './users';
 export async function signUpWithEmail(
   email: string, 
   password: string, 
@@ -9,15 +9,33 @@ export async function signUpWithEmail(
   phone_number: string
 ) {
   try {
+    // First, check if email and username are available
+    const availabilityCheck = await checkBothAvailability(email, username);
+    
+    if (!availabilityCheck.bothAvailable) {
+      const errors = [];
+      if (!availabilityCheck.email.available) {
+        errors.push(availabilityCheck.email.message);
+      }
+      if (!availabilityCheck.username.available) {
+        errors.push(availabilityCheck.username.message);
+      }
+      
+      return {
+        success: false,
+        message: errors.join(' and '),
+      };
+    }
+
     // Sign up the user with Supabase Auth
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.toLowerCase(), // Normalize email
       password,
       options: {
         data: {
           first_name,
           last_name,
-          username,
+          username: username.toLowerCase(), // Normalize username
           phone_number,
         },
       },
@@ -25,6 +43,15 @@ export async function signUpWithEmail(
 
     if (error) {
       console.error('Error signing up:', error.message);
+      
+      // Handle specific Supabase Auth errors
+      if (error.message.includes('already registered')) {
+        return {
+          success: false,
+          message: 'This email is already registered.',
+        };
+      }
+      
       return {
         success: false,
         message: error.message,
@@ -41,22 +68,63 @@ export async function signUpWithEmail(
         };
       }
 
-      // Insert user data into the "users" table
+      // Insert user data into the "users" table with error handling
       const { error: dbError } = await supabase.from("users").insert({
-        email,
+        email: email.toLowerCase(),
         user_id: data.user.id,
-        username,
+        username: username.toLowerCase(),
         first_name,
         last_name,
         phone_number,
+        points: 0, // Initialize with 0 points
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
 
       if (dbError) {
         console.error("Database Insert Error:", dbError.message);
+        
+        // If database insert fails, we should clean up the auth user
+        try {
+          await supabase.auth.admin.deleteUser(data.user.id);
+        } catch (cleanupError) {
+          console.error("Failed to cleanup auth user:", cleanupError);
+        }
+        
+        // Handle specific database errors
+        if (dbError.code === '23505') { // Unique constraint violation
+          if (dbError.message.includes('username')) {
+            return {
+              success: false,
+              message: "Username is already taken.",
+            };
+          }
+          if (dbError.message.includes('email')) {
+            return {
+              success: false,
+              message: "Email is already registered.",
+            };
+          }
+        }
+        
         return {
           success: false,
           message: "Sign-up failed. Please try again.",
         };
+      }
+
+      // Create initial user preferences
+      const { error: prefsError } = await supabase.from("user_preferences").insert({
+        user_id: data.user.id,
+        notifications_enabled: true,
+        favorite_teams: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      if (prefsError) {
+        console.warn("Failed to create user preferences:", prefsError.message);
+        // Don't fail the signup for this, just log it
       }
 
       // If email confirmation is enabled in Supabase

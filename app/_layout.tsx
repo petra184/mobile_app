@@ -6,7 +6,8 @@ import { Pressable } from "react-native";
 import Entypo from '@expo/vector-icons/Entypo';
 import { colors } from "@/constants/colors";
 import { Feather } from '@expo/vector-icons';
-import { Image } from "react-native";
+import { CartProvider } from "@/context/cart-context"
+
 function RootLayoutNav() {
     const router = useRouter();
     const { userId, isUserLoggedIn, initializeUser } = useUserStore();
@@ -65,7 +66,7 @@ function RootLayoutNav() {
         name="user_profile/change_password"  
         options={{ 
           headerShown: true,
-          headerTitle: "Change Password",
+          headerTitle: "",
           headerLeft: () => (
             <Pressable 
               onPress={() => router.back()} 
@@ -139,6 +140,24 @@ function RootLayoutNav() {
           },
         }} 
       />
+      <Stack.Screen 
+        name="all_cards/all_teams" 
+        options={{ 
+          title: "All Teams",
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Entypo name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+          headerBackTitle: "Back",
+          headerTitleAlign: "center",
+          headerTitleStyle: {
+            color: "black",
+          },
+        }} 
+      />
        <Stack.Screen 
         name="all_cards/game_details" 
         options={{ 
@@ -158,41 +177,33 @@ function RootLayoutNav() {
         }} 
       />
       <Stack.Screen 
+        name="all_cards/points" 
+        options={{ 
+          title: "",
+          headerStyle: { 
+            backgroundColor: colors.primary,
+          },
+          headerBackTitle: "Back",
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Entypo name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+          headerShown: false,
+        }} 
+      />
+      <Stack.Screen 
         name="all_cards/news_details" 
         options={{ 
-          title: "News",
+          title: "",
           headerBackTitle: "Back",
           headerLeft: () => (
             <Pressable 
               onPress={() => router.back()} 
               style={{ marginRight: 16 }}>
               <Feather name="chevron-left" size={24} color="black" />
-            </Pressable>
-          )
-        }} 
-      />
-      <Stack.Screen 
-        name="teams/team-details" 
-        options={{ 
-          title: "",
-          headerShown: false,
-          headerTitle: () => (
-            <Image 
-              source={require('@/IMAGES/logo_sports.png')}
-              style={{ 
-                width: 100, height: 40, resizeMode: 'cover', 
-              }}
-            />
-          ),
-          headerTitleAlign: "center",
-          headerStyle: { 
-            backgroundColor: "#00703c",
-          },
-          headerLeft: () => (
-            <Pressable 
-              onPress={() => router.back()} 
-              style={{ marginRight: 16 }}>
-              <Feather name="chevron-left" size={24} color="white" />
             </Pressable>
           )
         }} 
@@ -253,20 +264,6 @@ function RootLayoutNav() {
           ),
         }} 
       />
-      <Stack.Screen 
-        name="teams/SMTab" 
-        options={{ 
-          title: "",
-          headerShown: true,
-          headerLeft: () => (
-            <Pressable 
-              onPress={() => router.back()} 
-              style={{ marginRight: 16 }}>
-              <Feather name="chevron-left" size={24} color="black" />
-            </Pressable>
-          ),
-        }} 
-      />
        <Stack.Screen 
         name="teams/Coaches" 
         options={{ 
@@ -295,7 +292,34 @@ function RootLayoutNav() {
           ),
         }} 
       />
-
+      <Stack.Screen 
+        name="store/CelebrateBirthday" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
+      <Stack.Screen 
+        name="store/Checkout" 
+        options={{ 
+          title: "",
+          headerShown: true,
+          headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+              <Feather name="chevron-left" size={24} color="black" />
+            </Pressable>
+          ),
+        }} 
+      />
       </Stack>
     )
 }
@@ -303,7 +327,9 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <NotificationProvider>
-      <RootLayoutNav />
+      <CartProvider>
+        <RootLayoutNav />
+      </CartProvider>
     </NotificationProvider>
   );
 }

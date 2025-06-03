@@ -2,11 +2,13 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, Image, Pressable } from "react-native"
+import { View, Text, StyleSheet, FlatList, Image, Pressable, ActivityIndicator } from "react-native"
 import { colors } from "@/constants/colors"
 import type { Player, Coach } from "@/app/actions/info_teams"
 import { getTeamData } from "@/app/actions/info_teams"
 import { useRouter } from "expo-router"
+import Animated, { FadeInDown } from "react-native-reanimated"
+import { Feather } from "@expo/vector-icons"
 
 type RosterItem = (Player & { type: "player" }) | (Coach & { type: "coach" }) | { type: "label"; label: string }
 
@@ -113,9 +115,11 @@ export const RosterTab: React.FC<RosterTabProps> = ({ players, coaches, teamId, 
     )
   }
 
+  // Enhanced loading state with ActivityIndicator
   if (loading || loadingTeam) {
     return (
       <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading roster...</Text>
       </View>
     )
@@ -135,33 +139,43 @@ export const RosterTab: React.FC<RosterTabProps> = ({ players, coaches, teamId, 
         style={styles.backgroundImage}
       />
 
-      {rosterData.length > 0 ? (
-        <FlatList
-          data={rosterData}
-          renderItem={renderItem}
-          keyExtractor={(item, index) => {
-            if ("id" in item) return item.id
-            if (item.type === "label") return `label-${index}`
-            return `item-${index}`
-          }}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={() => (
-            <View style={styles.headerContainer}>
-              {teamData?.photo ? (
-                <Image source={{ uri: teamData.photo }} style={styles.roster} />
-              ) : (
-                <Image source={{ uri: "https://via.placeholder.com/800x400?text=Team+Roster" }} style={styles.roster} />
-              )}
+      <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.content}>
+        {rosterData.length > 0 ? (
+          <FlatList
+            data={rosterData}
+            renderItem={renderItem}
+            keyExtractor={(item, index) => {
+              if ("id" in item) return item.id
+              if (item.type === "label") return `label-${index}`
+              return `item-${index}`
+            }}
+            contentContainerStyle={styles.listContent}
+            ListHeaderComponent={() => (
+              <View style={styles.headerContainer}>
+                {teamData?.photo ? (
+                  <Image source={{ uri: teamData.photo }} style={styles.roster} />
+                ) : (
+                  <Image source={{ uri: "https://via.placeholder.com/800x400?text=Team+Roster" }} style={styles.roster} />
+                )}
+              </View>
+            )}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <Feather name="users" size={60} color={colors.primary + '40'} />
             </View>
-          )}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No roster found for this team</Text>
-          <Text style={styles.emptySubtext}>Check back later for updates</Text>
-        </View>
-      )}
+            <Text style={styles.emptyTitle}>No Roster Available</Text>
+            <Text style={styles.emptyText}>
+              This team doesn't have any players or coaches listed yet.
+            </Text>
+            <Text style={styles.emptySubtext}>
+              Check back later for roster updates!
+            </Text>
+          </View>
+        )}
+      </Animated.View>
     </View>
   )
 }
@@ -171,15 +185,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  content: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    justifyContent: "center",
+    padding: 20,
   },
   loadingText: {
+    marginTop: 12,
     fontSize: 16,
-    color: colors.textSecondary,
+    color: colors.text + '80',
   },
   sectionLabelContainer: {
     marginTop: 20,
@@ -287,20 +305,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
-    marginTop: 40,
+    padding: 40,
+  },
+  emptyIconContainer: {
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 12,
+    textAlign: "center",
   },
   emptyText: {
-    fontSize: 16,
-    color: colors.textSecondary,
+    fontSize: 15,
+    color: colors.text + '80',
     textAlign: "center",
+    lineHeight: 22,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.text + '60',
     textAlign: "center",
-    opacity: 0.7,
+    fontStyle: "italic",
   },
   playerNumber: {
     fontSize: 14,

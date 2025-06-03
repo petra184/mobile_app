@@ -1,11 +1,13 @@
 "use client"
 
 import type React from "react"
-import { View, Text, StyleSheet, FlatList, Image } from "react-native"
+import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator } from "react-native"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
 import type { Game } from "@/types/game"
-import { GameCard } from "@/components/games/gameCard"
+import { GameCard } from "@/components/games/game-card"
+import Animated, { FadeInDown } from "react-native-reanimated"
+import { Feather } from "@expo/vector-icons"
 
 interface ScheduleTabProps {
   games: Game[]
@@ -47,9 +49,11 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
     console.log("Notify for game:", game.id)
   }
 
+  // Enhanced loading state with ActivityIndicator
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading schedule...</Text>
       </View>
     )
@@ -117,23 +121,30 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
         style={styles.backgroundImage}
       />
 
-      {sections.length > 0 ? (
-        <FlatList
-          data={sections}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIcon}>
-            <Text style={styles.emptyIconText}>📅</Text>
+      <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.content}>
+        {sections.length > 0 ? (
+          <FlatList
+            data={sections}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <Feather name="calendar" size={60} color={colors.primary + '40'} />
+            </View>
+            <Text style={styles.emptyTitle}>No Games Scheduled</Text>
+            <Text style={styles.emptyText}>
+              This team doesn't have any games scheduled yet.
+            </Text>
+            <Text style={styles.emptySubtext}>
+              Check back later for schedule updates!
+            </Text>
           </View>
-          <Text style={styles.emptyText}>No games scheduled for this team</Text>
-          <Text style={styles.emptySubtext}>Check back later for updates</Text>
-        </View>
-      )}
+        )}
+      </Animated.View>
     </View>
   )
 }
@@ -142,6 +153,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  content: {
+    flex: 1,
   },
   backgroundImage: {
     position: "absolute",
@@ -152,13 +166,14 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    justifyContent: "center",
+    padding: 20,
   },
   loadingText: {
+    marginTop: 12,
     fontSize: 16,
-    color: colors.textSecondary,
+    color: colors.text + '80',
   },
   listContent: {
     paddingBottom: 20,
@@ -179,30 +194,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 40,
   },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: `${colors.textSecondary}10`,
-    alignItems: "center",
-    justifyContent: "center",
+  emptyIconContainer: {
     marginBottom: 20,
   },
-  emptyIconText: {
-    fontSize: 32,
-  },
-  emptyText: {
+  emptyTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: colors.text,
+    marginBottom: 12,
     textAlign: "center",
+  },
+  emptyText: {
+    fontSize: 15,
+    color: colors.text + '80',
+    textAlign: "center",
+    lineHeight: 22,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.text + '60',
     textAlign: "center",
-    opacity: 0.7,
+    fontStyle: "italic",
   },
 })
 

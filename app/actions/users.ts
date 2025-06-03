@@ -483,3 +483,157 @@ export async function uploadProfileImage(userId: string, imageUri: string): Prom
       return false;
     }
   }
+
+  export async function updateUserPassword(currentPassword: string, newPassword: string) {
+    try {
+      // First, verify the current password by attempting to sign in
+      const { data: user } = await supabase.auth.getUser();
+      
+      if (!user.user?.email) {
+        throw new Error('No authenticated user found');
+      }
+  
+      // Verify current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.user.email,
+        password: currentPassword,
+      });
+  
+      if (signInError) {
+        throw new Error('Current password is incorrect');
+      }
+  
+      // Update the password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+  
+      if (updateError) {
+        throw updateError;
+      }
+  
+      return { success: true };
+    } catch (error) {
+      console.error('Password update error:', error);
+      throw error;
+    }
+  }
+
+/**
+ * Check if an email is already taken
+ * @param email The email to check
+ * @returns Object with availability status
+ */
+export async function checkEmailAvailability(email: string) {
+  try {
+    if (!email || email.trim() === '') {
+      return { available: false, message: 'Email is required' };
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return { available: false, message: 'Invalid email format' };
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', email.toLowerCase())
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      // No rows returned - email is available
+      return { available: true, message: 'Email is available' };
+    }
+
+    if (error) {
+      console.error('Error checking email availability:', error);
+      return { available: false, message: 'Error checking email availability' };
+    }
+
+    // Email exists
+    return { available: false, message: 'Email is already taken' };
+  } catch (error) {
+    console.error('Unexpected error checking email:', error);
+    return { available: false, message: 'Error checking email availability' };
+  }
+}
+
+/**
+ * Check if a username is already taken
+ * @param username The username to check
+ * @returns Object with availability status
+ */
+export async function checkUsernameAvailability(username: string) {
+  try {
+    if (!username || username.trim() === '') {
+      return { available: false, message: 'Username is required' };
+    }
+
+    // Username validation rules
+    if (username.length < 3) {
+      return { available: false, message: 'Username must be at least 3 characters' };
+    }
+
+    if (username.length > 20) {
+      return { available: false, message: 'Username must be less than 20 characters' };
+    }
+
+    // Only allow alphanumeric characters and underscores
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      return { available: false, message: 'Username can only contain letters, numbers, and underscores' };
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('username')
+      .eq('username', username.toLowerCase())
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      // No rows returned - username is available
+      return { available: true, message: 'Username is available' };
+    }
+
+    if (error) {
+      console.error('Error checking username availability:', error);
+      return { available: false, message: 'Error checking username availability' };
+    }
+
+    // Username exists
+    return { available: false, message: 'Username is already taken' };
+  } catch (error) {
+    console.error('Unexpected error checking username:', error);
+    return { available: false, message: 'Error checking username availability' };
+  }
+}
+
+/**
+ * Check both email and username availability at once
+ * @param email The email to check
+ * @param username The username to check
+ * @returns Object with both availability statuses
+ */
+export async function checkBothAvailability(email: string, username: string) {
+  try {
+    const [emailResult, usernameResult] = await Promise.all([
+      checkEmailAvailability(email),
+      checkUsernameAvailability(username)
+    ]);
+
+    return {
+      email: emailResult,
+      username: usernameResult,
+      bothAvailable: emailResult.available && usernameResult.available
+    };
+  } catch (error) {
+    console.error('Error checking availability:', error);
+    return {
+      email: { available: false, message: 'Error checking email' },
+      username: { available: false, message: 'Error checking username' },
+      bothAvailable: false
+    };
+  }
+}
