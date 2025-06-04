@@ -2,7 +2,8 @@
 
 import type React from "react"
 import { useState } from "react"
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, Pressable } from "react-native"
+import { View, Text, StyleSheet, StatusBar, Pressable } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
 import { colors } from "@/constants/colors"
 import type { Team } from "@/app/actions/teams"
@@ -62,7 +63,7 @@ const TeamsPage: React.FC = () => {
   )
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["left"]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
 
       {/* Header */}
@@ -154,7 +155,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop:20,
     backgroundColor: colors.background,
   },
 })

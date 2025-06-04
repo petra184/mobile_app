@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator } from "reac
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
 import type { Game } from "@/types/game"
-import { GameCard } from "@/components/games/game-card"
+import { GameCard } from "@/components/games/gameCard"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { Feather } from "@expo/vector-icons"
 

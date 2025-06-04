@@ -167,7 +167,10 @@ const TeamItem = React.memo(
                   {team.shortName} {/* Show full name instead of shortName */}
                 </Text>
                 <Text style={styles.teamSport}>
-                  {team.gender} {team.sport}
+                  {team.gender}
+                </Text>
+                <Text style={styles.teamSport}>
+                  {team.sport}
                 </Text>
               </View>
             </View>
@@ -452,7 +455,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     width: "100%",
     flex: 1,
-    marginTop: 18,
+    marginTop: 8,
   },
   teamInfoContainer: {
     flexDirection: "row",
@@ -461,7 +464,7 @@ const styles = StyleSheet.create({
   },
   colorLine: {
     width: 3,
-    height: 38,
+    height: 60,
     borderRadius: 1.5,
     marginRight: 8,
     marginTop: 2,
@@ -474,10 +477,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     textAlign: "left",
-    lineHeight: 14,
   },
   teamSport: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textSecondary,
     textTransform: "capitalize",
     textAlign: "left",

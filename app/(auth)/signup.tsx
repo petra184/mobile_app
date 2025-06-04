@@ -491,6 +491,8 @@ export default function SignupScreen() {
                 </View>
               )}
 
+              <View style={styles.xxx}>
+
               <TouchableOpacity 
                 style={[
                   styles.signupButton,
@@ -517,6 +519,7 @@ export default function SignupScreen() {
                 <TouchableOpacity onPress={() => router.push("./login")}>
                   <Text style={styles.loginPromptLink}>Log in</Text>
                 </TouchableOpacity>
+              </View>
               </View>
             </View>
           </ScrollView>
@@ -552,6 +555,9 @@ const styles = StyleSheet.create({
     height: "65%",
     opacity: 0.1,
     zIndex: 0,
+  },
+  xxx:{
+    bottom: -80
   },
   header: {
     padding: 24,

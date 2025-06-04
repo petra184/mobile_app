@@ -32,6 +32,7 @@ interface Reward {
   image_url: string | null
   is_active: boolean | null
   team_id: string | null
+  category?: 'merchandise' | 'experiences' | 'discounts' | 'digital'
 }
 
 interface SpecialOffer {
@@ -44,6 +45,15 @@ interface SpecialOffer {
   end_date: string
   is_active: boolean | null
   team_id: string | null
+  category?: 'merchandise' | 'experiences' | 'discounts' | 'digital'
+}
+
+interface RecentRedemption {
+  id: string
+  reward_title: string
+  points_used: number
+  redeemed_at: string
+  status: 'pending' | 'completed' | 'cancelled'
 }
 
 export default function RewardsScreen() {
@@ -52,9 +62,10 @@ export default function RewardsScreen() {
   
   const [rewards, setRewards] = useState<Reward[]>([])
   const [specialOffers, setSpecialOffers] = useState<SpecialOffer[]>([])
+  const [recentRedemptions, setRecentRedemptions] = useState<RecentRedemption[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'rewards' | 'offers'>('rewards')
+  const [activeTab, setActiveTab] = useState<'rewards' | 'offers' | 'history'>('rewards')
 
   // Fetch rewards and special offers from Supabase
   const fetchRewardsData = async () => {
@@ -87,6 +98,22 @@ export default function RewardsScreen() {
         console.error('Error fetching special offers:', offersError)
         Alert.alert('Error', 'Failed to load special offers. Please try again.')
         return
+      }
+
+      // Fetch recent redemptions for the user
+      if (userId) {
+        const { data: redemptionsData, error: redemptionsError } = await supabase
+          .from('user_redemptions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('redeemed_at', { ascending: false })
+          .limit(10)
+        
+        if (redemptionsError) {
+          console.error('Error fetching redemptions:', redemptionsError)
+        } else {
+          setRecentRedemptions(redemptionsData || [])
+        }
       }
       
       setRewards(rewardsData || [])
@@ -143,14 +170,25 @@ export default function RewardsScreen() {
               const success = await redeemPoints(item.points_required)
               
               if (success) {
-                // Record the redemption in your database if needed
-                // This could be a server action or direct Supabase call
+                // Record the redemption in your database
+                await supabase
+                  .from('user_redemptions')
+                  .insert({
+                    user_id: userId,
+                    reward_id: item.id,
+                    reward_title: item.title,
+                    points_used: item.points_required,
+                    status: 'pending'
+                  })
                 
                 Alert.alert(
                   "Success!", 
                   `You have successfully redeemed "${item.title}". Check your email for details.`,
                   [{ text: "OK" }]
                 )
+                
+                // Refresh data to show new redemption
+                fetchRewardsData()
               } else {
                 Alert.alert(
                   "Error", 
@@ -179,6 +217,27 @@ export default function RewardsScreen() {
     const diffTime = end.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     return diffDays
+  }
+
+  // Format date for redemptions
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  // Get status color
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return '#10b981'
+      case 'pending': return '#f59e0b'
+      case 'cancelled': return '#ef4444'
+      default: return colors.text
+    }
   }
 
   // Render reward or special offer card
@@ -258,17 +317,42 @@ export default function RewardsScreen() {
     )
   }
 
+  // Render redemption history item
+  const renderRedemptionItem = (redemption: RecentRedemption) => (
+    <View key={redemption.id} style={styles.redemptionCard}>
+      <View style={styles.redemptionHeader}>
+        <View style={styles.redemptionIconContainer}>
+          <Feather name="check-circle" size={20} color={getStatusColor(redemption.status)} />
+        </View>
+        <View style={styles.redemptionInfo}>
+          <Text style={styles.redemptionTitle} numberOfLines={1}>
+            {redemption.reward_title}
+          </Text>
+          <Text style={styles.redemptionDate}>
+            {formatDate(redemption.redeemed_at)}
+          </Text>
+        </View>
+        <View style={styles.redemptionPoints}>
+          <Text style={styles.redemptionPointsText}>-{redemption.points_used}</Text>
+          <Text style={[styles.redemptionStatus, { color: getStatusColor(redemption.status) }]}>
+            {redemption.status.charAt(0).toUpperCase() + redemption.status.slice(1)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  )
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-    <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <StatusBar style="dark" />
       
       {/* Header with points display */}
       <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
         <View style={styles.pointsDisplayContainer}>
-            <Pressable onPress={() => router.back()} style={styles.backButton}>
-                <Feather name="chevron-left" size={28} color="black" />
-            </Pressable>
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <Feather name="chevron-left" size={28} color="black" />
+          </Pressable>
           <View style={styles.pointsDisplay}>
             <Feather name="star" size={24} color="#FFD700" style={{ marginRight: 8 }} />
             <Text style={styles.pointsDisplayText}>{points}</Text>
@@ -316,6 +400,23 @@ export default function RewardsScreen() {
               <Text style={styles.badgeText}>{specialOffers.length}</Text>
             </View>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+          onPress={() => setActiveTab('history')}
+        >
+          <Feather name="clock" 
+            size={18} 
+            color={activeTab === 'history' ? colors.primary : colors.text + '80'} 
+            style={styles.tabIcon} 
+          />
+          <Text style={[
+            styles.tabText, 
+            activeTab === 'history' && styles.activeTabText
+          ]}>
+            History
+          </Text>
         </TouchableOpacity>
       </Animated.View>
       
@@ -365,6 +466,25 @@ export default function RewardsScreen() {
               )}
             </>
           )}
+
+          {activeTab === 'history' && (
+            <>
+              {recentRedemptions.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Feather name="clock" size={60} color={colors.primary + '40'} />
+                  <Text style={styles.emptyTitle}>No Redemption History</Text>
+                  <Text style={styles.emptyText}>
+                    Your recent point redemptions will appear here once you start redeeming rewards.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.sectionTitle}>Recent Redemptions</Text>
+                  {recentRedemptions.map((redemption) => renderRedemptionItem(redemption))}
+                </>
+              )}
+            </>
+          )}
           
           <View style={styles.bottomSpacer} />
         </ScrollView>
@@ -380,7 +500,7 @@ const styles = StyleSheet.create({
   },
   backgroundImage: {
     position: "absolute",
-    bottom:0,
+    bottom: 0,
     resizeMode: "cover",
     opacity: 0.03,
     zIndex: 0,
@@ -403,11 +523,11 @@ const styles = StyleSheet.create({
       ios: {
         top: 10,
       },
-        android: {
-            top: 20,
-        },
+      android: {
+        top: 20,
+      },
     }),
- },
+  },
   pointsDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -445,7 +565,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   tabText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.text + '80',
   },
@@ -484,6 +604,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 16,
+    marginTop: 8,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -601,6 +728,57 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  redemptionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  redemptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  redemptionIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  redemptionInfo: {
+    flex: 1,
+  },
+  redemptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  redemptionDate: {
+    fontSize: 12,
+    color: colors.text + '60',
+  },
+  redemptionPoints: {
+    alignItems: 'flex-end',
+  },
+  redemptionPointsText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  redemptionStatus: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'capitalize',
   },
   bottomSpacer: {
     height: 40,

@@ -327,14 +327,6 @@ export default function AllGamesScreen() {
                 ? `No ${activeFilter !== "all" ? activeFilter : ""} games found for ${selectedTeam.name}`
                 : `No ${activeFilter !== "all" ? activeFilter : ""} games available`}
             </Text>
-            <Pressable
-              style={styles.resetButton}
-              onPress={() => {
-                setSelectedTeam(null)
-                setActiveFilter("all")
-              }}
-            >
-            </Pressable>
           </Animated.View>
         </ScrollView>
       )}
@@ -516,10 +508,6 @@ const styles = StyleSheet.create({
     paddingVertical: 50,
     paddingHorizontal: 30,
     marginHorizontal: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.05)",
   },
   emptyIconContainer: {
     width: 70,
@@ -542,20 +530,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 22,
-  },
-  resetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-  },
-  resetButtonText: {
-    color: "white",
-    fontWeight: "600",
-    fontSize: 15,
-    marginLeft: 8,
   },
   bottomSpacing: {
     height: 30,

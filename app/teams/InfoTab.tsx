@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking } from "r
 import { colors } from "@/constants/colors"
 import type { Team } from "@/app/actions/teams"
 import { Feather } from "@expo/vector-icons"
-import Animated, { FadeInDown } from "react-native-reanimated"
+import Animated, { FadeInDown, withTiming, withSpring, useAnimatedStyle, useSharedValue } from "react-native-reanimated"
 import AntDesign from '@expo/vector-icons/AntDesign';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
@@ -27,6 +27,25 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
     }
   }
 
+  const scale = useSharedValue(1)
+    const opacity = useSharedValue(1)
+    
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    }))
+
+
+  const handlePressIn = () => {
+      scale.value = withSpring(0.96, { damping: 15 })
+      opacity.value = withTiming(0.8, { duration: 100 })
+    }
+    
+    const handlePressOut = () => {
+      scale.value = withSpring(1, { damping: 15 })
+      opacity.value = withTiming(1, { duration: 150 })
+    }
+
   const winPercentage =
     teamStats.wins + teamStats.losses > 0
       ? ((teamStats.wins / (teamStats.wins + teamStats.losses)) * 100).toFixed(1)
@@ -41,41 +60,58 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
         {/* Social Media Links */}
         {(team.socialMedia?.facebook || team.socialMedia?.instagram || team.socialMedia?.twitter || team.socialMedia?.website) && (
           <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection2}>
+         
                       <View style={styles.circularButtonsContainer}>
                         {team.socialMedia?.facebook && (
-                          <Pressable
-                            style={[styles.circularButton, styles.facebookButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
-                          >
-                            <Feather name="facebook" size={22} color="#FFFFFF" />
-                          </Pressable>
+                          <Animated.View style={animatedStyle}>
+                            <Pressable
+                              style={[styles.circularButton, styles.facebookButton]}
+                              onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
+                              onPressIn={handlePressIn}
+                              onPressOut={handlePressOut}
+                            >
+                              <Feather name="facebook" size={22} color="#FFFFFF" />
+                            </Pressable>
+                          </Animated.View>
                         )}
             
                         {team.socialMedia?.instagram && (
-                          <Pressable
-                            style={[styles.circularButton, styles.instagramButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
-                          >
-                            <Feather name="instagram" size={22} color="#FFFFFF" />
-                          </Pressable>
+                          <Animated.View style={animatedStyle}>
+                            <Pressable
+                              style={[styles.circularButton, styles.instagramButton]}
+                              onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
+                              onPressIn={handlePressIn}
+                              onPressOut={handlePressOut}
+                            >
+                              <Feather name="instagram" size={22} color="#FFFFFF" />
+                            </Pressable>
+                          </Animated.View>
                         )}
             
                         {team.socialMedia?.twitter && (
-                          <Pressable
-                            style={[styles.circularButton, styles.twitterButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
-                          >
-                            <FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />
-                          </Pressable>
+                          <Animated.View style={animatedStyle}>
+                            <Pressable
+                              style={[styles.circularButton, styles.twitterButton]}
+                              onPressIn={handlePressIn}
+                              onPressOut={handlePressOut}
+                              onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
+                            >
+                              <FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />
+                            </Pressable>
+                          </Animated.View>
                         )}
             
                         {team.socialMedia?.website && (
-                          <Pressable
-                            style={[styles.circularButton, styles.websiteButton]}
-                            onPress={() => handleSocialPress(team.socialMedia?.website || null)}
-                          >
-                            <Feather name="globe" size={22} color="#FFFFFF" />
-                          </Pressable>
+                          <Animated.View style={animatedStyle}>
+                            <Pressable
+                              style={[styles.circularButton, styles.websiteButton]}
+                              onPress={() => handleSocialPress(team.socialMedia?.website || null)}
+                              onPressIn={handlePressIn}
+                              onPressOut={handlePressOut}
+                            >
+                              <Feather name="globe" size={22} color="#FFFFFF" />
+                            </Pressable>
+                          </Animated.View>
                         )}
                       </View>
           </Animated.View>
