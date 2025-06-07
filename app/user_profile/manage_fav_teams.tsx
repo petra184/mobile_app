@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
         paddingVertical: 2,
       },
       ios:{
-        paddingVertical: 8,
+        paddingVertical: 10,
       }
     }),
     borderWidth: 1,
@@ -258,7 +258,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   clearButton: {
-    padding: 4,
   },
   resultsContainer: {
     paddingHorizontal: 16,

@@ -293,3 +293,52 @@ export async function getFeaturedNews(limit = 5): Promise<NewsArticle[]> {
     throw error
   }
 }
+
+export async function getStoryByGameId(gameId: string) {
+
+  try {
+    const { data, error } = await supabase
+      .from("stories")
+      .select("id, title, headline")
+      .eq("game_id", gameId)
+      .eq("status", "published") // Only get published stories
+      .single()
+
+    if (error) {
+      // If no story found, return null (not an error)
+      if (error.code === "PGRST116") {
+        return null
+      }
+      console.error("Error fetching story by game ID:", error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error("Unexpected error fetching story by game ID:", error)
+    return null
+  }
+}
+
+// Alternative function that returns boolean for simpler checking
+export async function hasStoryForGame(gameId: string): Promise<boolean> {
+
+  try {
+    const { data, error } = await supabase
+      .from("stories")
+      .select("id")
+      .eq("game_id", gameId)
+      .eq("status", "published")
+      .limit(1)
+
+    if (error) {
+      console.error("Error checking story for game:", error)
+      return false
+    }
+
+    return data && data.length > 0
+  } catch (error) {
+    console.error("Unexpected error checking story for game:", error)
+    return false
+  }
+}

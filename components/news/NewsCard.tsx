@@ -28,7 +28,8 @@ export function NewsCard({ article, onPress }: NewsCardProps) {
   }
 
   return (
-    <Pressable style={styles.container} onPress={() => onPress(article)}>
+    <View style={styles.shadowWrapper}>
+     <Pressable style={styles.container} onPress={() => onPress(article)}>
       {/* Article Image */}
       {article.imageUrl ? (
         <Image source={{ uri: article.imageUrl }} style={styles.image} resizeMode="cover" />
@@ -82,20 +83,24 @@ export function NewsCard({ article, onPress }: NewsCardProps) {
         <Feather name="chevron-right" size={20} color={colors.textSecondary} />
       </View>
     </Pressable>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.card,
+  shadowWrapper: {
     borderRadius: 16,
     marginBottom: 16,
-    shadowColor: "#000",
+    backgroundColor: colors.card, // required for iOS shadow
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
-    overflow: "hidden",
+    elevation: 3, // Android
+  },
+  container: {
+    borderRadius: 16,
+    overflow: 'hidden', // this is fine here now
   },
   image: {
     width: "100%",

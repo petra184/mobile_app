@@ -51,13 +51,15 @@ export default function PointsCard({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}>
-      <LinearGradient
-        colors={[colors.primary, colors.accent]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.content}>
+          <View style={styles.shadowWrapper}>
+          <View style={styles.container}>
+            <LinearGradient
+              colors={[colors.primary, colors.accent]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.content}
+            >
+        
           <View style={styles.header}>
           <FontAwesome6 name="ranking-star" color="white" size={24} />
             <Text style={styles.rankText}>{rank}</Text>
@@ -79,26 +81,31 @@ export default function PointsCard({
               <Text style={styles.statLabel}>Day Streak</Text>
             </View>
           </View>
-        </View>
       </LinearGradient>
+      </View>
+      </View>
       </Pressable>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: 16,
-    overflow: 'hidden',
+  shadowWrapper: {
     marginHorizontal: 16,
-    elevation: 4,
+    borderRadius: 16,
+    backgroundColor: '#fff', // Required for iOS shadows
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+    elevation: 4, // Android
+  },
+  container: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   content: {
-    padding: 16,
+    padding: 16
   },
   header: {
     flexDirection: 'row',

@@ -71,21 +71,7 @@ export default function AccountSettingsScreen() {
         style={styles.backgroundImage}
       />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* User Info Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.settingsContainer}>
-            <View style={styles.userInfoItem}>
-              <View style={styles.settingLeft}>
-                <Feather name="user" size={20} color={colors.text} style={styles.settingIcon} />
-                <View>
-                  <Text style={styles.settingText}>{userName}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
-
+  
         {/* Notification Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notification Settings</Text>

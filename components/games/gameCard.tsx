@@ -1,9 +1,14 @@
+"use client"
+
 import type React from "react"
 import { View, Text, StyleSheet, Pressable, Image } from "react-native"
 import { colors } from "@/constants/colors"
 import type { Game } from "@/types/game"
 import Feather from "@expo/vector-icons/Feather"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
+import { useState, useEffect } from "react"
+import { getStoryByGameId } from "@/app/actions/news"
+import { router } from "expo-router"
 
 interface GameCardProps {
   game: Game
@@ -14,14 +19,37 @@ interface GameCardProps {
   onGameDetailsPress?: (game: Game) => void
 }
 
-export const GameCard: React.FC<GameCardProps> = ({ 
-  game, 
-  onPress, 
-  onNotifyPress, 
+export const GameCard: React.FC<GameCardProps> = ({
+  game,
+  onPress,
+  onNotifyPress,
   onQRScanPress,
   onNewsPress,
-  onGameDetailsPress 
+  onGameDetailsPress,
 }) => {
+  const [gameStory, setGameStory] = useState<{ id: string; title: string; headline: string } | null>(null)
+  const [isLoadingStory, setIsLoadingStory] = useState(false)
+
+  // Check for story when component mounts or game changes
+  useEffect(() => {
+    const checkForStory = async () => {
+      if (game.id && isCompleted) {
+        setIsLoadingStory(true)
+        try {
+          const story = await getStoryByGameId(game.id)
+          setGameStory(story)
+        } catch (error) {
+          console.error("Error checking for game story:", error)
+          setGameStory(null)
+        } finally {
+          setIsLoadingStory(false)
+        }
+      }
+    }
+
+    checkForStory()
+  }, [game.id])
+
   // Format date properly
   const formatGameDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -35,7 +63,7 @@ export const GameCard: React.FC<GameCardProps> = ({
 
   const scale = useSharedValue(1)
   const opacity = useSharedValue(1)
-  
+
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
@@ -109,7 +137,15 @@ export const GameCard: React.FC<GameCardProps> = ({
 
   const handleNewsPress = (e: any) => {
     e.stopPropagation()
-    if (onNewsPress) {
+
+    // If we have a story for this game, navigate to news details
+    if (gameStory) {
+      router.push({
+        pathname: "../all_cards/news_details",
+        params: { id: gameStory.id },
+      })
+    } else if (onNewsPress) {
+      // Fallback to the original onNewsPress handler
       onNewsPress(game)
     }
   }
@@ -125,7 +161,7 @@ export const GameCard: React.FC<GameCardProps> = ({
     scale.value = withSpring(0.96, { damping: 15 })
     opacity.value = withTiming(0.8, { duration: 100 })
   }
-  
+
   const handlePressOut = () => {
     scale.value = withSpring(1, { damping: 15 })
     opacity.value = withTiming(1, { duration: 150 })
@@ -136,14 +172,13 @@ export const GameCard: React.FC<GameCardProps> = ({
 
   return (
     <Animated.View style={animatedStyle}>
-      <Pressable onPress={handlePress} style={[
-        styles.container,
-        hasPoints && styles.containerWithPoints
-      ]}
+      <Pressable
+        onPress={handlePress}
+        style={[styles.container, hasPoints && styles.containerWithPoints]}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}>
-        
+        android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
+      >
         {/* Today Badge */}
         {isToday && !isPastGame && (
           <View style={styles.todayBadge}>
@@ -236,7 +271,9 @@ export const GameCard: React.FC<GameCardProps> = ({
           {hasPoints && (
             <View style={styles.detailRow}>
               <Feather name="award" size={16} color={isPastGame ? "#6b7280" : colors.secondary} />
-              <Text style={[styles.detailText, styles.pointsText, { color: isPastGame ? "#6b7280" : colors.secondary }]}>
+              <Text
+                style={[styles.detailText, styles.pointsText, { color: isPastGame ? "#6b7280" : colors.secondary }]}
+              >
                 {game.points} points for attending
               </Text>
             </View>
@@ -249,21 +286,21 @@ export const GameCard: React.FC<GameCardProps> = ({
             {onNotifyPress && (
               <Pressable
                 style={({ pressed, hovered }) => [
-                styles.actionButton,
-                {
-                  backgroundColor: pressed
-                    ? `${game.homeTeam.primaryColor}20`
-                    : hovered
-                    ? `${game.homeTeam.primaryColor}10`
-                    : "transparent",
-                  borderWidth: 1,
-                },
-              ]}
-              onPress={handleNotifyPress}
-            >
-              <Feather name="bell" size={16} color={teamColor} />
-              <Text style={[styles.buttonText, { color: teamColor }]}>Notify Me</Text>
-            </Pressable>
+                  styles.actionButton,
+                  {
+                    backgroundColor: pressed
+                      ? `${game.homeTeam.primaryColor}20`
+                      : hovered
+                        ? `${game.homeTeam.primaryColor}10`
+                        : "transparent",
+                    borderWidth: 1,
+                  },
+                ]}
+                onPress={handleNotifyPress}
+              >
+                <Feather name="bell" size={16} color={teamColor} />
+                <Text style={[styles.buttonText, { color: teamColor }]}>Notify Me</Text>
+              </Pressable>
             )}
 
             {onQRScanPress && (
@@ -278,23 +315,19 @@ export const GameCard: React.FC<GameCardProps> = ({
           </View>
         )}
 
-        {/* Completed Game Actions */}
-        {isCompleted && (
+        {/* Completed Game Actions - Only show if there's a story */}
+        {isCompleted && gameStory && !isLoadingStory && (
           <View style={styles.completedActionsContainer}>
             {/* Read News Link */}
-            <Pressable
-              style={styles.newsLinkContainer}
-              onPress={handleNewsPress}
-            >
+            <Pressable style={styles.newsLinkContainer} onPress={handleNewsPress}>
               <Text style={styles.newsLinkText}>Read More About it</Text>
               <Feather name="chevron-right" size={16} color={colors.primary} />
             </Pressable>
-            
           </View>
         )}
 
         {/* Single Check In Button for when no specific actions */}
-        {(!isCompleted && !isUpcoming && !onNotifyPress && !onQRScanPress) && (
+        {!isCompleted && !isUpcoming && !onNotifyPress && !onQRScanPress && (
           <View style={[styles.attendButton, { backgroundColor: teamColor }]}>
             <Text style={styles.attendButtonText}>Check In</Text>
           </View>
@@ -464,7 +497,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     gap: 6,
-    borderColor: "gray"
+    borderColor: "gray",
   },
   scanButton: {
     // backgroundColor set dynamically with teamColor
@@ -473,8 +506,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  completedActionsContainer: {
-  },
+  completedActionsContainer: {},
   newsLinkContainer: {
     flexDirection: "row",
     alignItems: "center",

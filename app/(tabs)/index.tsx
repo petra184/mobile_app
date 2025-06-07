@@ -5,7 +5,7 @@ import { View, StyleSheet, ScrollView, Pressable, Platform, Text } from "react-n
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
-import PointsCard from "@/components/rewards/main_card"
+import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
@@ -14,14 +14,17 @@ import { GameFilter, type GameFilterOptions } from "@/components/games/GameFilte
 import Feather from "@expo/vector-icons/Feather"
 import type { Team } from "@/app/actions/teams"
 import { getUpcomingGames, getPastGames, getLiveGames } from "@/app/actions/games"
+import { fetchUserStatus, type UserStatusWithLevel } from "@/app/actions/points"
 import type { Game } from "@/types/game"
+import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 
 export default function HomeScreen() {
   const router = useRouter()
-  const { points, preferences, getUserFirstName } = useUserStore()
+  const { points, preferences, getUserFirstName, userId } = useUserStore()
   const { showSuccess, showInfo } = useNotifications()
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [allGames, setAllGames] = useState<Game[]>([])
+  const [userStatus, setUserStatus] = useState<UserStatusWithLevel | null>(null)
   const [loading, setLoading] = useState(true)
   const [gameFilters, setGameFilters] = useState<GameFilterOptions>({
     sport: undefined,
@@ -29,10 +32,24 @@ export default function HomeScreen() {
     status: "all",
   })
 
-  // Fetch all games on component mount
+  // Fetch all games and user status on component mount
   useEffect(() => {
     fetchAllGames()
-  }, [])
+    if (userId) {
+      fetchUserData()
+    }
+  }, [userId])
+
+  // Fetch user status for the points card
+  const fetchUserData = async () => {
+    if (!userId) return
+    try {
+      const statusData = await fetchUserStatus(userId)
+      setUserStatus(statusData)
+    } catch (error) {
+      console.error("Error fetching user status:", error)
+    }
+  }
 
   // Fetch all games (past, live, and upcoming)
   const fetchAllGames = async () => {
@@ -138,7 +155,6 @@ export default function HomeScreen() {
 
   const getPersonalizedMessage = () => {
     const currentHour = new Date().getHours()
-    const userName = getUserFirstName()
 
     if (currentHour >= 5 && currentHour < 12) {
       return "Ready to start your day with some exciting games?"
@@ -195,6 +211,24 @@ export default function HomeScreen() {
   const completedGames = filteredGames.filter((game) => game.status === "completed")
   const otherGames = filteredGames.filter((game) => !["live", "scheduled", "completed"].includes(game.status))
 
+  const scale = useSharedValue(1)
+  const opacity = useSharedValue(1)
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }))
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.96, { damping: 15 })
+    opacity.value = withTiming(0.8, { duration: 100 })
+  }
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15 })
+    opacity.value = withTiming(1, { duration: 150 })
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
       <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
@@ -213,14 +247,22 @@ export default function HomeScreen() {
         </View>
 
         {/* Points Card with Greeting */}
-        <Pressable onPress={() => router.push("../all_cards/points")}>
-        <PointsCard
-            points={points}
-            rank="Gold" // or dynamically set it
-            gamesAttended={12}
-            streakDays={11}
-          />
-        </Pressable>
+        <Animated.View style={animatedStyle}>
+          <Pressable
+            onPress={() => router.push("../all_cards/points")}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
+          >
+            <PointsStatusCard
+              userFirstName={getUserFirstName()}
+              points={points}
+              userStatus={userStatus}
+              name={false}
+              animationDelay={200}
+            />
+          </Pressable>
+        </Animated.View>
 
         {/* Teams Section */}
         <View style={styles.section}>
@@ -289,7 +331,7 @@ export default function HomeScreen() {
               {upcomingGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
-                    <Feather name="calendar" size={16} color={colors.primary} />
+                    <Feather name="clock" size={16} color={colors.primary} />
                     <Text style={styles.gameGroupTitle}>Upcoming ({upcomingGames.length})</Text>
                   </View>
                   {upcomingGames.map((game) => (
@@ -301,6 +343,10 @@ export default function HomeScreen() {
               {/* Completed Games */}
               {completedGames.length > 0 && (
                 <View style={styles.gameGroup}>
+                  <View style={styles.gameGroupHeader}>
+                    <Feather name="check-circle" size={16} color={colors.primary} />
+                    <Text style={styles.gameGroupTitle}>Recent ({completedGames.length})</Text>
+                  </View>
                   {completedGames.map((game) => (
                     <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
                   ))}

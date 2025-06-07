@@ -104,25 +104,6 @@ function RootLayoutNav() {
         }} 
       />
       <Stack.Screen 
-        name="user_profile/activity_history" 
-        options={{ 
-          headerShown: true,
-          headerTitleAlign: "center",
-          headerTitle: "Activity History",
-          headerLeft: () => (
-            <Pressable 
-              onPress={() => router.back()} 
-              style={{ marginRight: 16 }}>
-               <Entypo name="chevron-left" size={24} color={colors.primary} />
-            </Pressable>
-          ),
-          headerTitleStyle: {
-            color: "#035e32",
-            fontWeight: '600',
-          },
-        }} 
-      />
-      <Stack.Screen 
         name="all_cards/all_games" 
         options={{ 
           title: "All Games",
@@ -143,7 +124,12 @@ function RootLayoutNav() {
       <Stack.Screen 
         name="all_cards/all_teams" 
         options={{ 
-          title: "All Teams",
+          title: "Teams",
+          headerStyle: { 
+            backgroundColor: colors.background,
+            
+          },
+          headerShown:true,
           headerLeft: () => (
             <Pressable 
               onPress={() => router.back()} 
@@ -152,10 +138,6 @@ function RootLayoutNav() {
             </Pressable>
           ),
           headerBackTitle: "Back",
-          headerTitleAlign: "center",
-          headerTitleStyle: {
-            color: "black",
-          },
         }} 
       />
        <Stack.Screen 

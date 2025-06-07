@@ -2,18 +2,20 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Pressable, Modal, ScrollView, SafeAreaView, Image, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, Pressable, Modal, ScrollView, SafeAreaView, Animated, Dimensions } from "react-native"
 import { colors } from "@/constants/colors"
 import Feather from "@expo/vector-icons/Feather"
-import { LinearGradient } from "expo-linear-gradient"
 import { supabase } from "@/lib/supabase"
-import type { Tables } from "@/types/supabase"
+
+const { width } = Dimensions.get("window")
 
 export interface GameFilterOptions {
   sport?: string
   gender?: "men" | "women"
   status?: "upcoming" | "past" | "live" | "all"
   team?: string
+  sortBy?: "date" | "sport" | "status"
+  sortOrder?: "asc" | "desc"
 }
 
 interface GameFilterProps {
@@ -36,26 +38,26 @@ export const GameFilter: React.FC<GameFilterProps> = ({ onFilterChange, currentF
   const [tempFilters, setTempFilters] = useState<GameFilterOptions>(currentFilters)
   const [teams, setTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(false)
-  const [activeSection, setActiveSection] = useState<string | null>(null)
+  const [slideAnim] = useState(new Animated.Value(width * 0.75))
 
   // Fetch teams from database
   const fetchTeams = async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
-        .from('teams')
-        .select('id, name, short_name, sport, gender, photo, color')
-        .order('sport')
-        .order('name')
+        .from("teams")
+        .select("id, name, short_name, sport, gender, photo, color")
+        .order("sport")
+        .order("name")
 
       if (error) {
-        console.error('Error fetching teams:', error)
+        console.error("Error fetching teams:", error)
         return
       }
 
       setTeams(data || [])
     } catch (error) {
-      console.error('Unexpected error fetching teams:', error)
+      console.error("Unexpected error fetching teams:", error)
     } finally {
       setLoading(false)
     }
@@ -64,32 +66,41 @@ export const GameFilter: React.FC<GameFilterProps> = ({ onFilterChange, currentF
   useEffect(() => {
     if (isVisible) {
       fetchTeams()
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start()
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: width * 0.75,
+        duration: 250,
+        useNativeDriver: true,
+      }).start()
     }
   }, [isVisible])
 
+  useEffect(() => {
+    setTempFilters(currentFilters)
+  }, [currentFilters])
+
   // Get unique sports from teams
   const getUniqueSports = () => {
-    const sportsSet = new Set(teams.map(team => team.sport))
+    const sportsSet = new Set(teams.map((team) => team.sport))
     return Array.from(sportsSet).sort()
   }
 
-  // Get teams filtered by current sport selection
-  const getFilteredTeams = () => {
-    if (!tempFilters.sport) return teams
-    return teams.filter(team => team.sport === tempFilters.sport)
-  }
-
-  const genders = [
-    { value: undefined, label: "All", icon: "users" },
-    { value: "men" as const, label: "Men's", icon: "user" },
-    { value: "women" as const, label: "Women's", icon: "user" },
-  ]
-
   const statuses = [
-    { value: "all" as const, label: "All Games", icon: "calendar", color: "#6B7280" },
+    { value: "all" as const, label: "All", icon: "calendar", color: "#6B7280" },
     { value: "live" as const, label: "Live", icon: "radio", color: "#EF4444" },
     { value: "upcoming" as const, label: "Upcoming", icon: "clock", color: "#3B82F6" },
     { value: "past" as const, label: "Past", icon: "check-circle", color: "#10B981" },
+  ]
+
+  const sortOptions = [
+    { value: "date" as const, label: "Date", icon: "calendar" },
+    { value: "sport" as const, label: "Sport", icon: "target" },
+    { value: "status" as const, label: "Status", icon: "activity" },
   ]
 
   const handleApplyFilters = () => {
@@ -98,7 +109,14 @@ export const GameFilter: React.FC<GameFilterProps> = ({ onFilterChange, currentF
   }
 
   const handleClearFilters = () => {
-    const clearedFilters = { sport: undefined, gender: undefined, status: "all" as const, team: undefined }
+    const clearedFilters: GameFilterOptions = {
+      sport: undefined,
+      gender: undefined,
+      status: "all",
+      team: undefined,
+      sortBy: "date",
+      sortOrder: "asc",
+    }
     setTempFilters(clearedFilters)
     onFilterChange(clearedFilters)
     setIsVisible(false)
@@ -110,224 +128,269 @@ export const GameFilter: React.FC<GameFilterProps> = ({ onFilterChange, currentF
     if (currentFilters.gender) count++
     if (currentFilters.status && currentFilters.status !== "all") count++
     if (currentFilters.team) count++
+    if (currentFilters.sortBy && currentFilters.sortBy !== "date") count++
     return count
   }
 
-  const toggleSection = (section: string) => {
-    setActiveSection(activeSection === section ? null : section)
+  const closeDrawer = () => {
+    setIsVisible(false)
   }
-
-  const renderSectionHeader = (title: string, sectionKey: string, icon: string) => (
-    <Pressable 
-      style={styles.sectionHeader} 
-      onPress={() => toggleSection(sectionKey)}
-    >
-      <View style={styles.sectionHeaderLeft}>
-        <Feather name={icon as any} size={20} color={colors.primary} />
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
-      <Feather 
-        name={activeSection === sectionKey ? "chevron-up" : "chevron-down"} 
-        size={20} 
-        color={colors.textSecondary} 
-      />
-    </Pressable>
-  )
-
- 
-  const renderTeamOptions = () => {
-    const filteredTeams = getFilteredTeams()
-    
-    return (
-      <View style={[styles.filterSection, activeSection !== 'team' && styles.collapsedSection]}>
-        {renderSectionHeader("Team", "team", "shield")}
-        {activeSection === 'team' && (
-          <View style={styles.sectionContent}>
-            <Pressable
-              style={[styles.filterOption, !tempFilters.team && styles.activeFilterOption]}
-              onPress={() => setTempFilters({ ...tempFilters, team: undefined })}
-            >
-              <View style={styles.optionContent}>
-                <Feather name="users" size={16} color={!tempFilters.team ? "white" : colors.text} />
-                <Text style={[styles.filterOptionText, !tempFilters.team && styles.activeFilterOptionText]}>
-                  All Teams
-                </Text>
-              </View>
-            </Pressable>
-            {filteredTeams.map((team) => (
-              <Pressable
-                key={team.id}
-                style={[styles.filterOption, styles.teamOption, tempFilters.team === team.id && styles.activeFilterOption]}
-                onPress={() => setTempFilters({ ...tempFilters, team: team.id })}
-              >
-                <View style={styles.teamOptionContent}>
-                  {team.photo ? (
-                    <Image source={{ uri: team.photo }} style={styles.teamLogo} />
-                  ) : (
-                    <View style={[styles.teamLogoPlaceholder, { backgroundColor: team.color || colors.primary + '20' }]}>
-                      <Feather name="shield" size={16} color={team.color || colors.primary} />
-                    </View>
-                  )}
-                  <View style={styles.teamInfo}>
-                    <Text style={[styles.teamName, tempFilters.team === team.id && styles.activeFilterOptionText]}>
-                      {team.name}
-                    </Text>
-                    <Text style={[styles.teamDetails, tempFilters.team === team.id && styles.activeTeamDetails]}>
-                      {team.sport} • {team.gender === 'men' ? "Men's" : "Women's"}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>
-    )
-  }
-
-  const renderGenderOptions = () => (
-    <View style={[styles.filterSection, activeSection !== 'gender' && styles.collapsedSection]}>
-      {renderSectionHeader("Gender", "gender", "user")}
-      {activeSection === 'gender' && (
-        <View style={styles.sectionContent}>
-          {genders.map((gender) => (
-            <Pressable
-              key={gender.label}
-              style={[styles.filterOption, tempFilters.gender === gender.value && styles.activeFilterOption]}
-              onPress={() => setTempFilters({ ...tempFilters, gender: gender.value })}
-            >
-              <View style={styles.optionContent}>
-                <Feather 
-                  name={gender.icon as any} 
-                  size={16} 
-                  color={tempFilters.gender === gender.value ? "white" : colors.text} 
-                />
-                <Text style={[styles.filterOptionText, tempFilters.gender === gender.value && styles.activeFilterOptionText]}>
-                  {gender.label}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </View>
-  )
-
-  const renderStatusOptions = () => (
-    <View style={[styles.filterSection, activeSection !== 'status' && styles.collapsedSection]}>
-      {renderSectionHeader("Game Status", "status", "calendar")}
-      {activeSection === 'status' && (
-        <View style={styles.sectionContent}>
-          {statuses.map((status) => (
-            <Pressable
-              key={status.value}
-              style={[styles.filterOption, (tempFilters.status || "all") === status.value && styles.activeFilterOption]}
-              onPress={() => setTempFilters({ ...tempFilters, status: status.value })}
-            >
-              <View style={styles.optionContent}>
-                <Feather 
-                  name={status.icon as any} 
-                  size={16} 
-                  color={(tempFilters.status || "all") === status.value ? "white" : status.color} 
-                />
-                <Text style={[styles.filterOptionText, (tempFilters.status || "all") === status.value && styles.activeFilterOptionText]}>
-                  {status.label}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </View>
-  )
 
   return (
     <>
+      {/* Filter Button */}
       <Pressable style={styles.filterButton} onPress={() => setIsVisible(true)}>
-        <LinearGradient
-          colors={['rgba(59, 130, 246, 0.1)', 'rgba(59, 130, 246, 0.05)']}
-          style={styles.filterButtonGradient}
-        >
-          <Feather name="sliders" size={18} color={colors.primary} />
-          <Text style={styles.filterButtonText}>Filters</Text>
-          {getActiveFilterCount() > 0 && (
-            <View style={styles.filterBadge}>
-              <Text style={styles.filterBadgeText}>{getActiveFilterCount()}</Text>
-            </View>
-          )}
-        </LinearGradient>
+        <Feather name="sliders" size={16} color={colors.primary} />
+        <Text style={styles.filterButtonText}>Filter</Text>
+        {getActiveFilterCount() > 0 && (
+          <View style={styles.filterBadge}>
+            <Text style={styles.filterBadgeText}>{getActiveFilterCount()}</Text>
+          </View>
+        )}
       </Pressable>
 
-      <Modal visible={isVisible} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={styles.modalContainer}>
-          <LinearGradient 
-            colors={["rgba(255,255,255,0.98)", "rgba(255,255,255,1)"]} 
-            style={styles.modalHeader}
-          >
-            <View style={styles.modalHeaderContent}>
-              <Pressable onPress={() => setIsVisible(false)} style={styles.headerButton}>
-                <Feather name="x" size={24} color={colors.text} />
-              </Pressable>
-              <Text style={styles.modalTitle}>Filter Games</Text>
-              <Pressable onPress={handleClearFilters} style={styles.headerButton}>
-                <Text style={styles.clearButton}>Clear All</Text>
-              </Pressable>
-            </View>
-          </LinearGradient>
+      {/* Side Drawer Modal */}
+      <Modal visible={isVisible} transparent animationType="fade" onRequestClose={closeDrawer}>
+        <View style={styles.modalOverlay}>
+          {/* Backdrop */}
+          <Pressable style={styles.backdrop} onPress={closeDrawer} />
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.loadingText}>Loading teams...</Text>
+          {/* Drawer */}
+          <Animated.View style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}>
+            <SafeAreaView style={styles.drawerContent}>
+              {/* Header */}
+              <View style={styles.drawerHeader}>
+                <Text style={styles.drawerTitle}>Filter & Sort</Text>
+                <Pressable onPress={closeDrawer} style={styles.closeButton}>
+                  <Feather name="x" size={20} color={colors.text} />
+                </Pressable>
               </View>
-            ) : (
-              <>
-                {renderTeamOptions()}
-                {renderGenderOptions()}
-                {renderStatusOptions()}
-              </>
-            )}
-          </ScrollView>
 
-          <View style={styles.modalFooter}>
-            <LinearGradient
-              colors={[colors.primary, colors.primary + 'DD']}
-              style={styles.applyButton}
-            >
-              <Pressable onPress={handleApplyFilters} style={styles.applyButtonPressable}>
-                <Feather name="check" size={20} color="white" />
-                <Text style={styles.applyButtonText}>Apply Filters</Text>
-              </Pressable>
-            </LinearGradient>
-          </View>
-        </SafeAreaView>
+              {/* Content */}
+              <ScrollView style={styles.drawerBody} showsVerticalScrollIndicator={false}>
+                {/* Sort Section */}
+                <View style={styles.filterSection}>
+                  <Text style={styles.sectionTitle}>Sort By</Text>
+                  <View style={styles.sortContainer}>
+                    {sortOptions.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        style={[styles.sortOption, tempFilters.sortBy === option.value && styles.activeSortOption]}
+                        onPress={() => setTempFilters({ ...tempFilters, sortBy: option.value })}
+                      >
+                        <Feather
+                          name={option.icon as any}
+                          size={14}
+                          color={tempFilters.sortBy === option.value ? "white" : colors.text}
+                        />
+                        <Text
+                          style={[
+                            styles.sortOptionText,
+                            tempFilters.sortBy === option.value && styles.activeSortOptionText,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {/* Sort Order */}
+                  <View style={styles.sortOrderContainer}>
+                    <Pressable
+                      style={[styles.sortOrderButton, tempFilters.sortOrder === "asc" && styles.activeSortOrder]}
+                      onPress={() => setTempFilters({ ...tempFilters, sortOrder: "asc" })}
+                    >
+                      <Feather
+                        name="arrow-up"
+                        size={14}
+                        color={tempFilters.sortOrder === "asc" ? "white" : colors.text}
+                      />
+                      <Text
+                        style={[styles.sortOrderText, tempFilters.sortOrder === "asc" && styles.activeSortOrderText]}
+                      >
+                        Ascending
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.sortOrderButton, tempFilters.sortOrder === "desc" && styles.activeSortOrder]}
+                      onPress={() => setTempFilters({ ...tempFilters, sortOrder: "desc" })}
+                    >
+                      <Feather
+                        name="arrow-down"
+                        size={14}
+                        color={tempFilters.sortOrder === "desc" ? "white" : colors.text}
+                      />
+                      <Text
+                        style={[styles.sortOrderText, tempFilters.sortOrder === "desc" && styles.activeSortOrderText]}
+                      >
+                        Descending
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {/* Status Filter */}
+                <View style={styles.filterSection}>
+                  <Text style={styles.sectionTitle}>Status</Text>
+                  <View style={styles.optionsGrid}>
+                    {statuses.map((status) => (
+                      <Pressable
+                        key={status.value}
+                        style={[
+                          styles.filterOption,
+                          (tempFilters.status || "all") === status.value && styles.activeFilterOption,
+                        ]}
+                        onPress={() => setTempFilters({ ...tempFilters, status: status.value })}
+                      >
+                        <Feather
+                          name={status.icon as any}
+                          size={14}
+                          color={(tempFilters.status || "all") === status.value ? "white" : status.color}
+                        />
+                        <Text
+                          style={[
+                            styles.filterOptionText,
+                            (tempFilters.status || "all") === status.value && styles.activeFilterOptionText,
+                          ]}
+                        >
+                          {status.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Sport Filter */}
+                <View style={styles.filterSection}>
+                  <Text style={styles.sectionTitle}>Sport</Text>
+                  <View style={styles.optionsGrid}>
+                    <Pressable
+                      style={[styles.filterOption, !tempFilters.sport && styles.activeFilterOption]}
+                      onPress={() => setTempFilters({ ...tempFilters, sport: undefined, team: undefined })}
+                    >
+                      <Feather name="grid" size={14} color={!tempFilters.sport ? "white" : colors.text} />
+                      <Text style={[styles.filterOptionText, !tempFilters.sport && styles.activeFilterOptionText]}>
+                        All Sports
+                      </Text>
+                    </Pressable>
+                    {getUniqueSports().map((sport) => (
+                      <Pressable
+                        key={sport}
+                        style={[styles.filterOption, tempFilters.sport === sport && styles.activeFilterOption]}
+                        onPress={() => setTempFilters({ ...tempFilters, sport, team: undefined })}
+                      >
+                        <Feather name="target" size={14} color={tempFilters.sport === sport ? "white" : colors.text} />
+                        <Text
+                          style={[
+                            styles.filterOptionText,
+                            tempFilters.sport === sport && styles.activeFilterOptionText,
+                          ]}
+                        >
+                          {sport}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Gender Filter */}
+                <View style={styles.filterSection}>
+                  <Text style={styles.sectionTitle}>Gender</Text>
+                  <View style={styles.optionsGrid}>
+                    {[
+                      { value: undefined, label: "All", icon: "users" },
+                      { value: "men" as const, label: "Men's", icon: "user" },
+                      { value: "women" as const, label: "Women's", icon: "user" },
+                    ].map((gender) => (
+                      <Pressable
+                        key={gender.label}
+                        style={[styles.filterOption, tempFilters.gender === gender.value && styles.activeFilterOption]}
+                        onPress={() => setTempFilters({ ...tempFilters, gender: gender.value })}
+                      >
+                        <Feather
+                          name={gender.icon as any}
+                          size={14}
+                          color={tempFilters.gender === gender.value ? "white" : colors.text}
+                        />
+                        <Text
+                          style={[
+                            styles.filterOptionText,
+                            tempFilters.gender === gender.value && styles.activeFilterOptionText,
+                          ]}
+                        >
+                          {gender.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              </ScrollView>
+
+              {/* Footer */}
+              <View style={styles.drawerFooter}>
+                <Pressable style={styles.clearButton} onPress={handleClearFilters}>
+                  <Text style={styles.clearButtonText}>Clear All</Text>
+                </Pressable>
+                <Pressable style={styles.applyButton} onPress={handleApplyFilters}>
+                  <Text style={styles.applyButtonText}>Apply</Text>
+                </Pressable>
+              </View>
+            </SafeAreaView>
+          </Animated.View>
+        </View>
       </Modal>
     </>
   )
 }
 
+// Filter Chips Component for showing active filters
+export const FilterChips: React.FC<{ filters: GameFilterOptions; onRemoveFilter: (key: string) => void }> = ({
+  filters,
+  onRemoveFilter,
+}) => {
+  const activeFilters = []
+
+  if (filters.sport) activeFilters.push({ key: "sport", label: filters.sport, value: filters.sport })
+  if (filters.gender)
+    activeFilters.push({ key: "gender", label: filters.gender === "men" ? "Men's" : "Women's", value: filters.gender })
+  if (filters.status && filters.status !== "all")
+    activeFilters.push({ key: "status", label: filters.status, value: filters.status })
+  if (filters.sortBy && filters.sortBy !== "date")
+    activeFilters.push({ key: "sortBy", label: `Sort: ${filters.sortBy}`, value: filters.sortBy })
+
+  if (activeFilters.length === 0) return null
+
+  return (
+    <View style={styles.filterChipsContainer}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterChipsScroll}>
+        {activeFilters.map((filter) => (
+          <View key={filter.key} style={styles.filterChip}>
+            <Text style={styles.filterChipText}>{filter.label}</Text>
+            <Pressable onPress={() => onRemoveFilter(filter.key)} style={styles.filterChipRemove}>
+              <Feather name="x" size={12} color={colors.primary} />
+            </Pressable>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   filterButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  filterButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    position: 'relative',
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    borderRadius: 8,
+    gap: 4,
+    position: "relative",
   },
   filterButtonText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.primary,
   },
   filterBadge: {
@@ -335,192 +398,195 @@ const styles = StyleSheet.create({
     top: -6,
     right: -6,
     backgroundColor: "#EF4444",
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: 'white',
   },
   filterBadgeText: {
     color: "white",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
-    paddingHorizontal: 4,
   },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: colors.background,
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
-  modalHeader: {
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
-  modalHeaderContent: {
+  drawer: {
+    width: width * 0.75,
+    backgroundColor: "#FFFFFF",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
+  drawerContent: {
+    flex: 1,
+  },
+  drawerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 24,
-  },
-  headerButton: {
-    padding: 4,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  clearButton: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.primary,
-  },
-  modalContent: {
-    flex: 1,
-    padding: 24,
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  filterSection: {
-    marginBottom: 24,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    overflow: 'hidden',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  collapsedSection: {
-    marginBottom: 12,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 20,
-    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
   },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sectionTitle: {
+  drawerTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: colors.text,
   },
-  sectionContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 12,
+  closeButton: {
+    padding: 4,
   },
-  filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  teamOption: {
-    paddingVertical: 16,
-  },
-  activeFilterOption: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  optionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  teamOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  teamLogo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    resizeMode: 'contain',
-  },
-  teamLogoPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  teamInfo: {
+  drawerBody: {
     flex: 1,
+    padding: 20,
   },
-  teamName: {
+  filterSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 12,
   },
-  teamDetails: {
+  sortContainer: {
+    gap: 8,
+  },
+  sortOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
+    gap: 8,
+  },
+  activeSortOption: {
+    backgroundColor: colors.primary,
+  },
+  sortOptionText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text,
+  },
+  activeSortOptionText: {
+    color: "white",
+  },
+  sortOrderContainer: {
+    flexDirection: "row",
+    marginTop: 8,
+    gap: 8,
+  },
+  sortOrderButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 6,
+    gap: 4,
+  },
+  activeSortOrder: {
+    backgroundColor: colors.primary,
+  },
+  sortOrderText: {
     fontSize: 12,
-    color: colors.textSecondary,
-    textTransform: 'capitalize',
+    fontWeight: "500",
+    color: colors.text,
   },
-  activeTeamDetails: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  activeSortOrderText: {
+    color: "white",
+  },
+  optionsGrid: {
+    gap: 8,
+  },
+  filterOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
+    gap: 8,
+  },
+  activeFilterOption: {
+    backgroundColor: colors.primary,
   },
   filterOptionText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "500",
     color: colors.text,
   },
   activeFilterOptionText: {
     color: "white",
-    fontWeight: "600",
   },
-  modalFooter: {
-    padding: 24,
+  drawerFooter: {
+    flexDirection: "row",
+    padding: 20,
     borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
+    borderTopColor: "#E5E7EB",
+    gap: 12,
+  },
+  clearButton: {
+    flex: 1,
+    paddingVertical: 12,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  clearButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
   },
   applyButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  applyButtonPressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    gap: 8,
+    flex: 2,
+    paddingVertical: 12,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    alignItems: "center",
   },
   applyButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "white",
-    fontSize: 18,
-    fontWeight: "700",
+  },
+  // Filter Chips Styles
+  filterChipsContainer: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  filterChipsScroll: {
+    flexDirection: "row",
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    gap: 6,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.primary,
+    textTransform: "capitalize",
+  },
+  filterChipRemove: {
+    padding: 2,
   },
 })

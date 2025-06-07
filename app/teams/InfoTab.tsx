@@ -59,8 +59,8 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
 
         {/* Social Media Links */}
         {(team.socialMedia?.facebook || team.socialMedia?.instagram || team.socialMedia?.twitter || team.socialMedia?.website) && (
-          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection2}>
-         
+          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection}>
+            <Text style={styles.sectionTitle}>See What's New</Text>
                       <View style={styles.circularButtonsContainer}>
                         {team.socialMedia?.facebook && (
                           <Animated.View style={animatedStyle}>
@@ -153,12 +153,13 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           </View>
         </Animated.View>
 
-        {team.additionalInfo && team.additionalInfo.trim() !== '' && (
+        {/* {team.additionalInfo && team.additionalInfo.trim() !== '' && ( */}
           <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
             <Text style={styles.sectionTitle}>About the Team</Text>
+            <Text style={styles.aboutText}>hehe</Text>
             <Text style={styles.aboutText}>{team.additionalInfo}</Text>
           </Animated.View>
-        )}
+        {/* )} */}
 
       
       </ScrollView>

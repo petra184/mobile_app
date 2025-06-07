@@ -1,28 +1,37 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
 import { getAllNews, getNewsByTeam, searchNews, type NewsArticle } from "@/app/actions/news"
-import type { Team } from "@/app/actions/teams"
-import { TeamSelector } from "@/components/teams/TeamSelector"
+import { getTeams, type Team } from "@/app/actions/teams"
+import { EnhancedDropdown } from "@/components/ui/new_dropdown"
 import { NewsCard } from "@/components/news/NewsCard"
 import { Feather } from "@expo/vector-icons"
 
 export default function NewsScreen() {
   const router = useRouter()
+  const [teams, setTeams] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [newsArticles, setNewsArticles] = useState<NewsArticle[]>([])
   const [loading, setLoading] = useState(true)
   const [searchLoading, setSearchLoading] = useState(false)
+  const [teamsLoading, setTeamsLoading] = useState(true)
+
+  // Load teams on component mount
+  useEffect(() => {
+    loadTeams()
+  }, [])
 
   // Load initial news articles
   useEffect(() => {
-    loadNews()
-  }, [selectedTeam])
+    if (!teamsLoading) {
+      loadNews()
+    }
+  }, [selectedTeam, teamsLoading])
 
   // Handle search with debouncing
   useEffect(() => {
@@ -36,6 +45,19 @@ export default function NewsScreen() {
       loadNews()
     }
   }, [searchQuery])
+
+  const loadTeams = async () => {
+    try {
+      setTeamsLoading(true)
+      const teamsData = await getTeams()
+      setTeams(teamsData)
+    } catch (error) {
+      console.error("Error loading teams:", error)
+      setTeams([])
+    } finally {
+      setTeamsLoading(false)
+    }
+  }
 
   const loadNews = async () => {
     try {
@@ -75,7 +97,8 @@ export default function NewsScreen() {
     }
   }
 
-  const handleTeamSelect = (team: Team) => {
+  const handleTeamSelect = (teamId: string | null) => {
+    const team = teams.find((t) => t.id === teamId) || null
     setSelectedTeam(team)
     setSearchQuery("") // Clear search when selecting team
   }
@@ -95,6 +118,24 @@ export default function NewsScreen() {
   const clearSearch = () => {
     setSearchQuery("")
   }
+
+  // Enhanced dropdown options with better UX (same as calendar screen)
+  const teamOptions = useMemo(
+    () => [
+      {
+        label: "All Teams",
+        value: null,
+        icon: "users",
+      },
+      ...teams.map((team) => ({
+        label: team.name,
+        value: team.id,
+        color: team.primaryColor,
+        subtitle: `${team.sport} • ${team.gender}`,
+      })),
+    ],
+    [teams],
+  )
 
   // Filter articles based on search query (client-side filtering for better UX)
   const filteredArticles = searchQuery.trim()
@@ -126,20 +167,23 @@ export default function NewsScreen() {
         {/* Team Selector and Controls */}
         <View style={styles.teamSelectorContainer}>
           <View style={styles.teamSelectorRow}>
-            <TeamSelector
-              onSelectTeam={handleTeamSelect}
-              onTeamPress={handleTeamSelect}
-              showFavorites={true}
-              horizontal={true}
-              showSearch={false}
-              showFilters={false}
+            <Text style={styles.filterLabel}>Filter by Team</Text>
+            <EnhancedDropdown
+              options={teamOptions}
+              selectedValue={selectedTeam?.id || null}
+              onSelect={handleTeamSelect}
+              placeholder="Select a team"
+              variant="team"
             />
           </View>
 
           {/* Show All Button */}
           {selectedTeam && (
             <View style={styles.controlsRow}>
-              <Text style={styles.selectedTeamText}>Showing news for: {selectedTeam.name}</Text>
+              <View style={styles.selectedTeamContainer}>
+                <Feather name="filter" size={16} color={colors.primary} />
+                <Text style={styles.selectedTeamText}>Showing news for: {selectedTeam.name}</Text>
+              </View>
               <Pressable style={styles.clearButton} onPress={clearTeamSelection}>
                 <Text style={styles.clearButtonText}>Show All</Text>
               </Pressable>
@@ -148,15 +192,17 @@ export default function NewsScreen() {
         </View>
 
         {/* Loading State */}
-        {(loading || searchLoading) && (
+        {(loading || searchLoading || teamsLoading) && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>{searchLoading ? "Searching..." : "Loading news..."}</Text>
+            <Text style={styles.loadingText}>
+              {searchLoading ? "Searching..." : teamsLoading ? "Loading teams..." : "Loading news..."}
+            </Text>
           </View>
         )}
 
         {/* News Articles */}
-        {!loading && !searchLoading && (
+        {!loading && !searchLoading && !teamsLoading && (
           <>
             {filteredArticles.length > 0 ? (
               <View style={styles.newsContainer}>
@@ -166,7 +212,7 @@ export default function NewsScreen() {
               </View>
             ) : (
               <View style={styles.emptyStateContainer}>
-                <Feather name="file-text" size={48} color={colors.textSecondary} />
+                <Feather name="search" size={48} color={colors.primary + '40'} />
                 <Text style={styles.emptyStateTitle}>No news articles found</Text>
                 <Text style={styles.emptyStateText}>
                   {searchQuery.trim()
@@ -249,31 +295,44 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingBottom: 12,
+    paddingHorizontal: 16,
   },
   teamSelectorRow: {
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text,
+    marginLeft: 4,
   },
   controlsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  selectedTeamContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
   selectedTeamText: {
     fontSize: 14,
-    color: colors.textSecondary,
-    flex: 1,
+    color: colors.text,
+    marginLeft: 8,
+    fontWeight: "500",
   },
   clearButton: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    backgroundColor: colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   clearButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
-    color: colors.primary,
+    color: "white",
   },
   loadingContainer: {
     alignItems: "center",
@@ -293,10 +352,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
     marginHorizontal: 16,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
     marginTop: 20,
   },
   emptyStateTitle: {
@@ -307,17 +362,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptyStateText: {
-    fontSize: 14,
-    color: colors.textSecondary,
+    fontSize: 15,
+    color: colors.text + '80',
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 22,
+    marginBottom: 18,
   },
   resetButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 18,
   },
   resetButtonText: {
     color: "white",

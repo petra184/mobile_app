@@ -14,6 +14,18 @@ import { getTeamById } from "@/app/actions/teams"
 import { useNotifications } from "@/context/notification-context"
 import { LinearGradient } from "expo-linear-gradient"
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { StatusBar } from "expo-status-bar"
+import { supabase } from "@/lib/supabase"
+import Entypo from '@expo/vector-icons/Entypo';
+
+// Type for news story
+type NewsStory = {
+  id: string
+  title: string
+  content: string
+  game_id: string | null
+  created_at: string
+}
 
 export default function GameDetailsScreen() {
   const router = useRouter()
@@ -25,6 +37,7 @@ export default function GameDetailsScreen() {
   const [team, setTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [gameNewsStory, setGameNewsStory] = useState<NewsStory | null>(null)
 
   // Fetch game data on component mount
   useEffect(() => {
@@ -47,17 +60,88 @@ export default function GameDetailsScreen() {
 
       setGame(gameData)
 
+      // Load team data
       try {
         const teamData = await getTeamById(gameData.homeTeam.id)
         setTeam(teamData)
       } catch (teamErr) {
         console.error("Error loading team data:", teamErr)
       }
+
+      // Check for news stories about this game
+      await checkForGameNews(gameId)
+
     } catch (err) {
       console.error("Error fetching game data:", err)
       setError("Failed to load game details")
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Check if there are news stories about this game
+  const checkForGameNews = async (gameId: string) => {
+    try {
+      const { data: stories, error } = await supabase
+        .from('stories')
+        .select('id, title, content, game_id, created_at')
+        .eq('game_id', gameId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (error) {
+        console.error("Error fetching game news:", error)
+        return
+      }
+
+      if (stories && stories.length > 0) {
+        setGameNewsStory(stories[0])
+      }
+    } catch (error) {
+      console.error("Error checking for game news:", error)
+    }
+  }
+
+  // Enhanced game status detection
+  const getGameStatus = (game: Game) => {
+    const now = new Date()
+    const gameDate = new Date(game.date)
+
+    // If no explicit status, determine based on date and time
+    if (game.time) {
+      try {
+        // Parse time and create full game datetime
+        const [hours, minutes] = game.time.split(':')
+        const gameDateTime = new Date(gameDate)
+        gameDateTime.setHours(parseInt(hours), parseInt(minutes))
+        
+        // Game is in the past
+        if (gameDateTime < now) {
+          return "completed"
+        }
+        
+        // Game is within 3 hours of start time (could be live)
+        const timeDiff = gameDateTime.getTime() - now.getTime()
+        const hoursUntilGame = timeDiff / (1000 * 60 * 60)
+        
+        if (hoursUntilGame <= 0 && hoursUntilGame >= -3) {
+          return "live"
+        }
+        
+        // Game is upcoming
+        return "scheduled"
+      } catch (error) {
+        console.error("Error parsing game time:", error)
+      }
+    }
+    
+    // Fallback: just compare dates
+    if (gameDate < now) {
+      return "completed"
+    } else if (gameDate.toDateString() === now.toDateString()) {
+      return "live" // Assume today's games are live
+    } else {
+      return "scheduled"
     }
   }
 
@@ -84,35 +168,30 @@ export default function GameDetailsScreen() {
     )
   }
 
-  const isCompleted = game.status === "completed"
-  const isLive = game.status === "live"
-  const isUpcoming = game.status === "scheduled"
+  // Get actual game status
+  const actualStatus = getGameStatus(game)
+  const isCompleted = actualStatus === "completed"
+  const isLive = actualStatus === "live"
+  const isUpcoming = actualStatus === "scheduled"
   const teamColor = team?.primaryColor || game.homeTeam.primaryColor || colors.primary
 
   const getStatusText = () => {
-    switch (game.status) {
+    switch (actualStatus) {
       case "live":
         return "LIVE"
       case "completed":
         return "FINAL"
-      case "postponed":
-        return "POSTPONED"
-      case "canceled":
-        return "CANCELED"
       default:
         return "UPCOMING"
     }
   }
 
   const getStatusColor = () => {
-    switch (game.status) {
+    switch (actualStatus) {
       case "live":
         return "#EF4444"
       case "completed":
-        return "#10B981"
-      case "postponed":
-      case "canceled":
-        return "#F59E0B"
+        return "red"
       default:
         return colors.primary
     }
@@ -175,18 +254,26 @@ export default function GameDetailsScreen() {
   }
   
   const handleMatchupHistoryPress = () => {
-    // Navigate to matchup history screen or show modal
     router.push(`../(tabs)/qr_code`)
   }
   
   const handleGameNotesPress = () => {
-    // Navigate to game notes screen or show modal
     router.push(`../(tabs)/qr_code`)
+  }
+
+  const handleNewsPress = () => {
+    if (gameNewsStory) {
+      router.push({
+        pathname: "../all_cards/news_details",
+        params: { id: gameNewsStory.id },
+      })
+    }
   }
 
   return (
     <>
       <SafeAreaView style={styles.container}>
+        <StatusBar style="light"/>
         <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
         
         {/* Modern Header with Gradient */}
@@ -232,7 +319,7 @@ export default function GameDetailsScreen() {
                   {isLive && <View style={styles.liveDot} />}
                 </View>
                 
-                {game.points && game.points > 0 && (
+                {game.points && game.points > 0 && (game.status === "live" || game.status =="scheduled") && (
                   <View style={styles.pointsBadge}>
                     <Feather name="award" size={16} color="#667eea" />
                     <Text style={styles.pointsText}>{game.points} PTS</Text>
@@ -244,7 +331,7 @@ export default function GameDetailsScreen() {
               <View style={styles.teamsContainer}>
                 {/* Home Team */}
                 <View style={styles.teamSection}>
-                  <View style={[styles.teamLogoContainer, { backgroundColor: teamColor + "15" }]}>
+                  <View style={styles.teamLogoContainer}>
                     <Image
                       source={{ uri: game.homeTeam.logo }}
                       style={styles.teamLogo}
@@ -278,24 +365,22 @@ export default function GameDetailsScreen() {
                 </View>
               </View>
 
-              
               {/* Game Notes and Matchup History Links */}
               <View style={styles.linksContainer}>
                 <View style={styles.linkItem}>
-                  <Feather name="map-pin" size={18} color={colors.primary} />
-                  <Text style={styles.linkText}>{game.location}</Text>
+                  <Feather name="map-pin" size={18} color={colors.primary} style={styles.dateTimeIcon} />
+                  <Text style={styles.gameDate}>{game.location}</Text>
                 </View>
 
                 <View style={styles.linkItem}>
                   <View style={styles.dateLocationRow}>
-                  <View style={styles.dateTimeContainer}>
-                    <Feather name="calendar" size={18} color={colors.primary} style={styles.dateTimeIcon} />
-                    <View>
-                      <Text style={styles.gameDate}>{formatGameDate(game.date)}</Text>
-                      <Text style={styles.gameTime}>{formatGameTime(game.time)}</Text>
+                    <View style={styles.dateTimeContainer}>
+                      <Feather name="clock" size={18} color={colors.primary} style={styles.dateTimeIcon} />
+                      <View>
+                        <Text style={styles.gameDate}>{formatGameDate(game.date)} at {formatGameTime(game.time)}</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
                 </View>
 
                 <Pressable style={styles.linkItem} onPress={handleGameNotesPress}>
@@ -330,14 +415,17 @@ export default function GameDetailsScreen() {
               </View>
               
               <View style={styles.secondaryButtonsRow}>
-                <Pressable style={styles.actionButtonSecondary} onPress={handleNotifyPress}>
-                  <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
-                  <Feather name="bell" size={24} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.actionButtonTextSecondary, { color: colors.text }]}>
-                    Notify me
-                  </Text>
-                </Pressable>
+                {/* Only show Notify Me button if game is NOT completed */}
+                {!isCompleted && (
+                  <Pressable style={styles.actionButtonSecondary} onPress={handleNotifyPress}>
+                    <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
+                      <Feather name="bell" size={24} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.actionButtonTextSecondary, { color: colors.text }]}>
+                      Notify me
+                    </Text>
+                  </Pressable>
+                )}
 
                 {isUpcoming && (
                   <Pressable style={styles.actionButtonSecondary} onPress={handleTicketPress}>
@@ -345,59 +433,43 @@ export default function GameDetailsScreen() {
                       <Ionicons name="ticket-outline" size={24} color={colors.primary} />
                     </View>
                     <Text style={[styles.actionButtonTextSecondary, { color: colors.text }]}>
-                    Purchase Tickets
+                      Purchase Tickets
                     </Text>
                   </Pressable>
                 )}
               </View>
             </Animated.View>
 
-            {/* Game Information Section */}
+            {/* Game Information Section - Simplified */}
             <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Additional Information</Text>
 
               <View style={styles.infoGrid}>
+                {/* Only show Game Status */}
                 <View style={styles.infoItem}>
                   <View style={styles.infoItemLeft}>
                     <View style={styles.infoIcon}>
-                      <Feather name="activity" size={16} color={colors.primary} />
+                      <Entypo name="back-in-time" size={20} color={colors.primary} />
                     </View>
-                    <Text style={styles.infoLabel}>Sport</Text>
+                    <Text style={styles.infoLabel}>Game Status</Text>
                   </View>
-                  <Text style={styles.infoValue}>{game.sport?.display_name || "Game"}</Text>
+                  <Text style={[styles.infoValue, { color: getStatusColor() }]}>
+                    {isUpcoming ? "Upcoming Game" : isLive ? "Live Game" : "Completed Game"}
+                  </Text>
                 </View>
 
-                <View style={styles.infoItem}>
-                  <View style={styles.infoItemLeft}>
-                    <View style={styles.infoIcon}>
-                      <Feather name="home" size={16} color={colors.primary} />
-                    </View>
-                    <Text style={styles.infoLabel}>Type</Text>
-                  </View>
-                  <Text style={styles.infoValue}>{game.locationType} Game</Text>
-                </View>
-
-                {game.attendance && (
-                  <View style={styles.infoItem}>
+                {/* Show news link if game is completed and has news */}
+                {isCompleted && gameNewsStory && (
+                  <Pressable style={styles.infoItem} onPress={handleNewsPress}>
                     <View style={styles.infoItemLeft}>
                       <View style={styles.infoIcon}>
-                        <Feather name="users" size={16} color={colors.primary} />
+                        <Ionicons name="newspaper-outline" size={16} color={colors.primary} />
                       </View>
-                      <Text style={styles.infoLabel}>Expected Attendance</Text>
+                      <Text style={styles.newsLinkText}>Read more about it</Text>
+                      <Feather name="chevron-right" size={16} color={colors.primary} />
                     </View>
-                    <Text style={styles.infoValue}>{game.attendance.toLocaleString()}</Text>
-                  </View>
+                  </Pressable>
                 )}
-
-                <View style={styles.infoItem}>
-                  <View style={styles.infoItemLeft}>
-                    <View style={styles.infoIcon}>
-                      <Feather name="clock" size={16} color={colors.primary} />
-                    </View>
-                    <Text style={styles.infoLabel}>Gates Open</Text>
-                  </View>
-                  <Text style={styles.infoValue}>90 minutes before</Text>
-                </View>
               </View>
             </Animated.View>
           </View>
@@ -540,8 +612,8 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: "white",
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     letterSpacing: 0.5,
   },
   liveDot: {
@@ -619,7 +691,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: colors.textSecondary,
   },
-  // New date and location in same row
   dateLocationRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -655,7 +726,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     flex: 1,
   },
-  // Links for Game Notes and Matchup History
   linksContainer: {
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
@@ -674,7 +744,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
-  // Professional action buttons
   actionButtonsRow: {
     marginBottom: 12,
   },
@@ -753,7 +822,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
@@ -763,10 +832,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   infoIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary + "15",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -780,5 +845,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: colors.textSecondary,
+  },
+  newsLinkContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  newsLinkText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.primary,
+    marginRight: 4,
   },
 })

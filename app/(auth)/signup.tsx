@@ -727,8 +727,7 @@ const styles = StyleSheet.create({
   matchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: -12,
-    marginBottom: 8,
+    marginTop: 5,
     marginLeft: 4,
   },
   matchText: {

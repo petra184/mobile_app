@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { checkBothAvailability } from './users';
+
+
 export async function signUpWithEmail(
   email: string, 
   password: string, 

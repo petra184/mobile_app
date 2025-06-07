@@ -136,6 +136,7 @@ const TeamItem = React.memo(
     // Grid layout (original)
     return (
       <Animated.View style={[animatedStyle, { width: cardWidth }]}>
+        <View style={styles.shadow}>
         <Pressable
           style={[
             styles.teamItem,
@@ -196,6 +197,7 @@ const TeamItem = React.memo(
             </View>
           )}
         </Pressable>
+        </View>
       </Animated.View>
     )
   },
@@ -397,6 +399,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  shadow: {
+    borderRadius: 16,
+    marginBottom: 16,
+    backgroundColor: colors.card, // required for iOS shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3, // Android
+    marginHorizontal:3,
+  },
   horizontalList: {
     paddingHorizontal: 16,
   },
@@ -433,7 +446,6 @@ const styles = StyleSheet.create({
     elevation: 3,
     position: "relative",
     overflow: "hidden",
-    marginHorizontal:3
   },
   selectedTeamItem: {
     shadowOpacity: 0.15,

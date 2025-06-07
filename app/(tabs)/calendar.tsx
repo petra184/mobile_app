@@ -1,16 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { View, Text, StyleSheet, ScrollView, Platform, Pressable } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
+import { LinearGradient } from "expo-linear-gradient"
 import { colors } from "@/constants/colors"
 import type { Team } from "@/app/actions/teams"
 import type { Team as DbTeam } from "@/types"
 import type { Game } from "@/types/game"
 import { CalendarView } from "@/components/games/CalendarView"
-import { GameCard } from "@/components/games/game-card"
-import { Dropdown } from "@/components/ui/dropdown"
+import { GameCard } from "@/components/games/gameCard"
+import { EnhancedDropdown } from "@/components/ui/new_dropdown"
 import { Feather } from "@expo/vector-icons"
 import { getTeams } from "@/app/actions/teams"
 
@@ -35,7 +36,7 @@ function convertUiTeamToDbTeam(uiTeam: Team): DbTeam {
   }
 }
 
-export default function CalendarScreen() {
+export default function EnhancedCalendarScreen() {
   const router = useRouter()
   const [teams, setTeams] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
@@ -43,7 +44,7 @@ export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [gamesOnSelectedDate, setGamesOnSelectedDate] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtersVisible, setFiltersVisible] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
 
   useEffect(() => {
     loadTeams()
@@ -81,6 +82,11 @@ export default function CalendarScreen() {
     setLocationType(type)
   }
 
+  const clearAllFilters = () => {
+    setSelectedTeam(null)
+    setLocationType(null)
+  }
+
   const formatSelectedDate = (date: Date) => {
     return date.toLocaleDateString("en-US", {
       weekday: "long",
@@ -90,65 +96,156 @@ export default function CalendarScreen() {
     })
   }
 
-  // Prepare dropdown options
-  const teamOptions = [
-    { label: "All Teams", value: null },
-    ...teams.map((team) => ({
-      label: team.name,
-      value: team.id,
-      color: team.primaryColor,
-    })),
-  ]
+  // Enhanced dropdown options with better UX
+  const teamOptions = useMemo(
+    () => [
+      {
+        label: "All Teams",
+        value: null,
+        icon: "users",
+      },
+      ...teams.map((team) => ({
+        label: team.name,
+        value: team.id,
+        color: team.primaryColor,
+        subtitle: `${team.sport} • ${team.gender}`,
+      })),
+    ],
+    [teams],
+  )
 
   const locationOptions = [
-    { label: "All Games", value: null },
-    { label: "Home Game", value: "home" },
-    { label: "Away Game", value: "away" },
-    { label: "Neutral Game", value: "neutral" },
+    {
+      label: "All Games",
+      value: null,
+      icon: "globe",
+    },
+    {
+      label: "Home Games",
+      value: "home",
+      subtitle: "Games at home venue",
+      icon: "home",
+    },
+    {
+      label: "Away Games",
+      value: "away",
+      subtitle: "Games at opponent venue",
+      icon: "map-pin",
+    },
+    {
+      label: "Neutral Games",
+      value: "neutral",
+      subtitle: "Games at neutral venue",
+      icon: "navigation",
+    },
   ]
+
+  // Filter chips for quick access
+  const filterChips = useMemo(() => {
+    const chips = []
+
+    // Popular teams as quick filters
+    const popularTeams = teams.slice(0, 4)
+    popularTeams.forEach((team) => {
+      chips.push({
+        id: `team-${team.id}`,
+        label: team.shortName || team.name,
+        value: team.id,
+        color: team.primaryColor,
+        isActive: selectedTeam?.id === team.id,
+      })
+    })
+
+    // Location type chips
+    chips.push(
+      {
+        id: "location-home",
+        label: "Home",
+        value: "home",
+        icon: "home",
+        isActive: locationType === "home",
+      },
+      {
+        id: "location-away",
+        label: "Away",
+        value: "away",
+        icon: "map-pin",
+        isActive: locationType === "away",
+      },
+    )
+
+    return chips
+  }, [teams, selectedTeam, locationType])
+
+  const handleChipPress = (chipId: string, value: string | null) => {
+    if (chipId.startsWith("team-")) {
+      handleTeamSelect(selectedTeam?.id === value ? null : value)
+    } else if (chipId.startsWith("location-")) {
+      handleLocationTypeChange(locationType === value ? null : value)
+    }
+  }
+
+  const hasActiveFilters = selectedTeam || locationType
 
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
 
-        {/* Filters Section */}
-        <View style={styles.filtersSection}>
+        {/* Advanced Filters Section */}
+        {filtersExpanded && (
+          <View style={styles.filtersSection}>
+            <Text style={styles.filtersTitle}></Text>
 
-          {filtersVisible && (
             <View style={styles.filtersGrid}>
               <View style={styles.filterItem}>
-                <Dropdown
+                <Text style={styles.filterLabel}>Filter by Team</Text>
+                <EnhancedDropdown
                   options={teamOptions}
                   selectedValue={selectedTeam?.id || null}
                   onSelect={handleTeamSelect}
                   placeholder="Select a team"
+                  variant="team"
                 />
               </View>
 
               <View style={styles.filterItem}>
-                <Dropdown
+                <Text style={styles.filterLabel}>Filter by Location</Text>
+                <EnhancedDropdown
                   options={locationOptions}
                   selectedValue={locationType}
                   onSelect={handleLocationTypeChange}
-                  placeholder="Select a locations"
+                  placeholder="Game location"
+                  variant="location"
                 />
               </View>
             </View>
-          )}
+          </View>
+        )}
 
-          {/* Active Filters Summary */}
-          {(selectedTeam || locationType) && (
-            <View style={styles.activeFiltersSummary}>
-              <View style={styles.summaryHeader}>
-                <Feather name="filter" size={16} color={colors.primary} />
-                <Text style={styles.summaryText}>
-                  {selectedTeam ? `${selectedTeam.name}` : "All teams"}
-                  {locationType ? ` • ${locationOptions.find((opt) => opt.value === locationType)?.label}` : ""}
-                </Text>
+        {/* Active Filters Summary */}
+        {hasActiveFilters && (
+          <View style={styles.activeFiltersSummary}>
+            <LinearGradient
+              colors={[`${colors.primary}15`, `${colors.accent}15`]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.summaryGradient}
+            >
+              <View style={styles.summaryContent}>
+                <View style={styles.summaryHeader}>
+                  <Feather name="filter" size={16} color={colors.primary} />
+                  <Text style={styles.summaryText}>
+                    {selectedTeam ? `${selectedTeam.name}` : "All teams"}
+                    {locationType ? ` • ${locationOptions.find((opt) => opt.value === locationType)?.label}` : ""}
+                  </Text>
+                </View>
+                <Pressable onPress={clearAllFilters} style={styles.clearButton}>
+                  <Text style={styles.clearButtonText}>Clear</Text>
+                </Pressable>
               </View>
-            </View>
-          )}
-        </View>
+            </LinearGradient>
+          </View>
+        )}
 
         {/* Calendar Section */}
         <View style={styles.calendarSection}>
@@ -162,19 +259,28 @@ export default function CalendarScreen() {
         {/* Selected Date Games */}
         {selectedDate && (
           <View style={styles.gamesSection}>
-            <View style={styles.gamesSectionHeader}>
+            <LinearGradient
+              colors={[`${colors.primary}08`, `${colors.accent}08`]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.gamesSectionHeader}
+            >
               <View style={styles.gamesHeaderContent}>
-                <Text style={styles.gamesTitle}>{formatSelectedDate(selectedDate)}</Text>
-                <Text style={styles.gamesSubtitle}>
-                  {gamesOnSelectedDate.length} game{gamesOnSelectedDate.length !== 1 ? "s" : ""} scheduled
-                </Text>
+                <View style={styles.gamesHeaderLeft}>
+                  <Text style={styles.gamesTitle}>{formatSelectedDate(selectedDate)}</Text>
+                  <Text style={styles.gamesSubtitle}>
+                    {gamesOnSelectedDate.length} game{gamesOnSelectedDate.length !== 1 ? "s" : ""} scheduled
+                  </Text>
+                </View>
               </View>
-            </View>
+            </LinearGradient>
 
             {gamesOnSelectedDate.length > 0 ? (
               <View style={styles.gamesList}>
-                {gamesOnSelectedDate.map((game) => (
-                  <GameCard key={game.id} game={game} onPress={() => handleGameSelect(game)} />
+                {gamesOnSelectedDate.map((game, index) => (
+                  <View key={game.id} style={[styles.gameCardWrapper, { marginTop: index === 0 ? 16 : 8 }]}>
+                    <GameCard game={game} onPress={() => handleGameSelect(game)} />
+                  </View>
                 ))}
               </View>
             ) : (
@@ -183,7 +289,9 @@ export default function CalendarScreen() {
                   <Feather name="calendar" size={32} color={colors.textSecondary} />
                 </View>
                 <Text style={styles.noGamesTitle}>No games scheduled</Text>
-                <Text style={styles.noGamesText}>There are no games scheduled for this date.</Text>
+                <Text style={styles.noGamesText}>
+                  There are no games scheduled for this date with your current filters.
+                </Text>
               </View>
             )}
           </View>
@@ -212,45 +320,88 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  filterLabel: {
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 20,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "white",
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  filterToggle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickFiltersSection: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  quickFiltersTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 12,
   },
   filtersSection: {
     paddingHorizontal: 20,
     marginBottom: 24,
-    marginTop: 16,
   },
-  filtersGrid: {
-    flexDirection: "row",
-    gap: 15,
-    marginTop: 16,
-  },
-  filterItem: {
-    flex: 1,
-  },
-  filtersHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
-  filtersHeaderText: {
-    fontSize: 18,
+  filtersTitle: {
+    fontSize: 16,
     fontWeight: "600",
     color: colors.text,
-    paddingLeft:10
+    marginBottom: 16,
+  },
+  filtersGrid: {
+    gap: 16,
+  },
+  filterItem: {
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text,
+    marginLeft: 4,
   },
   activeFiltersSummary: {
-    marginTop: 16,
-    padding: 10,
-    alignContent: "center",
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 26,
+    overflow: "hidden",
+  },
+  summaryGradient: {
+    paddingHorizontal: 16,
+    paddingVertical:10
+  },
+  summaryContent: {
+    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: `${colors.primary}08`,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: `${colors.primary}20`,
+    justifyContent: "space-between",
   },
   summaryHeader: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
   summaryText: {
     fontSize: 14,
@@ -258,25 +409,44 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginLeft: 8,
   },
+  clearButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  clearButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "white",
+  },
   calendarSection: {
     paddingHorizontal: 20,
     marginBottom: 24,
   },
   gamesSection: {
-    paddingHorizontal: 10,
     marginBottom: 24,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: colors.card,
   },
   gamesSectionHeader: {
-    marginBottom: 16,
-    paddingLeft: 10
+    paddingHorizontal: 20,
+    paddingTop:20
   },
   gamesHeaderContent: {
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 10,
+    borderBottomColor:colors.border,
+    borderBottomWidth:1
+  },
+  gamesHeaderLeft: {
+    flex: 1,
   },
   gamesTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: colors.text,
     marginBottom: 4,
@@ -285,16 +455,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
+  gamesHeaderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: `${colors.primary}20`,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   gamesList: {
-    gap: 12,
+    paddingBottom: 16,
+    backgroundColor:colors.background
+  },
+  gameCardWrapper: {
+    backgroundColor:colors.background
   },
   noGamesContainer: {
     alignItems: "center",
     padding: 40,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   noGamesIcon: {
     width: 64,
