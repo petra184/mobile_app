@@ -8,8 +8,8 @@ import { colors } from "@/constants/colors"
 import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
-import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
-import { GameCard } from "@/components/games/gameCard"
+import TeamSelector from "@/components/teams/SwipingCard"
+import { GameCard } from "@/components/games/new_game_card"
 import { GameFilter, type GameFilterOptions } from "@/components/games/GameFilter"
 import Feather from "@expo/vector-icons/Feather"
 import type { Team } from "@/app/actions/teams"
@@ -283,7 +283,6 @@ export default function HomeScreen() {
             onSelectTeam={handleTeamSelect}
             onTeamPress={handleTeamPress}
             showFavorites={true}
-            horizontal={true}
           />
         </View>
 

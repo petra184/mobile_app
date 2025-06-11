@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator } from "reac
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
 import type { Game } from "@/types/game"
-import { GameCard } from "@/components/games/gameCard"
+import { GameCard } from "@/components/games/new_game_card"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { Feather } from "@expo/vector-icons"
 
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     resizeMode: "cover",
-    opacity: 0.1,
+    opacity: 0.06,
     zIndex: 0,
   },
   loadingContainer: {

@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     resizeMode: "cover",
-    opacity: 0.1,
+    opacity: 0.06,
     zIndex: 0,
   },
   headerContainer: {

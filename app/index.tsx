@@ -102,8 +102,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     resizeMode: 'cover',
-    opacity: 0.8,
-    height: '70%',
+    height:"60%",
+    opacity: 0.6,
   },
   gradient: {
     position: 'absolute',

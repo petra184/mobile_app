@@ -1,5 +1,5 @@
 "use client"
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator, Platform } from "react-native"
+import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator } from "react-native"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -10,13 +10,12 @@ import { Linking } from "react-native"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { useState, useEffect } from "react"
 import { getGameById } from "@/app/actions/games"
-import { getTeamById } from "@/app/actions/teams"
+import { getTeamById, getRandomTeamPhotoWithCache } from "@/app/actions/teams"
 import { useNotifications } from "@/context/notification-context"
 import { LinearGradient } from "expo-linear-gradient"
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from "@expo/vector-icons/Ionicons"
 import { StatusBar } from "expo-status-bar"
 import { supabase } from "@/lib/supabase"
-import Entypo from '@expo/vector-icons/Entypo';
 
 // Type for news story
 type NewsStory = {
@@ -38,6 +37,7 @@ export default function GameDetailsScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [gameNewsStory, setGameNewsStory] = useState<NewsStory | null>(null)
+  const [teamPhoto, setTeamPhoto] = useState<string | null>(null)
 
   // Fetch game data on component mount
   useEffect(() => {
@@ -64,13 +64,18 @@ export default function GameDetailsScreen() {
       try {
         const teamData = await getTeamById(gameData.homeTeam.id)
         setTeam(teamData)
+
+        // Fetch team photo
+        if (teamData?.id) {
+          const photo = await getRandomTeamPhotoWithCache(teamData.id)
+          setTeamPhoto(photo)
+        }
       } catch (teamErr) {
         console.error("Error loading team data:", teamErr)
       }
 
       // Check for news stories about this game
       await checkForGameNews(gameId)
-
     } catch (err) {
       console.error("Error fetching game data:", err)
       setError("Failed to load game details")
@@ -83,10 +88,10 @@ export default function GameDetailsScreen() {
   const checkForGameNews = async (gameId: string) => {
     try {
       const { data: stories, error } = await supabase
-        .from('stories')
-        .select('id, title, content, game_id, created_at')
-        .eq('game_id', gameId)
-        .order('created_at', { ascending: false })
+        .from("stories")
+        .select("id, title, content, game_id, created_at")
+        .eq("game_id", gameId)
+        .order("created_at", { ascending: false })
         .limit(1)
 
       if (error) {
@@ -111,30 +116,30 @@ export default function GameDetailsScreen() {
     if (game.time) {
       try {
         // Parse time and create full game datetime
-        const [hours, minutes] = game.time.split(':')
+        const [hours, minutes] = game.time.split(":")
         const gameDateTime = new Date(gameDate)
-        gameDateTime.setHours(parseInt(hours), parseInt(minutes))
-        
+        gameDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes))
+
         // Game is in the past
         if (gameDateTime < now) {
           return "completed"
         }
-        
+
         // Game is within 3 hours of start time (could be live)
         const timeDiff = gameDateTime.getTime() - now.getTime()
         const hoursUntilGame = timeDiff / (1000 * 60 * 60)
-        
+
         if (hoursUntilGame <= 0 && hoursUntilGame >= -3) {
           return "live"
         }
-        
+
         // Game is upcoming
         return "scheduled"
       } catch (error) {
         console.error("Error parsing game time:", error)
       }
     }
-    
+
     // Fallback: just compare dates
     if (gameDate < now) {
       return "completed"
@@ -178,7 +183,7 @@ export default function GameDetailsScreen() {
   const getStatusText = () => {
     switch (actualStatus) {
       case "live":
-        return "LIVE"
+        return "LIVE NOW"
       case "completed":
         return "FINAL"
       default:
@@ -189,11 +194,11 @@ export default function GameDetailsScreen() {
   const getStatusColor = () => {
     switch (actualStatus) {
       case "live":
-        return "#EF4444"
+        return ["#EF4444", "#DC2626"] as const
       case "completed":
-        return "red"
+        return ["#3B82F6", "#2563EB"] as const
       default:
-        return colors.primary
+        return ["#10B981", "#059669"] as const
     }
   }
 
@@ -252,11 +257,11 @@ export default function GameDetailsScreen() {
   const handleQRScanPress = () => {
     router.push("../(tabs)/qr_code")
   }
-  
+
   const handleMatchupHistoryPress = () => {
     router.push(`../(tabs)/qr_code`)
   }
-  
+
   const handleGameNotesPress = () => {
     router.push(`../(tabs)/qr_code`)
   }
@@ -270,212 +275,226 @@ export default function GameDetailsScreen() {
     }
   }
 
+  // Determine location status
+  const getLocationStatus = () => {
+    if (!game.location) return "TBD"
+
+    const location = game.location.toLowerCase()
+    if (location.includes("neutral")) return "NEUTRAL"
+    if (location.includes("away") || location.includes("@")) return "AWAY"
+    return "HOME"
+  }
+
   return (
-    <>
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="light"/>
-        <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
-        
-        {/* Modern Header with Gradient */}
-        <LinearGradient
-          colors={[teamColor, teamColor + "E6"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <Pressable style={styles.headerBackButton} onPress={() => router.back()}>
-            <View style={styles.backButtonContainer}>
-              <Feather name="chevron-left" size={24} color="white" />
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+
+      {/* Back Button - Floating on top of hero image */}
+      <Pressable style={styles.backButtonAbsolute} onPress={() => router.back()}>
+        <View style={styles.backButtonCircle}>
+          <Feather name="chevron-left" size={24} color="white" />
+        </View>
+      </Pressable>
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Hero Image Section with Overlay */}
+        <View style={styles.heroSection}>
+          <Image
+            source={{ uri: teamPhoto || team?.logo || game.homeTeam.logo }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <LinearGradient colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]} style={styles.heroOverlay}>
+            {/* Status Badge */}
+           
+          </LinearGradient>
+        </View>
+
+        <View style={styles.contentContainer}>
+          {/* Game Details Card */}
+          <Animated.View entering={FadeInDown.duration(400)} style={styles.detailsCard}>
+
+          <View style={styles.topRow}>
+              <LinearGradient
+                colors={getStatusColor()}
+                style={styles.statusBadge}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {isLive && <View style={styles.liveDot} />}
+                <Text style={styles.statusText}>{getStatusText()}</Text>
+              </LinearGradient>
             </View>
-          </Pressable>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>{game.sport?.display_name || "Game"}</Text>
-            <Text style={styles.headerSubtitle}>
-              {game.homeTeam.name} vs {game.awayTeam.name}
-            </Text>
-          </View>
-        </LinearGradient>
-
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Main Image with Overlay */}
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: team?.logo }}
-              style={styles.roster}
-            />
-            <LinearGradient
-              colors={["transparent", "rgba(0,0,0,0.3)"]}
-              style={styles.imageOverlay}
-            />
-          </View>
-
-          <View style={styles.mainContent}>
-            {/* Game Details Section */}
-            <Animated.View entering={FadeInDown.duration(400)} style={styles.gameDetailsSection}>
-              {/* Status and Points Row - Centered */}
-              <View style={styles.statusPointsRow}>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-                  <Text style={styles.statusText}>{getStatusText()}</Text>
-                  {isLive && <View style={styles.liveDot} />}
+            {/* Teams Matchup */}
+            <View style={styles.teamsContainer}>
+              {/* Home Team */}
+              <View style={styles.teamSection}>
+                <View style={styles.teamLogoContainer}>
+                  <Image
+                    source={{ uri: game.homeTeam.logo }}
+                    style={styles.teamLogo}
+                    defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
+                  />
                 </View>
-                
-                {game.points && game.points > 0 && (game.status === "live" || game.status =="scheduled") && (
-                  <View style={styles.pointsBadge}>
-                    <Feather name="award" size={16} color="#667eea" />
-                    <Text style={styles.pointsText}>{game.points} PTS</Text>
-                  </View>
+                <Text style={styles.teamName}>{game.homeTeam.name}</Text>
+                {isCompleted && game.score && (
+                  <Text style={[styles.teamScore, { color: teamColor }]}>{game.score.home}</Text>
                 )}
               </View>
 
-              {/* Teams Matchup */}
-              <View style={styles.teamsContainer}>
-                {/* Home Team */}
-                <View style={styles.teamSection}>
-                  <View style={styles.teamLogoContainer}>
-                    <Image
-                      source={{ uri: game.homeTeam.logo }}
-                      style={styles.teamLogo}
-                      defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
-                    />
-                  </View>
-                  <Text style={styles.teamName}>{game.homeTeam.name}</Text>
-                  {isCompleted && game.score && (
-                    <Text style={[styles.teamScore, { color: teamColor }]}>{game.score.home}</Text>
-                  )}
-                </View>
-
-                {/* VS Divider */}
-                <View style={styles.vsSection}>
-                  <View style={styles.vsCircle}>
-                    <Text style={styles.vsText}>VS</Text>
-                  </View>
-                </View>
-
-                {/* Away Team */}
-                <View style={styles.teamSection}>
-                  <View style={styles.teamLogoContainer}>
-                    <Image
-                      source={{ uri: game.awayTeam.logo }}
-                      style={styles.teamLogo}
-                      defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
-                    />
-                  </View>
-                  <Text style={styles.teamName}>{game.awayTeam.name}</Text>
-                  {isCompleted && game.score && <Text style={styles.teamScore}>{game.score.away}</Text>}
+              {/* VS Divider */}
+              <View style={styles.vsSection}>
+                <View style={styles.vsCircle}>
+                  <Text style={styles.vsText}>VS</Text>
                 </View>
               </View>
 
-              {/* Game Notes and Matchup History Links */}
-              <View style={styles.linksContainer}>
-                <View style={styles.linkItem}>
-                  <Feather name="map-pin" size={18} color={colors.primary} style={styles.dateTimeIcon} />
-                  <Text style={styles.gameDate}>{game.location}</Text>
+              {/* Away Team */}
+              <View style={styles.teamSection}>
+                <View style={styles.teamLogoContainer}>
+                  <Image
+                    source={{ uri: game.awayTeam.logo }}
+                    style={styles.teamLogo}
+                    defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
+                  />
                 </View>
+                <Text style={styles.teamName}>{game.awayTeam.name}</Text>
+                {isCompleted && game.score && <Text style={styles.teamScore}>{game.score.away}</Text>}
+              </View>
+            </View>
 
-                <View style={styles.linkItem}>
-                  <View style={styles.dateLocationRow}>
-                    <View style={styles.dateTimeContainer}>
-                      <Feather name="clock" size={18} color={colors.primary} style={styles.dateTimeIcon} />
-                      <View>
-                        <Text style={styles.gameDate}>{formatGameDate(game.date)} at {formatGameTime(game.time)}</Text>
-                      </View>
-                    </View>
-                  </View>
+            {/* Date, Time and Location */}
+            <View style={styles.infoSection}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIconContainer}>
+                  <Feather name="calendar" size={20} color={teamColor} />
                 </View>
-
-                <Pressable style={styles.linkItem} onPress={handleGameNotesPress}>
-                  <Feather name="file-text" size={18} color={colors.primary} />
-                  <Text style={styles.linkText}>Game Notes</Text>
-                  <Feather name="chevron-right" size={18} color={colors.textSecondary} />
-                </Pressable>
-                
-                <Pressable style={styles.linkItem} onPress={handleMatchupHistoryPress}>
-                  <Feather name="bar-chart-2" size={18} color={colors.primary} />
-                  <Text style={styles.linkText}>Matchup History</Text>
-                  <Feather name="chevron-right" size={18} color={colors.textSecondary} />
-                </Pressable>
-              </View>
-            </Animated.View>
-
-            {/* Professional Action Buttons */}
-            <Animated.View entering={FadeInDown.duration(400).delay(100)}>
-              <View style={styles.actionButtonsRow}>
-                {isUpcoming && (
-                  <Pressable style={styles.actionButtonPrimary} onPress={handleQRScanPress}>
-                    <LinearGradient
-                      colors={[teamColor, teamColor + "CC"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                    <Ionicons name="qr-code" size={24} color="white" />
-                    <Text style={styles.actionButtonTextPrimary}>Scan QR Code</Text>
-                  </Pressable>
-                )}
-              </View>
-              
-              <View style={styles.secondaryButtonsRow}>
-                {/* Only show Notify Me button if game is NOT completed */}
-                {!isCompleted && (
-                  <Pressable style={styles.actionButtonSecondary} onPress={handleNotifyPress}>
-                    <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
-                      <Feather name="bell" size={24} color={colors.primary} />
-                    </View>
-                    <Text style={[styles.actionButtonTextSecondary, { color: colors.text }]}>
-                      Notify me
-                    </Text>
-                  </Pressable>
-                )}
-
-                {isUpcoming && (
-                  <Pressable style={styles.actionButtonSecondary} onPress={handleTicketPress}>
-                    <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
-                      <Ionicons name="ticket-outline" size={24} color={colors.primary} />
-                    </View>
-                    <Text style={[styles.actionButtonTextSecondary, { color: colors.text }]}>
-                      Purchase Tickets
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </Animated.View>
-
-            {/* Game Information Section - Simplified */}
-            <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.sectionContainer}>
-              <Text style={styles.sectionTitle}>Additional Information</Text>
-
-              <View style={styles.infoGrid}>
-                {/* Only show Game Status */}
-                <View style={styles.infoItem}>
-                  <View style={styles.infoItemLeft}>
-                    <View style={styles.infoIcon}>
-                      <Entypo name="back-in-time" size={20} color={colors.primary} />
-                    </View>
-                    <Text style={styles.infoLabel}>Game Status</Text>
-                  </View>
-                  <Text style={[styles.infoValue, { color: getStatusColor() }]}>
-                    {isUpcoming ? "Upcoming Game" : isLive ? "Live Game" : "Completed Game"}
+                <View style={styles.infoTextContainer}>
+                  <Text style={styles.infoLabel}>Date & Time</Text>
+                  <Text style={styles.infoValue}>
+                    {formatGameDate(game.date)} • {formatGameTime(game.time)}
                   </Text>
                 </View>
-
-                {/* Show news link if game is completed and has news */}
-                {isCompleted && gameNewsStory && (
-                  <Pressable style={styles.infoItem} onPress={handleNewsPress}>
-                    <View style={styles.infoItemLeft}>
-                      <View style={styles.infoIcon}>
-                        <Ionicons name="newspaper-outline" size={16} color={colors.primary} />
-                      </View>
-                      <Text style={styles.newsLinkText}>Read more about it</Text>
-                      <Feather name="chevron-right" size={16} color={colors.primary} />
-                    </View>
-                  </Pressable>
-                )}
               </View>
-            </Animated.View>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </>
+
+              <View style={styles.infoRow}>
+                <View style={styles.infoIconContainer}>
+                  <Feather name="map-pin" size={20} color={teamColor} />
+                </View>
+                <View style={styles.infoTextContainer}>
+                  <Text style={styles.infoLabel}>Location</Text>
+                  <Text style={styles.infoValue}>
+                    <Text style={styles.locationTag}>{getLocationStatus()}</Text> • {game.location || "TBD"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </Animated.View>
+
+          {/* Action Buttons */}
+          <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.actionsContainer}>
+            {isUpcoming && (
+              <Pressable style={styles.primaryButton} onPress={handleQRScanPress}>
+                <LinearGradient
+                  colors={[teamColor, teamColor + "CC"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Ionicons name="qr-code" size={24} color="white" />
+                <Text style={styles.primaryButtonText}>Scan QR Code</Text>
+              </Pressable>
+            )}
+
+            <View style={styles.secondaryButtonsRow}>
+              {!isCompleted && (
+                <Pressable style={styles.secondaryButton} onPress={handleNotifyPress}>
+                  <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
+                    <Feather name="bell" size={22} color={teamColor} />
+                  </View>
+                  <Text style={styles.secondaryButtonText}>Notify me</Text>
+                </Pressable>
+              )}
+
+              {isUpcoming && (
+                <Pressable style={styles.secondaryButton} onPress={handleTicketPress}>
+                  <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
+                    <Ionicons name="ticket-outline" size={22} color={teamColor} />
+                  </View>
+                  <Text style={styles.secondaryButtonText}>Get Tickets</Text>
+                </Pressable>
+              )}
+            </View>
+          </Animated.View>
+
+          {/* Additional Information */}
+          <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.additionalInfoCard}>
+            <Text style={styles.sectionTitle}>Additional Information</Text>
+
+            <Pressable style={styles.infoLink} onPress={handleGameNotesPress}>
+              <Feather name="file-text" size={20} color={teamColor} />
+              <Text style={styles.infoLinkText}>Game Notes</Text>
+              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+            </Pressable>
+
+            <Pressable style={styles.infoLink} onPress={handleMatchupHistoryPress}>
+              <Feather name="bar-chart-2" size={20} color={teamColor} />
+              <Text style={styles.infoLinkText}>Matchup History</Text>
+              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+            </Pressable>
+
+            {/* Points Section for upcoming games */}
+            {game.points && game.points > 0 && (isUpcoming || isLive) && (
+              <View style={styles.pointsSection}>
+                <LinearGradient
+                  colors={["#3B82F6", "#1D4ED8"]}
+                  style={styles.pointsGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <View style={styles.pointsContent}>
+                    <View style={styles.pointsIconContainer}>
+                      <Feather name="award" size={28} color="white" />
+                    </View>
+                    <View style={styles.pointsTextContainer}>
+                      <Text style={styles.pointsMainText}>EARN {game.points} POINTS</Text>
+                      <Text style={styles.pointsSubText}>Check in at this game to collect points!</Text>
+                    </View>
+                  </View>
+                </LinearGradient>
+              </View>
+            )}
+
+            {/* Special Events */}
+            {game.special_events && (
+              <View style={styles.specialEventsSection}>
+                <LinearGradient
+                  colors={["#F59E0B", "#D97706"]}
+                  style={styles.specialEventsGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <View style={styles.specialEventsContent}>
+                    <Feather name="star" size={20} color="white" />
+                    <Text style={styles.specialEventsText}>{game.special_events}</Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            )}
+
+            {/* News Story Link */}
+            {isCompleted && gameNewsStory && (
+              <Pressable style={styles.newsButton} onPress={handleNewsPress}>
+                <Ionicons name="newspaper-outline" size={20} color={teamColor} />
+                <Text style={styles.newsButtonText}>Read Game Story</Text>
+                <Feather name="chevron-right" size={20} color={teamColor} />
+              </Pressable>
+            )}
+          </Animated.View>
+        </View>
+      </ScrollView>
+    </View>
   )
 }
 
@@ -483,11 +502,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
-    ...Platform.select({
-      android: {paddingTop: -55,},
-      ios:{paddingTop: -60}
-    }),
-    bottom:0
   },
   backgroundImage: {
     position: "absolute",
@@ -504,6 +518,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
+    fontWeight: "500",
     color: colors.textSecondary,
     marginTop: 16,
   },
@@ -516,6 +531,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
+    fontWeight: "500",
     color: colors.textSecondary,
     marginVertical: 16,
     textAlign: "center",
@@ -523,6 +539,7 @@ const styles = StyleSheet.create({
   backButton: {
     backgroundColor: colors.primary,
     paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 8,
   },
   backButtonText: {
@@ -530,78 +547,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  header: {
-    flexDirection: "row",
+  backButtonAbsolute: {
+    position: "absolute",
+    top: 50,
+    left: 16,
+    zIndex: 10,
+  },
+  backButtonCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingTop: 60,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  headerBackButton: {
-    marginRight: -16,
-  },
-  backButtonContainer: {
-  },
-  headerContent: {
-    flex: 1,
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "white",
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
-    marginTop: 4,
   },
   scrollView: {
     flex: 1,
   },
-  imageContainer: {
+
+  // Hero Section
+  heroSection: {
+    height: 280,
+    width: "100%",
     position: "relative",
   },
-  roster: {
+  heroImage: {
     width: "100%",
-    height: 220,
-    resizeMode: "cover",
+    height: "100%",
   },
-  imageOverlay: {
+  heroOverlay: {
     position: "absolute",
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    height: 60,
-  },
-  mainContent: {
+    bottom: 0,
     padding: 20,
-    paddingTop: 0,
+    paddingTop: 60,
+    justifyContent: "space-between",
   },
-  gameDetailsSection: {
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
-    marginTop: -30,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-    zIndex: 1,
-  },
-  statusPointsRow: {
-    flexDirection: "row",
-    justifyContent: "center",
+  topRow: {
     alignItems: "center",
-    marginBottom: 20,
-    gap: 12,
+    top:-40,
+    marginBottom: -30
   },
   statusBadge: {
     flexDirection: "row",
@@ -611,9 +598,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   statusText: {
+    fontSize: 14,
+    fontWeight: "700",
     color: "white",
-    fontSize: 16,
-    fontWeight: "600",
     letterSpacing: 0.5,
   },
   liveDot: {
@@ -621,24 +608,54 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: "white",
-    marginLeft: 6,
+    marginRight: 6,
   },
   pointsBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#667eea15",
+    backgroundColor: "rgba(59, 130, 246, 0.8)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#667eea30",
     gap: 6,
   },
-  pointsText: {
-    color: "#667eea",
-    fontSize: 12,
+  pointsBadgeText: {
+    fontSize: 14,
     fontWeight: "700",
+    color: "white",
+  },
+  sportTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "rgba(255, 255, 255, 0.9)",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  matchupText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "white",
+    marginTop: 8,
+  },
+
+  // Content Container
+  contentContainer: {
+    padding: 20,
+    paddingTop: 0,
+    marginTop: -30,
+  },
+
+  // Details Card
+  detailsCard: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+    marginBottom: 20,
   },
   teamsContainer: {
     flexDirection: "row",
@@ -649,15 +666,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   teamLogoContainer: {
+    width: 80,
+    height: 80,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 12,
-    borderRadius: 12,
-    padding: 8,
   },
   teamLogo: {
     width: 70,
-    height: 60,
+    height: 70,
+    resizeMode: "contain",
   },
   teamName: {
     fontSize: 16,
@@ -691,68 +709,56 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: colors.textSecondary,
   },
-  dateLocationRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  dateTimeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  dateTimeIcon: {
-    marginRight: 10,
-  },
-  gameDate: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  gameTime: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: "500",
-  },
-  locationContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  locationText: {
-    fontSize: 16,
-    color: colors.primary,
-    fontWeight: "500",
-    flex: 1,
-  },
-  linksContainer: {
+
+  // Info Section
+  infoSection: {
     borderTopWidth: 1,
     borderTopColor: "#f1f5f9",
+    paddingTop: 16,
   },
-  linkItem: {
+  infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
+    marginBottom: 16,
   },
-  linkText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: colors.text,
+  infoIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  infoTextContainer: {
     flex: 1,
-    marginLeft: 12,
   },
-  actionButtonsRow: {
-    marginBottom: 12,
+  infoLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.textSecondary,
+    marginBottom: 4,
   },
-  actionButtonPrimary: {
+  infoValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  locationTag: {
+    fontWeight: "700",
+  },
+
+  // Actions Container
+  actionsContainer: {
+    marginBottom: 20,
+  },
+  primaryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
     borderRadius: 12,
+    marginBottom: 12,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -760,7 +766,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  actionButtonTextPrimary: {
+  primaryButtonText: {
     fontSize: 16,
     fontWeight: "700",
     color: "white",
@@ -769,15 +775,14 @@ const styles = StyleSheet.create({
   secondaryButtonsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
     gap: 12,
   },
-  actionButtonSecondary: {
+  secondaryButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 12,
     backgroundColor: "white",
     shadowColor: "#000",
@@ -792,22 +797,25 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 10,
+    marginRight: 8,
   },
-  actionButtonTextSecondary: {
+  secondaryButtonText: {
     fontSize: 14,
     fontWeight: "600",
+    color: colors.text,
   },
-  sectionContainer: {
+
+  // Additional Info Card
+  additionalInfoCard: {
     backgroundColor: "white",
     borderRadius: 20,
     padding: 20,
-    marginBottom: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 6,
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 20,
@@ -815,45 +823,96 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
-  infoGrid: {
-    gap: 0,
-  },
-  infoItem: {
+  infoLink: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
   },
-  infoItemLeft: {
+  infoLinkText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: colors.text,
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  // Points Section
+  pointsSection: {
+    marginTop: 16,
+  },
+  pointsGradient: {
+    borderRadius: 12,
+    padding: 16,
+  },
+  pointsContent: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
   },
-  infoIcon: {
+  pointsIconContainer: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  infoLabel: {
-    fontSize: 16,
-    color: colors.text,
-    fontWeight: "500",
+  pointsTextContainer: {
+    flex: 1,
   },
-  infoValue: {
+  pointsMainText: {
     fontSize: 16,
-    fontWeight: "600",
-    color: colors.textSecondary,
+    fontWeight: "700",
+    color: "white",
+    letterSpacing: 0.3,
   },
-  newsLinkContainer: {
+  pointsSubText: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "400",
+    marginTop: 2,
+  },
+
+  // Special Events
+  specialEventsSection: {
+    marginTop: 16,
+  },
+  specialEventsGradient: {
+    borderRadius: 12,
+    padding: 14,
+  },
+  specialEventsContent: {
     flexDirection: "row",
     alignItems: "center",
   },
-  newsLinkText: {
+  specialEventsText: {
+    fontSize: 14,
+    color: "white",
+    marginLeft: 10,
+    flex: 1,
+    fontWeight: "500",
+  },
+
+  // News Button
+  newsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  newsButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.primary,
-    marginRight: 4,
+    marginLeft: 10,
+    marginRight: 10,
   },
 })

@@ -401,14 +401,12 @@ const styles = StyleSheet.create({
   },
   shadow: {
     borderRadius: 16,
-    marginBottom: 16,
     backgroundColor: colors.card, // required for iOS shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3, // Android
-    marginHorizontal:3,
   },
   horizontalList: {
     paddingHorizontal: 16,

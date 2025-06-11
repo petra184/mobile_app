@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { View, Text, StyleSheet, StatusBar, Pressable, TouchableOpacity } from "react-native"
+import { View, Text, StyleSheet, StatusBar, Pressable, TouchableOpacity, Image } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
 import { colors } from "@/constants/colors"
@@ -131,6 +131,7 @@ const TeamsPage: React.FC = () => {
       {/* Teams List */}
      
       <View style={styles.content}>
+      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <Animated.View entering={FadeInDown.duration(400).delay(300)} style={{ flex: 1 }}>
         <TeamSelector
           key={selectedGenderFilter} // Force re-render when filter changes
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom:0,
     resizeMode: "cover",
-    opacity: 0.03,
+    opacity: 0.06,
     zIndex: 0,
   },
   header: {

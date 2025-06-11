@@ -436,3 +436,134 @@ export async function getTeamsWithUpcomingGames(): Promise<Team[]> {
     return []
   }
 }
+
+/**
+ * Get a random team photo for a specific team
+ * @param teamId The team ID to fetch a random photo for
+ * @returns URL of a random team photo or null if not found
+ */
+export async function getRandomTeamPhoto(teamId: string): Promise<string | null> {
+  try {
+    console.log("Fetching photos for team ID:", teamId)
+
+    const { data, error } = await supabase
+      .from("team_photos")
+      .select("file_path, file_name, team_id")
+      .eq("team_id", teamId)
+
+    if (error) {
+      console.error("Error fetching team photos:", error)
+      return null
+    }
+
+
+    if (!data || data.length === 0) {
+      console.log("No photos found for team:", teamId)
+      return null
+    }
+
+    // Get a random photo from the available photos
+    const randomIndex = Math.floor(Math.random() * data.length)
+    const selectedPhoto = data[randomIndex]
+    if (!selectedPhoto?.file_path) {
+      return null
+    }
+
+    // Construct the full Supabase Storage URL
+    const { data: urlData } = supabase.storage
+      .from("team-photos") // Replace with your actual bucket name
+      .getPublicUrl(selectedPhoto.file_path)
+
+    return urlData.publicUrl
+  } catch (error) {
+    console.error("Failed to fetch random team photo:", error)
+    return null
+  }
+}
+
+/**
+ * Get all photos for a specific team
+ * @param teamId The team ID to fetch photos for
+ * @returns Array of team photos
+ */
+export async function getTeamPhotos(teamId: string): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from("team_photos")
+      .select("*")
+      .eq("team_id", teamId)
+      .order("display_order", { ascending: true })
+
+    if (error) {
+      console.error("Error fetching team photos:", error)
+      return []
+    }
+
+    // Construct the full storage URLs for each photo
+    const photosWithUrls = (data || []).map(photo => ({
+      ...photo,
+      photo_url: supabase.storage
+        .from('team-photos') // Replace with your actual bucket name
+        .getPublicUrl(photo.file_path).data.publicUrl
+    }))
+
+    return photosWithUrls
+  } catch (error) {
+    console.error("Failed to fetch team photos:", error)
+    return []
+  }
+}
+
+/**
+ * Get team photo by ID
+ * @param photoId The photo ID to fetch
+ * @returns Team photo object or null if not found
+ */
+export async function getTeamPhotoById(photoId: string): Promise<any | null> {
+  try {
+    const { data, error } = await supabase.from("team_photos").select("*").eq("id", photoId).single()
+
+    if (error) {
+      console.error("Error fetching team photo by id:", error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error("Failed to fetch team photo by id:", error)
+    return null
+  }
+}
+
+/**
+ * Cache for team photos to avoid repeated database queries
+ */
+const teamPhotoCache: Record<string, { url: string; timestamp: number }> = {}
+
+/**
+ * Get random team photo with caching
+ * @param teamId The team ID to fetch a random photo for
+ * @returns URL of a random team photo or null if not found
+ */
+export async function getRandomTeamPhotoWithCache(teamId: string): Promise<string | null> {
+  // Check if we have a cached photo that's less than 5 minutes old
+  const cachedPhoto = teamPhotoCache[teamId]
+  const now = Date.now()
+
+  if (cachedPhoto && now - cachedPhoto.timestamp < 5 * 60 * 1000) {
+    return cachedPhoto.url
+  }
+
+  // Fetch a new random photo
+  const photoUrl = await getRandomTeamPhoto(teamId)
+
+  // Cache the result
+  if (photoUrl) {
+    teamPhotoCache[teamId] = {
+      url: photoUrl,
+      timestamp: now,
+    }
+  }
+
+  return photoUrl
+}

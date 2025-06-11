@@ -13,7 +13,6 @@ import {
   getUserPreferences 
 } from '@/app/actions/users';
 
-// Import auth actions to get user metadata as fallback
 import { getCurrentUser } from '@/app/actions/main_actions';
 
 interface UserState {
@@ -26,13 +25,16 @@ interface UserState {
   scanHistory: QRCodeScan[];
   preferences: UserPreferences;
   
+  // NEW: Remember Me functionality
+  rememberMe: boolean;
+  
   // Loading states
   isLoading: boolean;
   isPointsLoading: boolean;
   isScanHistoryLoading: boolean;
   
   // Actions
-  setUser: (userId: string, email?: string) => Promise<void>;
+  setUser: (userId: string, email?: string, remember?: boolean) => Promise<void>;
   initializeUser: (userId: string, email?: string) => Promise<void>;
   refreshUserData: () => Promise<void>;
   addPoints: (points: number, description: string) => Promise<void>;
@@ -44,6 +46,9 @@ interface UserState {
   isUserLoggedIn: () => boolean;
   getUserName: () => string;
   getUserFirstName: () => string;
+  
+  // NEW: Check if user should be auto-logged in
+  shouldAutoLogin: () => boolean;
 }
 
 function capitalize(name: string) {
@@ -66,11 +71,12 @@ export const useUserStore = create<UserState>()(
         favoriteTeams: [],
         notificationsEnabled: true,
       },
+      rememberMe: false, // NEW: Default to false
       isLoading: false,
       isPointsLoading: false,
       isScanHistoryLoading: false,
 
-      getUserFirstName:() => {
+      getUserFirstName: () => {
         const { first_name } = get();
         
         if (first_name) {
@@ -80,7 +86,6 @@ export const useUserStore = create<UserState>()(
         return 'User';
       },
       
-      // Get user's full name (capitalized)
       getUserName: () => {
         const { first_name, last_name } = get();
         
@@ -95,9 +100,13 @@ export const useUserStore = create<UserState>()(
         return 'User';
       },
       
-      // Set user and initialize data
-      setUser: async (userId: string, email?: string) => {
-        set({ userId, userEmail: email });
+      // UPDATED: Set user with remember preference
+      setUser: async (userId: string, email?: string, remember: boolean = false) => {
+        set({ 
+          userId, 
+          userEmail: email, 
+          rememberMe: remember 
+        });
         await get().initializeUser(userId, email);
       },
       
@@ -106,12 +115,11 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true, userId, userEmail: email });
         
         try {
-          // Fetch user data from database
           const [userProfile, scanHistory, userPreferences, authUserData] = await Promise.all([
             getUserProfile(userId),
             getUserScanHistory(userId),
             getUserPreferences(userId),
-            getCurrentUser() // Get auth metadata as fallback
+            getCurrentUser()
           ]);
           
           console.log('=== DEBUG USER DATA ===');
@@ -120,7 +128,6 @@ export const useUserStore = create<UserState>()(
           console.log('User preferences:', userPreferences);
           console.log('========================');
           
-          // Try to get names from userProfile first, then fallback to auth metadata
           const firstName = userProfile?.first_name || authUserData?.first_name || null;
           const lastName = userProfile?.last_name || authUserData?.last_name || null;
           
@@ -144,13 +151,19 @@ export const useUserStore = create<UserState>()(
         }
       },
       
-      // Check if user is logged in
-      isUserLoggedIn: () => {
-        const { userId } = get();
-        return !!userId;
+      // NEW: Check if user should be auto-logged in
+      shouldAutoLogin: () => {
+        const { userId, rememberMe } = get();
+        return !!(userId && rememberMe);
       },
       
-      // Refresh user data
+      // UPDATED: Check if user is logged in
+      isUserLoggedIn: () => {
+        return get().shouldAutoLogin();
+      },
+      
+      // ... all your other existing methods (addPoints, redeemPoints, etc.) ...
+      
       refreshUserData: async () => {
         const { userId } = get();
         if (!userId) return;
@@ -161,12 +174,6 @@ export const useUserStore = create<UserState>()(
             getCurrentUser()
           ]);
           
-          console.log('=== REFRESH DEBUG ===');
-          console.log('Refreshed user profile:', userProfile);
-          console.log('Refreshed auth metadata:', authUserData);
-          console.log('====================');
-          
-          // Try to get names from userProfile first, then fallback to auth metadata
           const firstName = userProfile?.first_name || authUserData?.first_name || null;
           const lastName = userProfile?.last_name || authUserData?.last_name || null;
           
@@ -179,8 +186,7 @@ export const useUserStore = create<UserState>()(
           console.error('Failed to refresh user data:', error);
         }
       },
-      
-      // Add points with database sync
+
       addPoints: async (points: number, description: string) => {
         const { userId } = get();
         if (!userId) return;
@@ -188,21 +194,15 @@ export const useUserStore = create<UserState>()(
         set({ isPointsLoading: true });
         
         try {
-          // Optimistically update UI
           set(state => ({
             points: state.points + points,
           }));
           
-          // Update database
           await updateUserPoints(userId, points, 'add');
-          
-          // Add to scan history
           await get().addScan({ points, description });
           
         } catch (error) {
           console.error('Failed to add points:', error);
-          
-          // Revert optimistic update
           set(state => ({
             points: state.points - points,
           }));
@@ -210,8 +210,7 @@ export const useUserStore = create<UserState>()(
           set({ isPointsLoading: false });
         }
       },
-      
-      // Redeem points with database sync
+
       redeemPoints: async (points: number) => {
         const { userId, points: currentPoints } = get();
         if (!userId) return false;
@@ -223,31 +222,24 @@ export const useUserStore = create<UserState>()(
         set({ isPointsLoading: true });
         
         try {
-          // Optimistically update UI
           set(state => ({
             points: state.points - points,
           }));
           
-          // Update database
           await updateUserPoints(userId, points, 'subtract');
-          
           return true;
           
         } catch (error) {
           console.error('Failed to redeem points:', error);
-          
-          // Revert optimistic update
           set(state => ({
             points: state.points + points,
           }));
-          
           return false;
         } finally {
           set({ isPointsLoading: false });
         }
       },
-      
-      // Add scan with database sync
+
       addScan: async (scan: Omit<QRCodeScan, 'id' | 'scannedAt'>) => {
         const { userId } = get();
         if (!userId) return;
@@ -259,25 +251,20 @@ export const useUserStore = create<UserState>()(
             scannedAt: new Date().toISOString(),
           };
           
-          // Optimistically update UI
           set(state => ({
             scanHistory: [newScan, ...state.scanHistory],
           }));
           
-          // Save to database
           await addUserScan(userId, newScan);
           
         } catch (error) {
           console.error('Failed to add scan:', error);
-          
-          // Revert optimistic update
           set(state => ({
             scanHistory: state.scanHistory.slice(1),
           }));
         }
       },
-      
-      // Toggle favorite team with database sync - FIXED VERSION
+
       toggleFavoriteTeam: async (teamId: string) => {
         const { userId, preferences } = get();
         if (!userId) return;
@@ -293,16 +280,11 @@ export const useUserStore = create<UserState>()(
             favoriteTeams,
           };
           
-          // Optimistically update UI
           set({ preferences: newPreferences });
-          
-          // Update database using UPSERT logic
           await updateUserPreferences(userId, newPreferences);
           
         } catch (error) {
           console.error('Failed to toggle favorite team:', error);
-          
-          // Revert optimistic update by refreshing preferences from database
           try {
             const userPreferences = await getUserPreferences(userId);
             set({ 
@@ -314,12 +296,10 @@ export const useUserStore = create<UserState>()(
           } catch (refreshError) {
             console.error('Failed to refresh preferences after error:', refreshError);
           }
-          
-          throw error; // Re-throw to show error to user
+          throw error;
         }
       },
-      
-      // Set notifications enabled with database sync - FIXED VERSION
+
       setNotificationsEnabled: async (enabled: boolean) => {
         const { userId, preferences } = get();
         if (!userId) return;
@@ -330,28 +310,22 @@ export const useUserStore = create<UserState>()(
             notificationsEnabled: enabled,
           };
           
-          // Optimistically update UI
           set({ preferences: newPreferences });
-          
-          // Update database using UPSERT logic
           await updateUserPreferences(userId, newPreferences);
           
         } catch (error) {
           console.error('Failed to update notification settings:', error);
-          
-          // Revert optimistic update
           set(state => ({
             preferences: {
               ...state.preferences,
               notificationsEnabled: !enabled,
             },
           }));
-          
-          throw error; // Re-throw to show error to user
+          throw error;
         }
       },
       
-      // Clear user data (for logout)
+      // UPDATED: Clear user data and remember preference
       clearUserData: () => {
         set({
           userId: null,
@@ -364,6 +338,7 @@ export const useUserStore = create<UserState>()(
             favoriteTeams: [],
             notificationsEnabled: true,
           },
+          rememberMe: false, // Reset remember preference
           isLoading: false,
           isPointsLoading: false,
           isScanHistoryLoading: false,
@@ -373,16 +348,28 @@ export const useUserStore = create<UserState>()(
     {
       name: 'user-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist essential data, not loading states
-      partialize: (state) => ({
-        userId: state.userId,
-        userEmail: state.userEmail,
-        first_name: state.first_name,
-        last_name: state.last_name,
-        points: state.points,
-        scanHistory: state.scanHistory,
-        preferences: state.preferences,
-      }),
+      // UPDATED: Conditionally persist userId based on rememberMe
+      partialize: (state) => {
+        const baseData = {
+          userEmail: state.userEmail,
+          first_name: state.first_name,
+          last_name: state.last_name,
+          points: state.points,
+          scanHistory: state.scanHistory,
+          preferences: state.preferences,
+          rememberMe: state.rememberMe,
+        };
+
+        // Only persist userId if rememberMe is true
+        if (state.rememberMe) {
+          return {
+            ...baseData,
+            userId: state.userId,
+          };
+        }
+
+        return baseData;
+      },
     }
   )
 );

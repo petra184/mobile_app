@@ -522,6 +522,7 @@ export default function SignupScreen() {
               </View>
               </View>
             </View>
+            <View style={styles.gap}></View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -706,6 +707,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 12,
+  },
+  gap:{
+    marginVertical:90
   },
   requirement: {
     flexDirection: 'row',

@@ -1,14 +1,19 @@
 "use client"
 
 import type React from "react"
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking } from "react-native"
+import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking, Dimensions, FlatList } from "react-native"
 import { colors } from "@/constants/colors"
 import type { Team } from "@/app/actions/teams"
+import { getTeamPhotos } from "@/app/actions/teams"
 import { Feather } from "@expo/vector-icons"
 import Animated, { FadeInDown, withTiming, withSpring, useAnimatedStyle, useSharedValue } from "react-native-reanimated"
-import AntDesign from '@expo/vector-icons/AntDesign';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import AntDesign from "@expo/vector-icons/AntDesign"
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
+import { useState, useEffect, useRef } from "react"
+
+const { width: screenWidth } = Dimensions.get("window")
+
 interface TeamInfoTabProps {
   teamId: string
   team: Team
@@ -21,6 +26,25 @@ interface TeamInfoTabProps {
 }
 
 export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStats }) => {
+  const [teamPhotos, setTeamPhotos] = useState<any[]>([])
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
+  const flatListRef = useRef<FlatList>(null)
+
+  useEffect(() => {
+    const fetchPhotos = async () => {
+      try {
+        const photos = await getTeamPhotos(teamId)
+        console.log("Fetched photos with URLs:", photos)
+        setTeamPhotos(photos)
+      } catch (error) {
+        console.error("Error fetching team photos:", error)
+        setTeamPhotos([])
+      }
+    }
+
+    fetchPhotos()
+  }, [teamId])
+
   const handleSocialPress = (url: string | null) => {
     if (url) {
       Linking.openURL(url)
@@ -28,92 +52,143 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
   }
 
   const scale = useSharedValue(1)
-    const opacity = useSharedValue(1)
-    
-    const animatedStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-      opacity: opacity.value,
-    }))
+  const opacity = useSharedValue(1)
 
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }))
 
   const handlePressIn = () => {
-      scale.value = withSpring(0.96, { damping: 15 })
-      opacity.value = withTiming(0.8, { duration: 100 })
-    }
-    
-    const handlePressOut = () => {
-      scale.value = withSpring(1, { damping: 15 })
-      opacity.value = withTiming(1, { duration: 150 })
-    }
+    scale.value = withSpring(0.96, { damping: 15 })
+    opacity.value = withTiming(0.8, { duration: 100 })
+  }
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15 })
+    opacity.value = withTiming(1, { duration: 150 })
+  }
 
   const winPercentage =
     teamStats.wins + teamStats.losses > 0
       ? ((teamStats.wins / (teamStats.wins + teamStats.losses)) * 100).toFixed(1)
       : "0.0"
 
+  const renderPhotoItem = ({ item }: { item: any }) => {
+    return (
+      <View style={styles.photoContainer}>
+        <Image
+          source={{ uri: item.photo_url }}
+          style={styles.photoImage}
+          resizeMode="cover"
+          onError={(error) => {
+            console.log("Image load error:", error.nativeEvent.error)
+            console.log("Failed URL:", item.photo_url)
+          }}
+          onLoad={() => console.log("Image loaded successfully:", item.photo_url)}
+        />
+        <View style={styles.photoOverlay} />
+      </View>
+    )
+  }
+
+  const onPhotoScroll = (event: any) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x
+    const currentIndex = Math.round(contentOffsetX / screenWidth)
+    setCurrentPhotoIndex(currentIndex)
+  }
+
+  const renderPaginationDot = (index: number) => (
+    <View key={index} style={[styles.paginationDot, currentPhotoIndex === index && styles.paginationDotActive]} />
+  )
+
   return (
     <View style={styles.container}>
       <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {/* Team Photos Carousel */}
+        {teamPhotos.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(400)} style={styles.photosSection}>
+            <FlatList
+              ref={flatListRef}
+              data={teamPhotos}
+              renderItem={renderPhotoItem}
+              keyExtractor={(item) => item.id}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={onPhotoScroll}
+              scrollEventThrottle={16}
+            />
+
+            {/* Pagination Dots */}
+            {teamPhotos.length > 1 && (
+              <View style={styles.paginationContainer}>{teamPhotos.map((_, index) => renderPaginationDot(index))}</View>
+            )}
+          </Animated.View>
+        )}
 
         {/* Social Media Links */}
-        {(team.socialMedia?.facebook || team.socialMedia?.instagram || team.socialMedia?.twitter || team.socialMedia?.website) && (
-          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>See What's New</Text>
-                      <View style={styles.circularButtonsContainer}>
-                        {team.socialMedia?.facebook && (
-                          <Animated.View style={animatedStyle}>
-                            <Pressable
-                              style={[styles.circularButton, styles.facebookButton]}
-                              onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
-                              onPressIn={handlePressIn}
-                              onPressOut={handlePressOut}
-                            >
-                              <Feather name="facebook" size={22} color="#FFFFFF" />
-                            </Pressable>
-                          </Animated.View>
-                        )}
-            
-                        {team.socialMedia?.instagram && (
-                          <Animated.View style={animatedStyle}>
-                            <Pressable
-                              style={[styles.circularButton, styles.instagramButton]}
-                              onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
-                              onPressIn={handlePressIn}
-                              onPressOut={handlePressOut}
-                            >
-                              <Feather name="instagram" size={22} color="#FFFFFF" />
-                            </Pressable>
-                          </Animated.View>
-                        )}
-            
-                        {team.socialMedia?.twitter && (
-                          <Animated.View style={animatedStyle}>
-                            <Pressable
-                              style={[styles.circularButton, styles.twitterButton]}
-                              onPressIn={handlePressIn}
-                              onPressOut={handlePressOut}
-                              onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
-                            >
-                              <FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />
-                            </Pressable>
-                          </Animated.View>
-                        )}
-            
-                        {team.socialMedia?.website && (
-                          <Animated.View style={animatedStyle}>
-                            <Pressable
-                              style={[styles.circularButton, styles.websiteButton]}
-                              onPress={() => handleSocialPress(team.socialMedia?.website || null)}
-                              onPressIn={handlePressIn}
-                              onPressOut={handlePressOut}
-                            >
-                              <Feather name="globe" size={22} color="#FFFFFF" />
-                            </Pressable>
-                          </Animated.View>
-                        )}
-                      </View>
+        {(team.socialMedia?.facebook ||
+          team.socialMedia?.instagram ||
+          team.socialMedia?.twitter ||
+          team.socialMedia?.website) && (
+          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection2}>
+
+            <View style={styles.circularButtonsContainer}>
+              {team.socialMedia?.facebook && (
+                <Animated.View style={animatedStyle}>
+                  <Pressable
+                    style={[styles.circularButton, styles.facebookButton]}
+                    onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                  >
+                    <Feather name="facebook" size={22} color="#FFFFFF" />
+                  </Pressable>
+                </Animated.View>
+              )}
+
+              {team.socialMedia?.instagram && (
+                <Animated.View style={animatedStyle}>
+                  <Pressable
+                    style={[styles.circularButton, styles.instagramButton]}
+                    onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                  >
+                    <Feather name="instagram" size={22} color="#FFFFFF" />
+                  </Pressable>
+                </Animated.View>
+              )}
+
+              {team.socialMedia?.twitter && (
+                <Animated.View style={animatedStyle}>
+                  <Pressable
+                    style={[styles.circularButton, styles.twitterButton]}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
+                  >
+                    <FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />
+                  </Pressable>
+                </Animated.View>
+              )}
+
+              {team.socialMedia?.website && (
+                <Animated.View style={animatedStyle}>
+                  <Pressable
+                    style={[styles.circularButton, styles.websiteButton]}
+                    onPress={() => handleSocialPress(team.socialMedia?.website || null)}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                  >
+                    <Feather name="globe" size={22} color="#FFFFFF" />
+                  </Pressable>
+                </Animated.View>
+              )}
+            </View>
           </Animated.View>
         )}
 
@@ -122,7 +197,7 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           <Text style={styles.sectionTitle}>Team Record</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-            <AntDesign name="Trophy" size={24} color={team.primaryColor} style={styles.statCardIcon} />
+              <AntDesign name="Trophy" size={24} color={team.primaryColor} style={styles.statCardIcon} />
               <Text style={styles.statCardLabel}>Overall</Text>
               <Text style={styles.statCardValue}>
                 {teamStats.wins}-{teamStats.losses}
@@ -130,7 +205,12 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
             </View>
 
             <View style={styles.statCard}>
-              <MaterialCommunityIcons name="crown-outline" size={25} color={team.primaryColor} style={styles.statCardIcon} />
+              <MaterialCommunityIcons
+                name="crown-outline"
+                size={25}
+                color={team.primaryColor}
+                style={styles.statCardIcon}
+              />
               <Text style={styles.statCardLabel}>Win %</Text>
               <Text style={styles.statCardValue}>{winPercentage}%</Text>
             </View>
@@ -153,15 +233,13 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           </View>
         </Animated.View>
 
-        {/* {team.additionalInfo && team.additionalInfo.trim() !== '' && ( */}
-          <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
-            <Text style={styles.sectionTitle}>About the Team</Text>
-            <Text style={styles.aboutText}>hehe</Text>
-            <Text style={styles.aboutText}>{team.additionalInfo}</Text>
-          </Animated.View>
-        {/* )} */}
+        <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
+          <Text style={styles.sectionTitle}>About the Team</Text>
+          <Text style={styles.aboutText}>hehe</Text>
+          <Text style={styles.aboutText}>{team.additionalInfo}</Text>
+        </Animated.View>
 
-      
+        
       </ScrollView>
     </View>
   )
@@ -176,7 +254,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     resizeMode: "cover",
-    opacity: 0.1,
+    opacity: 0.06,
     zIndex: 0,
   },
   content: {
@@ -184,6 +262,53 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
+  },
+  // Photo carousel styles
+  photosSection: {
+    marginBottom: 24,
+    marginHorizontal: -16,
+    marginTop: -16, // This negates the container's padding
+    borderRadius: 0, // Remove border radius since it goes edge to edge
+    overflow: "hidden",
+    backgroundColor: colors.card,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  photoContainer: {
+    width: screenWidth, // Use full screen width instead of screenWidth - 32
+    height: 220,
+    position: "relative",
+  },
+  photoImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  paginationContainer: {
+    position: "absolute",
+    bottom: 8, // Reduced from 16
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 0, // Removed padding
+  },
+  paginationDot: {
+    width: 5, // Reduced from 6
+    height: 5, // Reduced from 6
+    borderRadius: 2.5,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    marginHorizontal: 3,
+  },
+  paginationDotActive: {
+    backgroundColor: "#FFFFFF",
+    width: 7, // Reduced from 8
+    height: 7, // Reduced from 8
+    borderRadius: 3.5,
   },
   teamHeader: {
     flexDirection: "row",
@@ -338,6 +463,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     color: colors.text,
+  },
+  photoOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 20, // Reduced from 50
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
   },
 })
 

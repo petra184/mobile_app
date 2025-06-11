@@ -18,8 +18,9 @@ export interface Game {
   date: string;
   time: string;
   status: GameStatus;
+  photo_url?: string | null;
   location: string;
-  locationType: string;
+  location_type: string;
   homeTeam: Team;
   awayTeam: Team;
   score?: GameScore;
@@ -28,7 +29,8 @@ export interface Game {
     display_name?: string;
   };
   attendance?: number;
-  seasonType?: string;
+  special_events?: string | null
+  seasonType?: string | null;
   points?: number;
 }
 

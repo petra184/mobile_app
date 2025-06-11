@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { NotificationProvider } from "@/context/notification-context"
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
 export default function TabLayout() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function TabLayout() {
   };
   
   return (
+    <GestureHandlerRootView>
     <NotificationProvider>
     <Tabs
       screenOptions={{
@@ -112,5 +114,6 @@ export default function TabLayout() {
       />
     </Tabs>
     </NotificationProvider>
+    </GestureHandlerRootView>
   );
 }

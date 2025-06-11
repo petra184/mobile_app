@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom:0,
     resizeMode: "cover",
-    opacity: 0.03,
+    opacity: 0.06,
     zIndex: 0,
   },
   filtersContainer: {

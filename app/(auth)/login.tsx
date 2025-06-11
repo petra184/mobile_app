@@ -22,7 +22,6 @@ import { signInWithEmailOrUsername } from "@/app/actions/main_actions"
 import { useNotifications } from "@/context/notification-context"
 import { useUserStore } from "@/hooks/userStore"
 import { colors } from "@/constants/colors"
-// Define the main color from the logo
 
 export default function LoginScreen() {
     const router = useRouter()
@@ -30,10 +29,10 @@ export default function LoginScreen() {
     const [showPassword, setShowPassword] = useState(false)
     const [identifier, setIdentifier] = useState("")
     const [password, setPassword] = useState("")
+    const [rememberMe, setRememberMe] = useState(false) // NEW: Remember Me state
     
-    // Initialize notifications and user store
     const { showSuccess, showError, showWarning } = useNotifications()
-    const { setUser } = useUserStore()
+    const { setUser, clearUserData } = useUserStore()
   
     const goHome = () => {
       router.push("/")
@@ -52,18 +51,17 @@ export default function LoginScreen() {
         if (success && user) {
           showSuccess("Welcome back!", "You have successfully logged in")
           
-          // Initialize user store with user data
-          await setUser(user.id, user.email)
+          // Pass the rememberMe preference to setUser
+          await setUser(user.id, user.email, rememberMe)
           
-          // Small delay to show the success message before navigation
-          setTimeout(() => {
-            router.push("/(tabs)")
-          }, 1000)
+          router.push("/(tabs)")
         } else {
+          clearUserData()
           showError("Login Failed", message || "Invalid credentials. Please check your email/username and password.")
         }
       } catch (error) {
         console.error("Login error:", error)
+        clearUserData()
         showError("Connection Error", "Unable to connect to the server. Please check your internet connection and try again.")
       } finally {
         setLoading(false)
@@ -74,7 +72,7 @@ export default function LoginScreen() {
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={styles.container}>
         <Image
-          source={require("../../IMAGES/crowd.jpg")} // Update path as needed
+          source={require("../../IMAGES/crowd.jpg")}
           style={styles.backgroundImage}
         />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoid}>
@@ -112,15 +110,30 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
+            <View style={styles.row}>
+            <View style={styles.rememberMeContainer}>
+              <TouchableOpacity 
+                style={styles.checkboxContainer} 
+                onPress={() => setRememberMe(!rememberMe)}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && (
+                    <Ionicons name="checkmark" size={16} color="white" />
+                  )}
+                </View>
+                <Text style={styles.passwordInput}>Keep me signed in</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={styles.forgotPassword} onPress={() => router.push("./forgot_password")}>
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
+            </View>
 
             <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
               {loading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>Log In</Text>}
             </TouchableOpacity>
+            
           </View>
-
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => router.push("./signup")}>
@@ -134,10 +147,11 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ... all your existing styles ...
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    paddingTop: Platform.OS === "ios" ? 0 : 74, // Adjust for Android status bar
+    paddingTop: Platform.OS === "ios" ? 0 : 74,
   },
   backgroundImage: {
     position: "absolute",
@@ -159,11 +173,6 @@ const styles = StyleSheet.create({
         top: -35,
       },
     }),
-  },
-  backButtonText: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#333",
   },
   keyboardAvoid: {
     flex: 1,
@@ -204,7 +213,7 @@ const styles = StyleSheet.create({
   },
   passwordInput: {
     flex: 1,
-    paddingRight: 50, // Space for the eye icon
+    paddingRight: 50,
   },
   eyeIcon: {
     position: "absolute",
@@ -213,6 +222,38 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingBottom: 15,
   },
+  row:{
+    flexDirection:"row",
+  },
+  // NEW: Remember Me Styles
+  rememberMeContainer: {
+    flex:1,
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    marginLeft:4,
+    borderColor: "#A0A0A0",
+    backgroundColor: "transparent",
+    marginRight: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  rememberMeText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  
   forgotPassword: {
     alignSelf: "flex-end",
     marginBottom: 24,
@@ -228,7 +269,7 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: "center",
     marginTop: 8,
-    bottom:-70,
+    bottom: -70,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
