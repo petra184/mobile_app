@@ -10,7 +10,7 @@ import { Linking } from "react-native"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { useState, useEffect } from "react"
 import { getGameById } from "@/app/actions/games"
-import { getTeamById, getRandomTeamPhotoWithCache } from "@/app/actions/teams"
+import { getTeamById } from "@/app/actions/teams"
 import { useNotifications } from "@/context/notification-context"
 import { LinearGradient } from "expo-linear-gradient"
 import Ionicons from "@expo/vector-icons/Ionicons"
@@ -37,7 +37,6 @@ export default function GameDetailsScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [gameNewsStory, setGameNewsStory] = useState<NewsStory | null>(null)
-  const [teamPhoto, setTeamPhoto] = useState<string | null>(null)
 
   // Fetch game data on component mount
   useEffect(() => {
@@ -64,12 +63,6 @@ export default function GameDetailsScreen() {
       try {
         const teamData = await getTeamById(gameData.homeTeam.id)
         setTeam(teamData)
-
-        // Fetch team photo
-        if (teamData?.id) {
-          const photo = await getRandomTeamPhotoWithCache(teamData.id)
-          setTeamPhoto(photo)
-        }
       } catch (teamErr) {
         console.error("Error loading team data:", teamErr)
       }
@@ -107,47 +100,10 @@ export default function GameDetailsScreen() {
     }
   }
 
-  // Enhanced game status detection
-  const getGameStatus = (game: Game) => {
-    const now = new Date()
-    const gameDate = new Date(game.date)
-
-    // If no explicit status, determine based on date and time
-    if (game.time) {
-      try {
-        // Parse time and create full game datetime
-        const [hours, minutes] = game.time.split(":")
-        const gameDateTime = new Date(gameDate)
-        gameDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes))
-
-        // Game is in the past
-        if (gameDateTime < now) {
-          return "completed"
-        }
-
-        // Game is within 3 hours of start time (could be live)
-        const timeDiff = gameDateTime.getTime() - now.getTime()
-        const hoursUntilGame = timeDiff / (1000 * 60 * 60)
-
-        if (hoursUntilGame <= 0 && hoursUntilGame >= -3) {
-          return "live"
-        }
-
-        // Game is upcoming
-        return "scheduled"
-      } catch (error) {
-        console.error("Error parsing game time:", error)
-      }
-    }
-
-    // Fallback: just compare dates
-    if (gameDate < now) {
-      return "completed"
-    } else if (gameDate.toDateString() === now.toDateString()) {
-      return "live" // Assume today's games are live
-    } else {
-      return "scheduled"
-    }
+  // Get game photo from database or fallback (same logic as GameCard)
+  const getGamePhoto = () => {
+    console.log("Photo URL:", game?.photo_url)
+    return game?.photo_url || game?.homeTeam?.logo || "/placeholder.svg?height=200&width=400"
   }
 
   // Loading state
@@ -173,34 +129,76 @@ export default function GameDetailsScreen() {
     )
   }
 
-  // Get actual game status
-  const actualStatus = getGameStatus(game)
-  const isCompleted = actualStatus === "completed"
-  const isLive = actualStatus === "live"
-  const isUpcoming = actualStatus === "scheduled"
+  // Simplified game status logic (same as GameCard)
+  const isCompleted = game.status === "completed"
+  const isLive = game.status === "live"
+  const isUpcoming = game.status === "scheduled" || (!isCompleted && !isLive)
+  const isPostponed = game.status === "postponed"
+  const isCanceled = game.status === "canceled"
+
+  // Check if game is today
+  const gameDate = new Date(game.date)
+  const isToday = new Date().toDateString() === gameDate.toDateString()
+
+  // Check if game is within an hour from now (for QR code button)
+  const now = new Date()
+  const gameDateTime = new Date(game.date)
+  if (game.time) {
+    const [hours, minutes] = game.time.split(":")
+    gameDateTime.setHours(parseInt(hours), parseInt(minutes))
+  }
+  const timeDiff = gameDateTime.getTime() - now.getTime()
+  const hoursUntilGame = timeDiff / (1000 * 60 * 60)
+  const isWithinAnHour = hoursUntilGame <= 1 && hoursUntilGame >= 0
+
   const teamColor = team?.primaryColor || game.homeTeam.primaryColor || colors.primary
 
-  const getStatusText = () => {
-    switch (actualStatus) {
-      case "live":
-        return "LIVE NOW"
-      case "completed":
-        return "FINAL"
-      default:
-        return "UPCOMING"
+  // Get status display info (same logic as GameCard)
+  const getStatusInfo = () => {
+    if (isLive)
+      return {
+        text: "LIVE NOW",
+        color: "#FFFFFF",
+        bgColor: "#EF4444",
+        gradient: ["#EF4444", "#DC2626"] as const,
+      }
+    if (isCompleted)
+      return {
+        text: "FINAL",
+        color: "#FFFFFF",
+        bgColor: "#3B82F6",
+        gradient: ["#3B82F6", "#2563EB"] as const,
+      }
+    if (isPostponed)
+      return {
+        text: "POSTPONED",
+        color: "#FFFFFF",
+        bgColor: "#F59E0B",
+        gradient: ["#F59E0B", "#D97706"] as const,
+      }
+    if (isCanceled)
+      return {
+        text: "CANCELED",
+        color: "#FFFFFF",
+        bgColor: "#EF4444",
+        gradient: ["#EF4444", "#DC2626"] as const,
+      }
+    if (isToday)
+      return {
+        text: "TODAY",
+        color: "#FFFFFF",
+        bgColor: "#3B82F6",
+        gradient: ["#3B82F6", "#2563EB"] as const,
+      }
+    return {
+      text: "UPCOMING",
+      color: "#FFFFFF",
+      bgColor: "#10B981",
+      gradient: ["#10B981", "#059669"] as const,
     }
   }
 
-  const getStatusColor = () => {
-    switch (actualStatus) {
-      case "live":
-        return ["#EF4444", "#DC2626"] as const
-      case "completed":
-        return ["#3B82F6", "#2563EB"] as const
-      default:
-        return ["#10B981", "#059669"] as const
-    }
-  }
+  const statusInfo = getStatusInfo()
 
   // Format date properly
   const formatGameDate = (dateString: string) => {
@@ -218,33 +216,8 @@ export default function GameDetailsScreen() {
     }
   }
 
-  // Format time properly
-  const formatGameTime = (timeString?: string) => {
-    if (!timeString) return "TBD"
-
-    try {
-      let date: Date
-
-      if (timeString.includes(":")) {
-        const [hours, minutes] = timeString.split(":")
-        date = new Date()
-        date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
-      } else {
-        date = new Date(timeString)
-      }
-
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-    } catch (error) {
-      return timeString
-    }
-  }
-
   const handleTicketPress = () => {
-    const ticketUrl = `https://tickets.gojaspers.com/game/${game.id}`
+    const ticketUrl = "https://gojaspers.universitytickets.com/"
     Linking.openURL(ticketUrl).catch(() => {
       showError("Error", "Unable to open ticket link")
     })
@@ -298,34 +271,38 @@ export default function GameDetailsScreen() {
       </Pressable>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Hero Image Section with Overlay */}
+        {/* Hero Image Section with Overlay - Now using game photo */}
         <View style={styles.heroSection}>
           <Image
-            source={{ uri: teamPhoto || team?.logo || game.homeTeam.logo }}
+            source={{ uri: getGamePhoto() }}
             style={styles.heroImage}
             resizeMode="cover"
           />
           <LinearGradient colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]} style={styles.heroOverlay}>
-            {/* Status Badge */}
-           
           </LinearGradient>
         </View>
 
         <View style={styles.contentContainer}>
           {/* Game Details Card */}
           <Animated.View entering={FadeInDown.duration(400)} style={styles.detailsCard}>
+            {/* Status Badge - Only show if TODAY or LIVE */}
+            {getStatusInfo() && (
+              <View style={styles.topRow}>
+                <LinearGradient
+                  colors={statusInfo.gradient}
+                  style={styles.statusBadge}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {isLive && <View style={styles.liveDot} />}
+                  <Text style={styles.statusText}>
+                    {statusInfo.text}
+                    {!isCompleted && ` • EARN ${game.points} POINTS`}
+                  </Text>
+                </LinearGradient>
+              </View>
+            )}
 
-          <View style={styles.topRow}>
-              <LinearGradient
-                colors={getStatusColor()}
-                style={styles.statusBadge}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                {isLive && <View style={styles.liveDot} />}
-                <Text style={styles.statusText}>{getStatusText()}</Text>
-              </LinearGradient>
-            </View>
             {/* Teams Matchup */}
             <View style={styles.teamsContainer}>
               {/* Home Team */}
@@ -373,7 +350,7 @@ export default function GameDetailsScreen() {
                 <View style={styles.infoTextContainer}>
                   <Text style={styles.infoLabel}>Date & Time</Text>
                   <Text style={styles.infoValue}>
-                    {formatGameDate(game.date)} • {formatGameTime(game.time)}
+                    {formatGameDate(game.date)} • {game.time}
                   </Text>
                 </View>
               </View>
@@ -389,40 +366,50 @@ export default function GameDetailsScreen() {
                   </Text>
                 </View>
               </View>
+              
+              { game.special_events && (
+              <View style={styles.infoRow}>
+                <View style={[styles.infoIconContainer, {backgroundColor: teamColor}]}>
+                  <Feather name="star" size={20} color="white" />
+                </View>
+                <View style={styles.infoTextContainer}>
+                  <Text style={styles.infoLabel}>Special Events</Text>
+                  <Text style={styles.infoValue}>
+                    <Text style={styles.locationTag}>{game.special_events}</Text>
+                  </Text>
+                </View>
+              </View>
+              )}
+
             </View>
           </Animated.View>
 
-          {/* Action Buttons */}
+          {/* Action Buttons - Both in same row */}
           <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.actionsContainer}>
-            {isUpcoming && (
-              <Pressable style={styles.primaryButton} onPress={handleQRScanPress}>
-                <LinearGradient
-                  colors={[teamColor, teamColor + "CC"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                <Ionicons name="qr-code" size={24} color="white" />
-                <Text style={styles.primaryButtonText}>Scan QR Code</Text>
-              </Pressable>
-            )}
-
-            <View style={styles.secondaryButtonsRow}>
+            <View style={styles.buttonRow}>
+              {/* Notify Me Button */}
               {!isCompleted && (
-                <Pressable style={styles.secondaryButton} onPress={handleNotifyPress}>
-                  <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
-                    <Feather name="bell" size={22} color={teamColor} />
+                <Pressable style={[styles.actionButton, { backgroundColor: "white" }]} onPress={handleNotifyPress}>
+                  <View style={[styles.actionButtonIcon, { backgroundColor: teamColor + "15" }]}>
+                    <Feather name="bell" size={20} color={teamColor} />
                   </View>
-                  <Text style={styles.secondaryButtonText}>Notify me</Text>
+                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Notify Me</Text>
                 </Pressable>
               )}
 
-              {isUpcoming && (
-                <Pressable style={styles.secondaryButton} onPress={handleTicketPress}>
-                  <View style={[styles.secondaryButtonIcon, { backgroundColor: teamColor + "15" }]}>
-                    <Ionicons name="ticket-outline" size={22} color={teamColor} />
+              {/* QR Code Button - Show if live or within an hour */}
+              {(isLive || isWithinAnHour || isToday) && (
+                <Pressable style={[styles.actionButton]} onPress={handleQRScanPress}>
+                  <LinearGradient
+                    colors={[teamColor, teamColor + "CC"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.actionButtonIcon}>
+                    <Ionicons name="qr-code" size={20} color="white" />
                   </View>
-                  <Text style={styles.secondaryButtonText}>Get Tickets</Text>
+                  <Text style={[styles.actionButtonText, { color: "white" }]}>Scan QR Code</Text>
                 </Pressable>
               )}
             </View>
@@ -444,44 +431,11 @@ export default function GameDetailsScreen() {
               <Feather name="chevron-right" size={20} color={colors.textSecondary} />
             </Pressable>
 
-            {/* Points Section for upcoming games */}
-            {game.points && game.points > 0 && (isUpcoming || isLive) && (
-              <View style={styles.pointsSection}>
-                <LinearGradient
-                  colors={["#3B82F6", "#1D4ED8"]}
-                  style={styles.pointsGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                >
-                  <View style={styles.pointsContent}>
-                    <View style={styles.pointsIconContainer}>
-                      <Feather name="award" size={28} color="white" />
-                    </View>
-                    <View style={styles.pointsTextContainer}>
-                      <Text style={styles.pointsMainText}>EARN {game.points} POINTS</Text>
-                      <Text style={styles.pointsSubText}>Check in at this game to collect points!</Text>
-                    </View>
-                  </View>
-                </LinearGradient>
-              </View>
-            )}
-
-            {/* Special Events */}
-            {game.special_events && (
-              <View style={styles.specialEventsSection}>
-                <LinearGradient
-                  colors={["#F59E0B", "#D97706"]}
-                  style={styles.specialEventsGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                >
-                  <View style={styles.specialEventsContent}>
-                    <Feather name="star" size={20} color="white" />
-                    <Text style={styles.specialEventsText}>{game.special_events}</Text>
-                  </View>
-                </LinearGradient>
-              </View>
-            )}
+            <Pressable style={styles.infoLink} onPress={handleTicketPress}>
+              <Ionicons name="ticket-outline" size={20} color={teamColor} />
+              <Text style={styles.infoLinkText}>Tickets available online or at the entrance</Text>
+              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+            </Pressable>
 
             {/* News Story Link */}
             {isCompleted && gameNewsStory && (
@@ -587,8 +541,8 @@ const styles = StyleSheet.create({
   },
   topRow: {
     alignItems: "center",
-    top:-40,
-    marginBottom: -30
+    top: -40,
+    marginBottom: -30,
   },
   statusBadge: {
     flexDirection: "row",
@@ -609,33 +563,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: "white",
     marginRight: 6,
-  },
-  pointsBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(59, 130, 246, 0.8)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  pointsBadgeText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "white",
-  },
-  sportTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "rgba(255, 255, 255, 0.9)",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  matchupText: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "white",
-    marginTop: 8,
   },
 
   // Content Container
@@ -673,8 +600,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   teamLogo: {
-    width: 70,
-    height: 70,
+    width: 90,
+    height: 90,
     resizeMode: "contain",
   },
   teamName: {
@@ -683,6 +610,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: "center",
     marginBottom: 8,
+    height: 45,
   },
   teamScore: {
     fontSize: 32,
@@ -748,17 +676,22 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Actions Container
+  // Actions Container - Updated for same row layout
   actionsContainer: {
     marginBottom: 20,
   },
-  primaryButton: {
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
-    marginBottom: 12,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -766,43 +699,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "white",
-    marginLeft: 10,
-  },
-  secondaryButtonsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  secondaryButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  secondaryButtonIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  actionButtonIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 8,
   },
-  secondaryButtonText: {
+  actionButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.text,
   },
 
   // Additional Info Card
@@ -838,61 +745,44 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
-  // Points Section
-  pointsSection: {
+  // Points Badge - Same as GameCard
+  pointsBadgeContainer: {
     marginTop: 16,
+    alignItems: "flex-start",
   },
-  pointsGradient: {
-    borderRadius: 12,
-    padding: 16,
-  },
-  pointsContent: {
+  pointsBadge: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
-  pointsIconContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  pointsTextContainer: {
-    flex: 1,
-  },
-  pointsMainText: {
-    fontSize: 16,
+  pointsBadgeText: {
+    fontSize: 12,
     fontWeight: "700",
     color: "white",
     letterSpacing: 0.3,
   },
-  pointsSubText: {
-    fontSize: 12,
-    color: "rgba(255, 255, 255, 0.9)",
-    fontWeight: "400",
-    marginTop: 2,
-  },
 
-  // Special Events
-  specialEventsSection: {
-    marginTop: 16,
+  // Special Events - Same as GameCard
+  specialEventContainer: {
+    marginTop: 12,
+    alignItems: "flex-start",
   },
-  specialEventsGradient: {
-    borderRadius: 12,
-    padding: 14,
-  },
-  specialEventsContent: {
+  specialEventBadge: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
   },
-  specialEventsText: {
-    fontSize: 14,
+  specialEventText: {
+    fontSize: 12,
+    fontWeight: "600",
     color: "white",
-    marginLeft: 10,
     flex: 1,
-    fontWeight: "500",
   },
 
   // News Button

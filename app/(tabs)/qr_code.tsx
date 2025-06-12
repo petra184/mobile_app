@@ -14,6 +14,7 @@ import {
   Dimensions,
   RefreshControl,
   TouchableOpacity,
+  FlatList,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -24,1041 +25,410 @@ import QRCode from "react-native-qrcode-svg"
 import { supabase } from "@/lib/supabase"
 import type { Database } from "@/types/supabase"
 
+// --- NEW: Define clear types for our data structures ---
 type GameSchedule = Database["public"]["Tables"]["game_schedule"]["Row"]
 type Team = Database["public"]["Tables"]["teams"]["Row"]
 type OpposingTeam = Database["public"]["Tables"]["opposing_teams"]["Row"]
-type ScanHistoryItem = Database["public"]["Tables"]["scan_history"]["Row"]
 
+// Combine them into a single, more useful type for our app
 interface GameWithTeams extends GameSchedule {
-  teams?: Team
-  opposing_teams?: OpposingTeam
+  teams?: Team | null
+  opposing_teams?: OpposingTeam | null
 }
 
-export default function QRCodeScreen() {
-  const { points, userId, getUserFirstName, isLoading: userLoading } = useUserStore()
+// --- NEW: Define props interface for GameSelectionModal ---
+interface GameSelectionModalProps {
+  visible: boolean;
+  onClose: () => void;
+  games: GameWithTeams[];
+  selectedGame: GameWithTeams | null;
+  onSelect: (game: GameWithTeams) => void;
+}
 
+
+// --- HELPER FUNCTIONS (with type safety) ---
+const formatDate = (dateString: string): string => new Date(dateString).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+const formatTime = (timeString: string | null): string => {
+  if (!timeString) return "TBD"
+  try {
+    const [hours, minutes] = timeString.split(":")
+    const date = new Date()
+    date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
+    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  } catch {
+    return timeString; // Fallback
+  }
+}
+
+// --- UPDATED: Game Selection Modal Component with typed props ---
+const GameSelectionModal = ({ visible, onClose, games, selectedGame, onSelect }: GameSelectionModalProps) => {
+  const modalSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(modalSlideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 40,
+        friction: 10,
+      }).start();
+    } else {
+       Animated.timing(modalSlideAnim, {
+        toValue: Dimensions.get('window').height,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
+  const renderGameItem = ({ item }: { item: GameWithTeams }) => (
+    <TouchableOpacity
+      style={styles.modalGameItem}
+      onPress={() => onSelect(item)}
+    >
+      <View style={styles.modalGameItemContent}>
+        <Text style={styles.modalGameItemTitle}>{item.teams?.name || "Game"} vs {item.opposing_teams?.name || "Away"}</Text>
+        <Text style={styles.modalGameItemSubtitle}>{formatDate(item.date)} at {formatTime(item.game_time)}</Text>
+      </View>
+      {selectedGame?.game_id === item.game_id && (
+        <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+      )}
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      onRequestClose={onClose}
+      animationType="none"
+    >
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Animated.View style={[styles.modalContainer, { transform: [{ translateY: modalSlideAnim }] }]}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select a Game</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={games}
+              renderItem={renderGameItem}
+              keyExtractor={(item) => item.game_id}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 40 }}
+            />
+          </Pressable>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+
+    
+  );
+};
+
+
+export default function QRCodeScreen() {
+  const { userId, isLoading: userLoading } = useUserStore()
+  
+  // --- UPDATED: Use the specific GameWithTeams type for state ---
   const [games, setGames] = useState<GameWithTeams[]>([])
   const [selectedGame, setSelectedGame] = useState<GameWithTeams | null>(null)
+  
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [recentScans, setRecentScans] = useState<ScanHistoryItem[]>([])
-  const [showQRModal, setShowQRModal] = useState(false)
   const [isQRAvailable, setIsQRAvailable] = useState(false)
   const [timeUntilAvailable, setTimeUntilAvailable] = useState("")
   const [hasAlreadyScanned, setHasAlreadyScanned] = useState(false)
-  const [showGameDropdown, setShowGameDropdown] = useState(false)
+  const [isModalVisible, setIsModalVisible] = useState(false)
 
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(1)).current
-  const scaleAnim = useRef(new Animated.Value(1)).current
-  const slideAnim = useRef(new Animated.Value(0)).current
-  const modalFadeAnim = useRef(new Animated.Value(0)).current
-  const modalScaleAnim = useRef(new Animated.Value(0.8)).current
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (!userId) {
+      setLoading(false)
+      return
+    }
+    if (!isRefresh) setLoading(true)
 
-  const loadData = useCallback(
-    async (isRefresh = false) => {
-      if (!userId) {
-        setLoading(false)
-        return
+    try {
+      const { data: gameData, error: gameError } = await supabase
+        .from("game_schedule")
+        .select(`*, teams:sport_id(*), opposing_teams:opponent_id(*)`)
+        .gte("date", new Date().toISOString().split("T")[0])
+        .order("date", { ascending: true }).limit(10)
+
+      if (gameError) throw gameError
+
+      const typedGameData = gameData as GameWithTeams[];
+      setGames(typedGameData || []);
+
+      if (typedGameData && typedGameData.length > 0 && !selectedGame) {
+        handleSelectGame(typedGameData[0], true);
+      } else if (selectedGame) {
+        // Find the latest version of the selected game in case its data changed
+        const updatedSelectedGame = typedGameData.find(g => g.game_id === selectedGame.game_id) || selectedGame;
+        handleSelectGame(updatedSelectedGame, true);
       }
 
-      try {
-        if (!isRefresh) setLoading(true)
-
-        // Load upcoming games with team information
-        const { data: gameData, error: gameError } = await supabase
-          .from("game_schedule")
-          .select(`
-          *,
-          teams:sport_id (
-            id,
-            name,
-            short_name,
-            sport,
-            color,
-            photo
-          ),
-          opposing_teams:opponent_id (
-            id,
-            name,
-            logo
-          )
-        `)
-          .gte("date", new Date().toISOString().split("T")[0])
-          .order("date", { ascending: true })
-          .limit(10)
-
-        if (gameError) {
-          console.error("Game data error:", gameError)
-          throw gameError
-        }
-
-        // Load recent scan history from database
-        const { data: scanData, error: scanError } = await supabase
-          .from("scan_history")
-          .select("*")
-          .eq("user_id", userId)
-          .order("scanned_at", { ascending: false })
-          .limit(5)
-
-        if (scanError) {
-          console.error("Scan data error:", scanError)
-          throw scanError
-        }
-
-        setGames(gameData || [])
-        setRecentScans(scanData || [])
-
-        if (gameData && gameData.length > 0 && !selectedGame) {
-          setSelectedGame(gameData[0])
-          checkQRAvailability(gameData[0])
-          checkIfAlreadyScanned(gameData[0].game_id)
-        }
-      } catch (error) {
-        console.error("Error loading data:", error)
-        Alert.alert("Error", "Failed to load games and scan history")
-      } finally {
-        setLoading(false)
-        if (isRefresh) setRefreshing(false)
-      }
-    },
-    [userId, selectedGame],
-  )
+    } catch (error) {
+      console.error("Error loading games:", error)
+      Alert.alert("Error", "Failed to load game schedule.")
+    } finally {
+      setLoading(false)
+      if (isRefresh) setRefreshing(false)
+    }
+  }, [userId])
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
     loadData(true)
   }, [loadData])
 
-  const generateQRData = useCallback(
-    (game: GameWithTeams) => {
-      return JSON.stringify({
-        type: "USER_GAME_ATTENDANCE",
-        userId: userId,
-        userName: getUserFirstName(),
-        gameId: game.game_id,
-        gameDate: game.date,
-        gameTime: game.game_time,
-        gameLocation: game.location,
-        homeTeam: game.teams?.name || "Home Team",
-        awayTeam: game.opposing_teams?.name || "Away Team",
-        sport: game.teams?.sport || "Game",
-        pointsToAward: game.points || 50,
-        timestamp: Date.now(),
-        version: "1.0",
-      })
-    },
-    [userId, getUserFirstName],
-  )
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
-  }
-
-  const formatTime = (timeString: string | null) => {
-    if (!timeString) return ""
-
-    try {
-      const [hours, minutes] = timeString.split(":")
-      const date = new Date()
-      date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
-
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    } catch {
-      return timeString
-    }
-  }
-
-  const formatScanDate = (dateString: string | null) => {
-    if (!dateString) return ""
-
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    })
-  }
-
-  const formatTimeUntilAvailable = (timeDiff: number) => {
-    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
-    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60))
-
-    if (days > 0) {
-      return `Available in ${days}d ${hours}h ${minutes}m`
-    } else if (hours > 0) {
-      return `Available in ${hours}h ${minutes}m`
+  const checkQRAvailability = (game: GameWithTeams) => {
+    if (!game?.date || !game?.game_time) return;
+  
+    const gameDateTime = new Date(`${game.date}T${game.game_time}`);
+    const now = new Date();
+    const oneHourBefore = new Date(gameDateTime.getTime() - 60 * 60 * 1000);
+  
+    if (now >= oneHourBefore) {
+      setIsQRAvailable(true);
+      setTimeUntilAvailable("");
     } else {
-      return `Available in ${minutes}m`
+      const diff = oneHourBefore.getTime() - now.getTime();
+  
+      const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+      const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+      const minutes = Math.floor((diff % (60 * 60 * 1000)) / 60000);
+  
+      const timeString =
+        days > 0 ? `in ${days}d ${hours}h ${minutes}m` : `in ${hours}h ${minutes}m`;
+  
+      setTimeUntilAvailable(timeString);
+      setIsQRAvailable(false);
     }
+  };
+  
+
+  const checkIfAlreadyScanned = async (gameId: string) => {
+    if (!userId) return
+    const { data, error } = await supabase
+      .from("scan_history").select("id").eq("user_id", userId).eq("id", gameId).single()
+    if (error && error.code !== "PGRST116") console.error("Error checking scan:", error)
+    setHasAlreadyScanned(!!data)
   }
 
-  const checkQRAvailability = useCallback((game: GameWithTeams) => {
-    if (!game.date || !game.game_time) {
-      setIsQRAvailable(false)
-      setTimeUntilAvailable("Game time not available")
-      return false
-    }
-
-    try {
-      const gameDateTime = new Date(`${game.date}T${game.game_time}`)
-      const now = new Date()
-      const oneHourBefore = new Date(gameDateTime.getTime() - 60 * 60 * 1000)
-      const gameEnd = new Date(gameDateTime.getTime() + 3 * 60 * 60 * 1000)
-
-      if (now >= oneHourBefore && now <= gameEnd) {
-        setIsQRAvailable(true)
-        setTimeUntilAvailable("")
-        return true
-      } else if (now < oneHourBefore) {
-        const timeDiff = oneHourBefore.getTime() - now.getTime()
-        setTimeUntilAvailable(formatTimeUntilAvailable(timeDiff))
-        setIsQRAvailable(false)
-        return false
-      } else {
-        setTimeUntilAvailable("Game has ended")
-        setIsQRAvailable(false)
-        return false
-      }
-    } catch (error) {
-      console.error("Error checking QR availability:", error)
-      setIsQRAvailable(false)
-      setTimeUntilAvailable("Error checking availability")
-      return false
-    }
-  }, [])
-
-  const checkIfAlreadyScanned = useCallback(
-    async (gameId: string) => {
-      if (!userId) return false
-
-      try {
-        const { data, error } = await supabase
-          .from("scan_history")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("id", gameId)
-          .single()
-
-        if (error && error.code !== "PGRST116") {
-          console.error("Error checking scan history:", error)
-          return false
-        }
-
-        const hasScanned = !!data
-        setHasAlreadyScanned(hasScanned)
-        return hasScanned
-      } catch (error) {
-        console.error("Error checking scan history:", error)
-        setHasAlreadyScanned(false)
-        return false
-      }
-    },
-    [userId],
-  )
-
-  const openQRModal = () => {
-    setShowQRModal(true)
-    Animated.parallel([
-      Animated.timing(modalFadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.spring(modalScaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }
-
-  const closeQRModal = () => {
-    Animated.parallel([
-      Animated.timing(modalFadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(modalScaleAnim, {
-        toValue: 0.8,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setShowQRModal(false)
-    })
-  }
-
-  const handleSelectGame = (game: GameWithTeams) => {
+  const handleSelectGame = (game: GameWithTeams, isInitialLoad = false) => {
     setSelectedGame(game)
     checkQRAvailability(game)
     checkIfAlreadyScanned(game.game_id)
-    setShowGameDropdown(false)
+    if (!isInitialLoad) setIsModalVisible(false)
   }
 
-  // Initial load
-  useEffect(() => {
-    if (userId) {
-      loadData()
-    }
-  }, [userId])
-
-  // Set up interval for time checking
+  useEffect(() => { if (userId) loadData() }, [userId])
   useEffect(() => {
     if (!selectedGame) return
-
-    const interval = setInterval(() => {
-      checkQRAvailability(selectedGame)
-    }, 60000) // Check every minute
-
+    const interval = setInterval(() => checkQRAvailability(selectedGame), 30000)
     return () => clearInterval(interval)
-  }, [selectedGame, checkQRAvailability])
-
-  // Entry animation
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [])
+  }, [selectedGame])
 
   if (loading || userLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
+        <ActivityIndicator style={{ flex: 1 }} size="large" color={colors.primary} />
       </SafeAreaView>
     )
   }
 
-  if (!userId) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Ionicons name="person-outline" size={64} color={colors.textSecondary} />
-          <Text style={styles.errorText}>Please log in to view your QR code</Text>
-        </View>
-      </SafeAreaView>
-    )
-  }
+  const qrData = selectedGame ? JSON.stringify({ userId, gameId: selectedGame.game_id }) : ""
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <Animated.ScrollView
+      <GameSelectionModal
+        visible={isModalVisible}
+        onClose={() => setIsModalVisible(false)}
+        games={games}
+        selectedGame={selectedGame}
+        onSelect={handleSelectGame}
+      />
+      
+      <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        style={{ opacity: fadeAnim }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
       >
-        {/* Header */}
-        <Animated.View style={[styles.header, { transform: [{ translateY: slideAnim }] }]}>
-          <Text style={styles.instructions}>Show this QR code to staff at games and events to earn points!</Text>
-        </Animated.View>
+        <Text style={styles.instructions}>Show this QR code at games, events, and merchandise stores to earn points and unlock rewards!</Text>
 
-        {/* Game Selection Dropdown */}
-        <View style={styles.gameSelectionWrapper}>
-          <TouchableOpacity 
-            style={styles.gameDropdownButton} 
-            onPress={() => setShowGameDropdown(!showGameDropdown)}
-          >
-            <Text style={styles.gameDropdownText}>
-              {selectedGame ? 
-                `${selectedGame.teams?.sport || "Game"} - ${formatDate(selectedGame.date)}` : 
-                "Select a game"}
-            </Text>
-            <Ionicons 
-              name={showGameDropdown ? "chevron-up" : "chevron-down"} 
-              size={20} 
-              color={colors.text} 
-            />
-          </TouchableOpacity>
-          
-          {showGameDropdown && (
-            <View style={styles.gameDropdownList}>
-              {games.map((game) => (
-                <TouchableOpacity
-                  key={game.game_id}
-                  style={[
-                    styles.gameDropdownItem,
-                    selectedGame?.game_id === game.game_id && styles.gameDropdownItemSelected
-                  ]}
-                  onPress={() => handleSelectGame(game)}
-                >
-                  <View style={styles.gameDropdownItemContent}>
-                    <Text style={[
-                      styles.gameDropdownItemTitle,
-                      selectedGame?.game_id === game.game_id && styles.gameDropdownItemTextSelected
-                    ]}>
-                      {game.teams?.sport || "Game"} - {formatDate(game.date)}
-                    </Text>
-                    <Text style={[
-                      styles.gameDropdownItemSubtitle,
-                      selectedGame?.game_id === game.game_id && styles.gameDropdownItemTextSelected
-                    ]}>
-                      {game.teams?.short_name || "Home"} vs {game.opposing_teams?.name || "Away"}
-                    </Text>
-                    <Text style={[
-                      styles.gameDropdownItemDetails,
-                      selectedGame?.game_id === game.game_id && styles.gameDropdownItemTextSelected
-                    ]}>
-                      {formatTime(game.game_time)} at {game.location}
-                    </Text>
-                  </View>
-                  {selectedGame?.game_id === game.game_id && (
-                    <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Current Game QR Code */}
         {selectedGame ? (
-          <>
-            <Animated.View style={[styles.gameInfo, { transform: [{ translateY: slideAnim }] }]}>
-              <Text style={styles.gameTitle}>
-                {selectedGame.teams?.sport || "Game"} - {formatDate(selectedGame.date)}
-              </Text>
-              <Text style={styles.gameMatchup}>
-                {selectedGame.teams?.short_name || "Home"} vs {selectedGame.opposing_teams?.name || "Away"}
-              </Text>
-              <Text style={styles.gameLocation}>
-                {formatTime(selectedGame.game_time)} at {selectedGame.location}
-              </Text>
-              <Text style={styles.qrPointsText}>{selectedGame.points || 50} Points</Text>
+          <View style={styles.mainCard}>
+            <TouchableOpacity style={styles.cardHeader} onPress={() => setIsModalVisible(true)}>
+              <View style={styles.cardHeaderContent}>
+                <Text style={styles.cardTitle}>{selectedGame.teams?.sport || "Game"}</Text>
+                <Text style={styles.cardSubtitle}>
+                  {selectedGame.teams?.short_name || "Home"} vs {selectedGame.opposing_teams?.name || "Away"}
+                </Text>
+                 <Text style={styles.cardDetails}>{formatDate(selectedGame.date)} at {formatTime(selectedGame.game_time)}</Text>
+              </View>
+              <Ionicons name="chevron-down" size={24} color={colors.primary} />
+            </TouchableOpacity>
 
-              {!isQRAvailable && timeUntilAvailable && (
-                <View style={styles.availabilityContainer}>
-                  <Ionicons name="time-outline" size={16} color={colors.warning} />
-                  <Text style={styles.availabilityText}>{timeUntilAvailable}</Text>
+            <View style={[styles.qrWrapper, { opacity: isQRAvailable && !hasAlreadyScanned ? 1 : 0.4 }]}>
+              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.qrGradient}>
+                <View style={styles.qrBackground}>
+                  <QRCode value={qrData} size={Dimensions.get('window').width * 0.55} />
+                </View>
+              </LinearGradient>
+            </View>
+
+            <View style={styles.statusContainer}>
+              {hasAlreadyScanned ? (
+                <View style={[styles.statusBadge, { backgroundColor: '#10B981'}]}>
+                  <Ionicons name="checkmark-circle" size={16} color="white" />
+                  <Text style={styles.statusText}>Points Received</Text>
+                </View>
+              ) : isQRAvailable ? (
+                <View style={[styles.statusBadge, { backgroundColor: colors.success }]}>
+                  <Ionicons name="scan" size={16} color="white" />
+                  <Text style={styles.statusText}>Ready to Scan</Text>
+                </View>
+              ) : (
+                <View style={[styles.statusBadge, { backgroundColor: colors.warning }]}>
+                  <Ionicons name="time" size={16} color="white" />
+                  <Text style={styles.statusText}>Available {timeUntilAvailable}</Text>
                 </View>
               )}
-
-              {hasAlreadyScanned && (
-                <View style={styles.scannedContainer}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                  <Text style={styles.scannedText}>Already scanned for this game</Text>
-                </View>
-              )}
-            </Animated.View>
-
-            <Pressable
-              onPress={isQRAvailable && !hasAlreadyScanned ? openQRModal : undefined}
-              disabled={!isQRAvailable || hasAlreadyScanned}
-            >
-              <Animated.View
-                style={[
-                  styles.qrContainer,
-                  {
-                    opacity: isQRAvailable && !hasAlreadyScanned ? 1 : 0.5,
-                    transform: [{ scale: scaleAnim }],
-                  },
-                ]}
-              >
-                <View style={styles.shadowWrapper}>
-                <LinearGradient
-                  colors={[colors.primary, colors.accent]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.qrGradient}
-                >
-                  <View style={styles.qrBackground}>
-                    {isQRAvailable && !hasAlreadyScanned ? (
-                      <QRCode
-                        value={generateQRData(selectedGame)}
-                        size={220}
-                        color={colors.text}
-                        backgroundColor="#FFFFFF"
-                      />
-                    ) : (
-                      <View style={styles.qrPlaceholder}>
-                        <Ionicons
-                          name={hasAlreadyScanned ? "checkmark-circle" : "time-outline"}
-                          size={80}
-                          color={colors.textSecondary}
-                        />
-                        <Text style={styles.qrPlaceholderText}>
-                          {hasAlreadyScanned ? "Already Scanned" : "QR Code Not Available"}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </LinearGradient>
-                </View>
-              </Animated.View>
-            </Pressable>
-          </>
+            </View>
+          </View>
         ) : (
           <View style={styles.noGamesContainer}>
             <Ionicons name="calendar-outline" size={64} color={colors.textSecondary} />
-            <Text style={styles.noGamesText}>No upcoming games scheduled</Text>
-            <Pressable style={styles.refreshButton} onPress={() => loadData()}>
-              <Text style={styles.refreshButtonText}>Refresh</Text>
-            </Pressable>
+            <Text style={styles.noGamesText}>No upcoming games found</Text>
           </View>
         )}
 
-        {/* Recent Scans */}
-        <View style={styles.historyContainer}>
-          <Text style={styles.historyTitle}>Recent Scans</Text>
-          {recentScans && recentScans.length > 0 ? (
-            recentScans.map((scan) => (
-              <View key={scan.id} style={styles.historyItem}>
-                <View style={styles.historyInfo}>
-                  <Text style={styles.historyDescription}>{scan.description}</Text>
-                  <Text style={styles.historyDate}>{formatScanDate(scan.scanned_at)}</Text>
-                </View>
-                <Text style={styles.historyPoints}>+{scan.points}</Text>
-              </View>
-            ))
-          ) : (
-            <View style={styles.noHistoryContainer}>
-              <Ionicons name="trophy-outline" size={32} color={colors.textSecondary} />
-              <Text style={styles.noHistoryText}>No scans yet. Start attending games to earn points!</Text>
-            </View>
-          )}
-        </View>
-
-        {/* How it works */}
         <View style={styles.infoContainer}>
           <Text style={styles.infoTitle}>How It Works</Text>
-          <View style={styles.infoStep}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>1</Text>
-            </View>
-            <Text style={styles.infoText}>Show your QR code to staff at games and events</Text>
-          </View>
-          <View style={styles.infoStep}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>2</Text>
-            </View>
-            <Text style={styles.infoText}>Staff will scan your code to award points instantly</Text>
-          </View>
-          <View style={styles.infoStep}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>3</Text>
-            </View>
-            <Text style={styles.infoText}>Redeem your points for exclusive rewards and merchandise</Text>
-          </View>
+          <Text style={styles.infoText}>
+            1. Show your QR code at participating locations
+          </Text>
+          <Text style={styles.infoText}>
+            2. Staff will scan your code to award points
+          </Text>
+          <Text style={styles.infoText}>
+            3. Earn points for attending games, buying merchandise, and more
+          </Text>
+          <Text style={styles.infoText}>
+            4. Redeem your points for exclusive rewards
+          </Text>
         </View>
-
-        <View style={styles.bottomSpacing} />
-      </Animated.ScrollView>
-
-      {/* QR Code Modal */}
-      <Modal visible={showQRModal} transparent={true} animationType="none" onRequestClose={closeQRModal}>
-        <Pressable style={styles.modalOverlay} onPress={closeQRModal}>
-          <Animated.View
-            style={[
-              styles.modalContainer,
-              {
-                opacity: modalFadeAnim,
-                transform: [{ scale: modalScaleAnim }],
-              },
-            ]}
-          >
-            <Pressable onPress={(e) => e.stopPropagation()}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Your QR Code</Text>
-                  <Pressable onPress={closeQRModal} style={styles.closeButton}>
-                    <Ionicons name="close" size={24} color={colors.text} />
-                  </Pressable>
-                </View>
-
-                <View style={styles.modalQRContainer}>
-                  <QRCode
-                    value={selectedGame ? generateQRData(selectedGame) : ""}
-                    size={280}
-                    color={colors.text}
-                    backgroundColor="#FFFFFF"
-                  />
-                </View>
-
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalGameTitle}>
-                    {selectedGame?.teams?.sport || "Game"} - {selectedGame ? formatDate(selectedGame.date) : ""}
-                  </Text>
-                  <Text style={styles.modalGameDetails}>
-                    {selectedGame?.teams?.short_name || "Home"} vs {selectedGame?.opposing_teams?.name || "Away"}
-                  </Text>
-                  <Text style={styles.modalPoints}>Earn {selectedGame?.points || 50} Points</Text>
-                </View>
-
-                <Text style={styles.modalInstructions}>Show this QR code to staff to earn your points!</Text>
-              </View>
-            </Pressable>
-          </Animated.View>
-        </Pressable>
-      </Modal>
+      </ScrollView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingTop: 40,
+  container: { 
+    flex: 1, 
     backgroundColor: colors.background,
+    paddingTop:40, 
   },
-  shadowWrapper: {
-    borderRadius: 24, 
-    backgroundColor: '#fff', // Required for iOS shadows
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4, // Android
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.text,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  errorText: {
-    fontSize: 18,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 16,
-  },
-  content: {
-    paddingHorizontal: 16,
-  },
-  header: {
-    marginBottom: 24,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: colors.text,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  instructions: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: "center",
-    lineHeight: 24,
-    paddingTop: 20,
-  },
-  gameSelectionWrapper: {
-    marginBottom: 20,
-    zIndex: 10,
-  },
-  gameDropdownButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  content: { padding: 16, paddingBottom: 40 },
+  instructions: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
+  
+  mainCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 24,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  gameDropdownText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.text,
-  },
-  gameDropdownList: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxHeight: 300,
-    overflow: 'hidden',
-  },
-  gameDropdownItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  gameDropdownItemSelected: {
-    backgroundColor: `${colors.primary}10`,
-  },
-  gameDropdownItemContent: {
-    flex: 1,
-  },
-  gameDropdownItemTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  gameDropdownItemSubtitle: {
-    fontSize: 14,
-    color: colors.text,
-    marginBottom: 2,
-  },
-  gameDropdownItemDetails: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  gameDropdownItemTextSelected: {
-    color: colors.primary,
-  },
-  gameInfo: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  gameTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  gameMatchup: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: colors.text,
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  gameLocation: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  qrPointsText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.success,
-  },
-  qrContainer: {
-    marginBottom: 24,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 5,
   },
-  qrGradient: {
-    padding: 20,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qrBackground: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 16,
-    alignItems: "center",
-  },
-  qrPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 220,
-    width: 220,
-  },
-  qrPlaceholderText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 12,
-    fontWeight: "500",
-  },
-  gameSelection: {
-    marginBottom: 24,
-  },
-  selectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.text,
-    marginBottom: 12,
-  },
-  gameOption: {
-    backgroundColor: colors.card,
-    padding: 12,
-    borderRadius: 12,
-    marginRight: 12,
-    minWidth: 140,
-    alignItems: "center",
-  },
-  selectedGame: {
-    backgroundColor: colors.primary,
-  },
-  gameOptionDate: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.text,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  gameOptionTeams: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: colors.text,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  gameOptionLocation: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  gameOptionPoints: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: colors.success,
-    textAlign: "center",
-  },
-  selectedGameText: {
-    color: "#FFFFFF",
-  },
-  noGamesContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  noGamesText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  refreshButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  refreshButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  historyContainer: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-  },
-  historyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 16,
-  },
-  historyItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  historyInfo: {
-    flex: 1,
+  cardHeaderContent: { flex: 1, marginRight: 8 },
+  cardTitle: { fontSize: 22, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  cardSubtitle: { fontSize: 16, fontWeight: '500', color: colors.textSecondary },
+  cardDetails: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
+  qrWrapper: { alignItems: 'center', marginVertical: 24 },
+  qrGradient: { padding: 12, borderRadius: 20 },
+  qrBackground: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12 },
+
+  statusContainer: {
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  historyDescription: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: "500",
-    marginBottom: 4,
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 99,
   },
-  historyDate: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  statusText: { color: 'white', fontSize: 14, fontWeight: '600', marginLeft: 8 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContainer: { 
+    backgroundColor: colors.card, 
+    borderTopLeftRadius: 24, 
+    borderTopRightRadius: 24, 
+    maxHeight: '75%', 
+    padding: 16,
+    paddingTop: 8,
   },
-  historyPoints: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.success,
+  modalContent: {},
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingBottom: 16, 
+    paddingTop: 8,
   },
-  noHistoryContainer: {
-    alignItems: "center",
-    paddingVertical: 20,
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text },
+  closeButton: { padding: 8 },
+  
+  modalGameItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingVertical: 16,
   },
-  noHistoryText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 12,
-    lineHeight: 20,
-  },
+  modalGameItemContent: { flex: 1 },
+  modalGameItemTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 4 },
+  modalGameItemSubtitle: { fontSize: 14, color: colors.textSecondary },
+  separator: { height: 1, backgroundColor: colors.border },
+  
+  noGamesContainer: { alignItems: "center", paddingVertical: 80 },
+  noGamesText: { fontSize: 16, color: colors.textSecondary, marginTop: 16 },
   infoContainer: {
-    backgroundColor: colors.card,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderRadius: 16,
     padding: 16,
+    marginTop:30,
+    width: '90%',
+    alignSelf:"center"
   },
   infoTitle: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: '700',
     color: colors.text,
     marginBottom: 16,
-    textAlign: "center",
-  },
-  infoStep: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  stepNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    marginTop: 2,
-  },
-  stepNumberText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    textAlign: 'center',
   },
   infoText: {
-    flex: 1,
     fontSize: 14,
     color: colors.text,
     lineHeight: 20,
   },
-  bottomSpacing: {
-    height: 40,
-  },
-  availabilityContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "rgba(255, 193, 7, 0.1)",
-    borderRadius: 8,
-  },
-  availabilityText: {
-    fontSize: 12,
-    color: colors.warning,
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  scannedContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-    borderRadius: 8,
-  },
-  scannedText: {
-    fontSize: 12,
-    color: colors.success,
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContainer: {
-    margin: 20,
-    borderRadius: 24,
-    overflow: "hidden",
-  },
-  modalContent: {
-    backgroundColor: colors.background,
-    borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    maxWidth: Dimensions.get("window").width - 40,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalQRContainer: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  modalInfo: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalGameTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.text,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  modalGameDetails: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  modalPoints: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.success,
-  },
-  modalInstructions: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-})
+});

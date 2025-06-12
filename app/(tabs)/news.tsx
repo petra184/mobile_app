@@ -289,7 +289,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   clearSearchButton: {
-    padding: 4,
   },
   teamSelectorContainer: {
     borderBottomWidth: 1,

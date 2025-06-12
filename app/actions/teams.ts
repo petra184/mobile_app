@@ -16,7 +16,7 @@ export interface Team {
   logo: string,
   sport: string
   gender: string
-  additionalInfo?: string
+  about_team?: string;
   socialMedia?: {
     website?: string
     facebook?: string
@@ -80,7 +80,9 @@ function transformTeamForUI(dbTeam: TeamsRow): Team {
     logo: dbTeam.photo || `/placeholder.svg?height=64&width=64&text=${dbTeam.short_name}`,
     sport: dbTeam.sport,
     gender: dbTeam.gender,
-    additionalInfo: dbTeam.additional_info || undefined,
+    about_team: typeof dbTeam?.about_team === "string"
+      ? dbTeam.about_team
+      : JSON.stringify(dbTeam?.about_team),
     socialMedia: {
       website: dbTeam.website || undefined,
       facebook: dbTeam.facebook || undefined,
@@ -177,7 +179,6 @@ export async function getTeams(): Promise<Team[]> {
     if (!data) {
       return []
     }
-
     // Transform database data to UI format
     return data.map(transformTeamForUI)
   } catch (error) {
@@ -272,6 +273,9 @@ export async function getTeamById(id: string): Promise<Team | null> {
     if (!data) {
       return null
     }
+
+    
+    console.log("team data:", data)
 
     return transformTeamForUI(data)
   } catch (error) {

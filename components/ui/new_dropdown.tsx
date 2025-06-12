@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   dropdown: {
     backgroundColor: colors.card,
     borderRadius: 20,
-    maxHeight: Dimensions.get("window").height * 0.6,
+    maxHeight: 280,
     minWidth: 280,
     maxWidth: "90%",
     ...Platform.select({

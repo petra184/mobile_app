@@ -17,6 +17,7 @@ import { getUpcomingGames, getPastGames, getLiveGames } from "@/app/actions/game
 import { fetchUserStatus, type UserStatusWithLevel } from "@/app/actions/points"
 import type { Game } from "@/types/game"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
+import { sortGamesByPriority } from '@/utils/sortGame'
 
 export default function HomeScreen() {
   const router = useRouter()
@@ -27,9 +28,11 @@ export default function HomeScreen() {
   const [userStatus, setUserStatus] = useState<UserStatusWithLevel | null>(null)
   const [loading, setLoading] = useState(true)
   const [gameFilters, setGameFilters] = useState<GameFilterOptions>({
-    sport: undefined,
-    gender: undefined,
     status: "all",
+    // Make sure all possible filter properties are defined, even if undefined initially
+    sport: undefined,
+    location: undefined,
+    teamId: undefined
   })
 
   // Fetch all games and user status on component mount
@@ -51,7 +54,7 @@ export default function HomeScreen() {
     }
   }
 
-  // Fetch all games (past, live, and upcoming)
+  // Updated fetchAllGames function using the sorting utility
   const fetchAllGames = async () => {
     try {
       setLoading(true)
@@ -63,35 +66,11 @@ export default function HomeScreen() {
         getLiveGames(5), // Get live games
       ])
 
-      // Combine all games and sort by date
+      // Combine all games
       const combinedGames = [...live, ...upcoming, ...past]
 
-      // Sort games by date (most recent/upcoming first)
-      const sortedGames = combinedGames.sort((a, b) => {
-        const dateA = new Date(a.date)
-        const dateB = new Date(b.date)
-        const now = new Date()
-
-        // Prioritize live games first
-        if (a.status === "live" && b.status !== "live") return -1
-        if (b.status === "live" && a.status !== "live") return 1
-
-        // Then upcoming games
-        if (dateA >= now && dateB >= now) {
-          return dateA.getTime() - dateB.getTime()
-        }
-
-        // Then past games (most recent first)
-        if (dateA < now && dateB < now) {
-          return dateB.getTime() - dateA.getTime()
-        }
-
-        // Mixed: upcoming before past
-        if (dateA >= now && dateB < now) return -1
-        if (dateB >= now && dateA < now) return 1
-
-        return dateA.getTime() - dateB.getTime()
-      })
+      // Use the sorting utility: Live -> Today -> Upcoming
+      const sortedGames = sortGamesByPriority(combinedGames)
 
       setAllGames(sortedGames)
     } catch (error) {
@@ -107,7 +86,6 @@ export default function HomeScreen() {
     showSuccess("Team Selected", `You selected ${team.name}`)
   }
 
-  // Fixed: Navigate to team details screen with the team ID
   const handleTeamPress = (team: Team) => {
     router.push({
       pathname: "../teams",
@@ -136,7 +114,8 @@ export default function HomeScreen() {
 
   const handleFilterChange = (filters: GameFilterOptions) => {
     setGameFilters(filters)
-    showInfo("Filters Applied", "Games filtered successfully")
+    // You might want to remove this toast for a smoother user experience
+    // showInfo("Filters Applied", "Games list updated")
   }
 
   const getTimeBasedGreeting = () => {
@@ -181,18 +160,24 @@ export default function HomeScreen() {
     }
   }
 
-  // Apply filters to games
+  // Apply filters to games (games are already sorted by priority)
   const filteredGames = allGames.filter((game) => {
-    // Sport filter
-    if (gameFilters.sport && game.sport?.name !== gameFilters.sport.toLowerCase()) {
+    // Team filter (using teamId)
+    if (gameFilters.teamId && game.homeTeam.id !== gameFilters.teamId) {
       return false
     }
 
-    // Gender filter
-    if (gameFilters.gender) {
-      const teamGender = game.homeTeam.gender?.toLowerCase()
-      if (gameFilters.gender === "men" && teamGender !== "men") return false
-      if (gameFilters.gender === "women" && teamGender !== "women") return false
+    // Sport filter
+    if (gameFilters.sport && game.sport?.name.toLowerCase() !== gameFilters.sport.toLowerCase()) {
+      return false
+    }
+
+    // Location filter
+    if (gameFilters.location) {
+      const location = game.location.toLowerCase()
+      if (gameFilters.location === "home" && !location.includes("home")) return false
+      if (gameFilters.location === "away" && !(location.includes("away") || location.includes("@"))) return false
+      if (gameFilters.location === "neutral" && !location.includes("neutral")) return false
     }
 
     // Status filter
@@ -311,7 +296,6 @@ export default function HomeScreen() {
             </View>
           ) : filteredGames.length > 0 ? (
             <View>
-              {/* Live Games */}
               {liveGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -326,7 +310,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Upcoming Games */}
               {upcomingGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -339,7 +322,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Completed Games */}
               {completedGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -352,7 +334,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Other Games (postponed, canceled, etc.) */}
               {otherGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -377,7 +358,6 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
@@ -487,10 +467,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
     marginHorizontal: 20,
-    backgroundColor: "white",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   noGamesTitle: {
     fontSize: 18,

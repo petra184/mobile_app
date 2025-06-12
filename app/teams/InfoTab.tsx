@@ -235,9 +235,17 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
 
         <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
           <Text style={styles.sectionTitle}>About the Team</Text>
-          <Text style={styles.aboutText}>hehe</Text>
-          <Text style={styles.aboutText}>{team.additionalInfo}</Text>
+
+          {team.about_team &&
+            Array.isArray(JSON.parse(team.about_team)) &&
+            JSON.parse(team.about_team).map((item: string, index: number) => (
+              <View key={index} style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                <Feather name="star" size={20} color={team.primaryColor} style={{ marginRight: 6 }} />
+                <Text style={styles.aboutText}>{item}</Text>
+              </View>
+            ))}
         </Animated.View>
+
 
         
       </ScrollView>
@@ -460,7 +468,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   aboutText: {
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 22,
     color: colors.text,
   },

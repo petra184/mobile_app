@@ -87,7 +87,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="qr_code"
         options={{
-          title: 'QR Code',
+          title: 'Scan',
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="qrcode-scan" size={24} color={color} />,
         }}
       />
