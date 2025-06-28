@@ -1,71 +1,133 @@
+"use client"
+
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, TextInput, Pressable, Alert, Image, ScrollView, Platform, ActivityIndicator } from "react-native"
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Alert,
+  Image,
+  ScrollView,
+  Platform,
+  ActivityIndicator,
+} from "react-native"
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import * as ImagePicker from "expo-image-picker"
-import Feather from '@expo/vector-icons/Feather'
-import { useUserStore } from '@/hooks/userStore'
-import { getCurrentUser } from '@/app/actions/main_actions'
+import Feather from "@expo/vector-icons/Feather"
+import { useUserStore } from "@/hooks/userStore"
+import { getCurrentUser } from "@/app/actions/main_actions"
+import { updateProfileWithImage, updateUserProfile, checkUsernameAvailability, getUserById } from "@/app/actions/users"
 
 function capitalize(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase())
+  return name.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 export default function EditProfileScreen() {
   const router = useRouter()
-  const { first_name: storeFirstName, last_name: storeLastName, userEmail, refreshUserData } = useUserStore()
-  
+  const { userId, first_name: storeFirstName, last_name: storeLastName, userEmail, refreshUserData } = useUserStore()
+
   const [first_name, setFirstName] = useState("")
   const [last_name, setLastName] = useState("")
   const [username, setUsername] = useState("")
   const [profileImage, setProfileImage] = useState<string | null>(null)
+  const [originalProfileImage, setOriginalProfileImage] = useState<string | null>(null)
   const [phone, setPhone] = useState("")
   const [birthday, setBirthday] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isImageUploading, setIsImageUploading] = useState(false)
+  const [usernameError, setUsernameError] = useState("")
+  const [originalUsername, setOriginalUsername] = useState("")
 
   useEffect(() => {
     async function fetchData() {
       try {
         setIsLoading(true)
-        
-        // Get data from auth metadata
-        const authData = await getCurrentUser()
-        
-        // Use store data as primary source, fallback to auth data
-        setFirstName(storeFirstName || authData?.first_name || "")
-        setLastName(storeLastName || authData?.last_name || "")
-        setUsername(authData?.username || "")
-        setPhone(authData?.phone_number || "")
-        setBirthday(authData?.birthday || "")
-        
-        console.log('Edit Profile - Store data:', { storeFirstName, storeLastName })
-        console.log('Edit Profile - Auth data:', authData)
-        
+
+        if (!userId) {
+          Alert.alert("Error", "User not found")
+          router.back()
+          return
+        }
+
+        // Get data from both auth metadata and database
+        const [authData, userData] = await Promise.all([getCurrentUser(), getUserById(userId)])
+
+        // Use database data as primary source, fallback to auth data, then store data
+        setFirstName(userData?.first_name || storeFirstName || authData?.first_name || "")
+        setLastName(userData?.last_name || storeLastName || authData?.last_name || "")
+        setUsername(userData?.username || authData?.username || "")
+        setOriginalUsername(userData?.username || authData?.username || "")
+        setPhone(userData?.phone_number || authData?.phone_number || "")
+        setBirthday(userData?.birthday || authData?.birthday || "")
+        setProfileImage(userData?.profile_image_url || null)
+        setOriginalProfileImage(userData?.profile_image_url || null)
+
+        console.log("Edit Profile - User data loaded:", {
+          firstName: userData?.first_name,
+          lastName: userData?.last_name,
+          username: userData?.username,
+          profileImage: userData?.profile_image_url,
+        })
       } catch (error) {
-        console.error('Error fetching user data:', error)
+        console.error("Error fetching user data:", error)
+        Alert.alert("Error", "Failed to load profile data")
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchData()
-  }, [storeFirstName, storeLastName])
+  }, [userId, storeFirstName, storeLastName])
+
+  // Validate username as user types
+  useEffect(() => {
+    const validateUsername = async () => {
+      if (!username.trim() || username === originalUsername) {
+        setUsernameError("")
+        return
+      }
+
+      try {
+        const result = await checkUsernameAvailability(username)
+        setUsernameError(result.available ? "" : result.message)
+      } catch (error) {
+        console.error("Error checking username:", error)
+      }
+    }
+
+    const timeoutId = setTimeout(validateUsername, 500) // Debounce
+    return () => clearTimeout(timeoutId)
+  }, [username, originalUsername])
 
   // Function to handle image selection
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-      aspect: [1, 1], // Square crop
-    })
+    try {
+      // Request permission
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri)
+      if (permissionResult.granted === false) {
+        Alert.alert("Permission Required", "Please allow access to your photo library to update your profile picture.")
+        return
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8, // Reduce quality for faster upload
+        aspect: [1, 1], // Square crop
+      })
+
+      if (!result.canceled && result.assets[0]) {
+        setProfileImage(result.assets[0].uri)
+      }
+    } catch (error) {
+      console.error("Error picking image:", error)
+      Alert.alert("Error", "Failed to select image. Please try again.")
     }
   }
 
@@ -81,21 +143,56 @@ export default function EditProfileScreen() {
       return
     }
 
+    if (usernameError) {
+      Alert.alert("Error", "Please fix the username error before saving")
+      return
+    }
+
+    if (!userId) {
+      Alert.alert("Error", "User ID not found")
+      return
+    }
+
     try {
       setIsSaving(true)
-      
-      // Here you would typically call an API to update the user profile
-      // For now, we'll just refresh the user data and show success
-      await refreshUserData()
-      
-      Alert.alert("Success", "Profile updated successfully", [
-        { text: "OK", onPress: () => router.back() }
-      ])
+      setIsImageUploading(true)
+
+      const profileData = {
+        first_name: first_name.trim(),
+        last_name: last_name.trim(),
+        username: username.trim(),
+        phone_number: phone.trim() || undefined,
+        birthday: birthday.trim() || undefined,
+      }
+
+      // Check if image changed
+      const imageChanged = profileImage !== originalProfileImage
+      const newImageUri = imageChanged && profileImage && !profileImage.startsWith("http") ? profileImage : undefined
+
+      let success = false
+
+      if (newImageUri) {
+        // Update profile with new image
+        success = await updateProfileWithImage(userId, profileData, newImageUri, originalProfileImage || undefined)
+      } else {
+        // Update profile without changing image
+        success = await updateUserProfile(userId, profileData)
+      }
+
+      if (success) {
+        // Refresh user data in store
+        await refreshUserData()
+
+        Alert.alert("Success", "Profile updated successfully", [{ text: "OK", onPress: () => router.back() }])
+      } else {
+        throw new Error("Profile update failed")
+      }
     } catch (error) {
-      console.error('Error saving profile:', error)
+      console.error("Error saving profile:", error)
       Alert.alert("Error", "Failed to update profile. Please try again.")
     } finally {
       setIsSaving(false)
+      setIsImageUploading(false)
     }
   }
 
@@ -132,10 +229,24 @@ export default function EditProfileScreen() {
               )}
 
               {/* Circular Edit (Pencil) Button */}
-              <Pressable style={styles.editPhotoButton} onPress={pickImage}>
-                <Feather name="edit-2" size={16} color="white" />
+              <Pressable
+                style={[styles.editPhotoButton, isImageUploading && styles.editPhotoButtonDisabled]}
+                onPress={pickImage}
+                disabled={isImageUploading}
+              >
+                {isImageUploading ? (
+                  <ActivityIndicator size={12} color="white" />
+                ) : (
+                  <Feather name="edit-2" size={16} color="white" />
+                )}
               </Pressable>
             </View>
+
+            {profileImage && (
+              <Text style={styles.imageHint}>
+                {profileImage.startsWith("http") ? "Current profile photo" : "New photo selected"}
+              </Text>
+            )}
           </View>
 
           {/* Form */}
@@ -168,13 +279,14 @@ export default function EditProfileScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Username</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, usernameError ? styles.inputError : null]}
                 value={username}
-                onChangeText={(text) => setUsername(text)}
+                onChangeText={(text) => setUsername(text.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
                 placeholder="Enter username"
                 placeholderTextColor={colors.textSecondary}
                 autoCapitalize="none"
               />
+              {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
             </View>
 
             <View style={styles.inputGroup}>
@@ -215,13 +327,16 @@ export default function EditProfileScreen() {
           </View>
 
           {/* Save Button */}
-          <Pressable 
-            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
+          <Pressable
+            style={[styles.saveButton, (isSaving || usernameError) && styles.saveButtonDisabled]}
             onPress={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !!usernameError}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <View style={styles.savingContainer}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.saveButtonText}>{isImageUploading ? "Uploading image..." : "Saving..."}</Text>
+              </View>
             ) : (
               <Text style={styles.saveButtonText}>Save Changes</Text>
             )}
@@ -262,8 +377,8 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 12,
@@ -297,7 +412,7 @@ const styles = StyleSheet.create({
   profileImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 50,
+    borderRadius: 55,
   },
   editPhotoButton: {
     position: "absolute",
@@ -314,6 +429,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+  },
+  editPhotoButtonDisabled: {
+    opacity: 0.6,
+  },
+  imageHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   formContainer: {
     padding: 16,
@@ -344,6 +468,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
+  inputError: {
+    borderColor: "#ef4444",
+  },
   disabledInput: {
     backgroundColor: colors.border,
     color: colors.textSecondary,
@@ -351,6 +478,11 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 12,
     color: colors.textSecondary,
+    marginTop: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#ef4444",
     marginTop: 4,
   },
   saveButton: {
@@ -370,5 +502,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  savingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 })

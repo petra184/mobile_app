@@ -1,832 +1,510 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Alert,
-  Animated,
-  Platform,
-  KeyboardAvoidingView,
-} from "react-native"
+import { useState, useCallback, useEffect } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { useRouter } from "expo-router"
 import { Feather } from "@expo/vector-icons"
+import { useRouter, useLocalSearchParams } from "expo-router"
 import { colors } from "@/constants/colors"
-import { useCart } from "@/context/cart-context"
+import { useCart, type CartItem } from "@/context/cart-context"
+import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
-import { LinearGradient } from "expo-linear-gradient"
+import { supabase } from "@/lib/supabase"
+import Animated, { FadeInUp } from "react-native-reanimated"
 
-
-// Card type icons
-const CARD_TYPES = {
-  visa: require("@/IMAGES/visa.jpeg"),
-  mastercard: require("@/IMAGES/mastercard.jpg"),
-  amex: require("@/IMAGES/amex.png"),
-  discover: require("@/IMAGES/amex.png"),
-}
-
-interface Address {
-  fullName: string
-  addressLine1: string
-  addressLine2: string
-  city: string
-  state: string
-  zipCode: string
-  country: string
-  phone: string
-}
-
-interface CreditCardInfo {
-  cardNumber: string
-  nameOnCard: string
-  expiryDate: string
-  cvv: string
-  cardType: string | null
-}
-
-const CheckoutScreen: React.FC = () => {
-  const { items, updateQuantity, removeFromCart, totalPrice, clearCart } = useCart()
-  const { showNotification } = useNotifications()
+const RewardsCheckoutScreen: React.FC = () => {
   const router = useRouter()
+  const params = useLocalSearchParams()
+  const { items, totalItems, totalPoints, updateQuantity, removeFromCart, clearCart, isLoading } = useCart()
+  const { points, userId, redeemPoints } = useUserStore()
+  const { showSuccess, showError } = useNotifications()
+  const [processing, setProcessing] = useState(false)
 
-  // State for form sections
-  const [promoCode, setPromoCode] = useState("")
-  const [shippingMethod, setShippingMethod] = useState("standard")
-  const [paymentMethod, setPaymentMethod] = useState("creditCard")
-  const [sameAsBilling, setSameAsBilling] = useState(true)
+  const canAfford = points >= totalPoints
+  const hasItems = items.length > 0
 
-  // State for expanded sections
-  const [expandedSections, setExpandedSections] = useState({
-    cart: true,
-    shipping: false,
-    payment: false,
-    summary: true,
-  })
+  // Force refresh cart when params change (coming from store screen)
+  useEffect(() => {
+    if (params.timestamp) {
+      console.log("🔄 Checkout screen refreshed with new params:", params)
+    }
+  }, [params])
 
-  // State for addresses
-  const [billingAddress, setBillingAddress] = useState<Address>({
-    fullName: "",
-    addressLine1: "",
-    addressLine2: "",
-    city: "",
-    state: "",
-    zipCode: "",
-    country: "United States",
-    phone: "",
-  })
+  // Debug cart state
+  useEffect(() => {
+    console.log("🛒 Checkout screen - Cart state:", {
+      items: items.length,
+      totalItems,
+      totalPoints,
+      isLoading,
+      userPoints: points,
+      canAfford,
+    })
+  }, [items, totalItems, totalPoints, isLoading, points, canAfford])
 
-  const [shippingAddress, setShippingAddress] = useState<Address>({
-    fullName: "",
-    addressLine1: "",
-    addressLine2: "",
-    city: "",
-    state: "",
-    zipCode: "",
-    country: "United States",
-    phone: "",
-  })
-
-  // State for credit card
-  const [creditCard, setCreditCard] = useState<CreditCardInfo>({
-    cardNumber: "",
-    nameOnCard: "",
-    expiryDate: "",
-    cvv: "",
-    cardType: null,
-  })
-
-  // State for saved cards
-  const [savedCards, setSavedCards] = useState([
-    {
-      id: "1",
-      cardNumber: "•••• •••• •••• 4242",
-      nameOnCard: "John Doe",
-      expiryDate: "12/25",
-      cardType: "visa",
-      isDefault: true,
+  const handleQuantityChange = useCallback(
+    (id: string, change: number) => {
+      const item = items.find((item) => item.id === id)
+      if (item) {
+        const newQuantity = item.quantity + change
+        if (newQuantity > 0) {
+          updateQuantity(id, newQuantity)
+        } else {
+          removeFromCart(id)
+        }
+      }
     },
+    [items, updateQuantity, removeFromCart],
+  )
+
+  const handleRemoveItem = useCallback(
+    (id: string) => {
+      removeFromCart(id)
+    },
+    [removeFromCart],
+  )
+
+  // Database lookup to determine if item is a special offer or reward
+  const determineItemType = useCallback(
+    async (itemId: string): Promise<{ isSpecialOffer: boolean; exists: boolean }> => {
+      try {
+        // First check if the item exists in special_offers table
+        const { data: specialOffer, error: specialOfferError } = await supabase
+          .from("special_offers")
+          .select("id")
+          .eq("id", itemId)
+          .single()
+
+        if (specialOffer && !specialOfferError) {
+          return { isSpecialOffer: true, exists: true }
+        }
+
+        // If not found in special_offers, check if it exists in rewards table
+        const { data: reward, error: rewardError } = await supabase
+          .from("rewards")
+          .select("id")
+          .eq("id", itemId)
+          .single()
+
+        if (reward && !rewardError) {
+          return { isSpecialOffer: false, exists: true }
+        }
+
+        // If not found in either table
+        return { isSpecialOffer: false, exists: false }
+      } catch (error) {
+        console.error(`Error determining item type for ${itemId}:`, error)
+        return { isSpecialOffer: false, exists: false }
+      }
+    },
+    [],
+  )
+
+  const processCheckout = useCallback(async () => {
+    setProcessing(true)
+    try {
+      // Verify user is authenticated
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+      if (authError || !user) {
+        throw new Error("User not authenticated")
+      }
+
+      // Create a snapshot of current cart items before clearing
+      const cartSnapshot = [...items]
+      const snapshotTotalItems = totalItems
+      const snapshotTotalPoints = totalPoints
+
+      console.log("🛒 Processing checkout with items:", cartSnapshot)
+      console.log("🔐 Authenticated user:", user.id)
+
+      // Determine item types for all items first
+      const itemsWithTypes = await Promise.all(
+        cartSnapshot.map(async (item) => {
+          const { isSpecialOffer, exists } = await determineItemType(item.id)
+          if (!exists) {
+            throw new Error(`Item "${item.title}" not found in database`)
+          }
+          return {
+            ...item,
+            isSpecialOffer,
+          }
+        }),
+      )
+
+      // Determine transaction subtype
+      const hasRewards = itemsWithTypes.some((item) => !item.isSpecialOffer)
+      const hasOffers = itemsWithTypes.some((item) => item.isSpecialOffer)
+
+      let transactionSubtype = "reward_only"
+      if (hasRewards && hasOffers) transactionSubtype = "mixed"
+      else if (hasOffers) transactionSubtype = "offer_only"
+
+      // Start a transaction - make sure to use the authenticated user's ID
+      const { data: transaction, error: transactionError } = await supabase
+        .from("reward_transactions")
+        .insert({
+          user_id: user.id, // Use the authenticated user's ID
+          transaction_type: "reward_purchase",
+          transaction_subtype: transactionSubtype,
+          total_points_used: snapshotTotalPoints,
+          items: itemsWithTypes.map((item) => ({
+            id: item.id,
+            title: item.title,
+            points_required: item.points_required,
+            quantity: item.quantity,
+            total_points: item.points_required * item.quantity,
+            item_type: item.isSpecialOffer ? "special_offer" : "reward",
+          })),
+          status: "completed",
+        })
+        .select()
+        .single()
+
+      if (transactionError) {
+        console.error("Transaction error:", transactionError)
+        throw new Error("Failed to create transaction record")
+      }
+
+      console.log("✅ Transaction created:", transaction.id)
+
+      // Process each item and create unified transaction items
+      for (const item of itemsWithTypes) {
+        const itemType = item.isSpecialOffer ? "special_offer" : "reward"
+
+        console.log(`Processing ${itemType}: ${item.title}`)
+
+        // Insert unified transaction item with correct foreign key
+        const transactionItemData = {
+          transaction_id: transaction.id,
+          quantity: item.quantity,
+          points_per_item: item.points_required,
+          total_points: item.points_required * item.quantity,
+          item_title: item.title,
+          item_type: itemType,
+          ...(item.isSpecialOffer
+            ? { special_offer_id: item.id, reward_id: null }
+            : { reward_id: item.id, special_offer_id: null }),
+        }
+
+        const { error: itemError } = await supabase.from("transaction_items").insert(transactionItemData)
+
+        if (itemError) {
+          console.error("Transaction item error:", itemError)
+          throw new Error(`Failed to create transaction item for ${item.title}`)
+        }
+
+        // Handle item-specific logic
+        if (item.isSpecialOffer) {
+          // Mark special offer as claimed
+          const { data: claimResult, error: claimError } = await supabase.rpc("mark_special_offer_as_claimed", {
+            p_offer_id: item.id,
+            p_quantity: item.quantity,
+          })
+
+          if (claimError || !claimResult) {
+            console.error("Special offer claim error:", claimError)
+            throw new Error(`Failed to claim special offer ${item.title}`)
+          }
+        } else {
+          // Mark reward as purchased using the database function
+          const { data: markResult, error: markError } = await supabase.rpc("mark_reward_as_purchased", {
+            p_reward_id: item.id,
+            p_quantity: item.quantity,
+          })
+
+          if (markError || !markResult) {
+            console.error("Reward mark error:", markError)
+            throw new Error(`Failed to update stock for reward ${item.title}`)
+          }
+        }
+
+        // Create unified redemption record
+        const redemptionData = {
+          user_id: user.id, // Use the authenticated user's ID
+          item_title: item.title,
+          item_type: itemType,
+          points_used: item.points_required * item.quantity,
+          quantity: item.quantity,
+          status: "completed",
+          ...(item.isSpecialOffer
+            ? { special_offer_id: item.id, reward_id: null }
+            : { reward_id: item.id, special_offer_id: null }),
+        }
+
+        const { error: redemptionError } = await supabase.from("user_redemptions_unified").insert(redemptionData)
+
+        if (redemptionError) {
+          console.error("Redemption error:", redemptionError)
+          throw new Error(`Failed to create redemption record for ${item.title}`)
+        }
+
+        // Record purchase history
+        const { error: purchaseHistoryError } = await supabase.rpc("record_purchase_history", {
+          p_user_id: user.id,
+          p_item_id: item.id,
+          p_item_title: item.title,
+          p_item_type: itemType,
+          p_points_used: item.points_required * item.quantity,
+          p_quantity: item.quantity,
+          p_transaction_id: transaction.id,
+        })
+
+        if (purchaseHistoryError) {
+          console.error("Purchase history error:", purchaseHistoryError)
+          // Don't throw error for purchase history as it's not critical
+        }
+      }
+
+      console.log("✅ All transaction items and redemptions created")
+
+      // Create points transaction record - use the authenticated user's ID
+      const pointsTransactionData = {
+        user_id: user.id, // Use the authenticated user's ID
+        points_change: -snapshotTotalPoints,
+        transaction_type: "redemption",
+        source_type: transactionSubtype,
+        source_id: transaction.id,
+        description: `Redeemed ${snapshotTotalItems} item${snapshotTotalItems > 1 ? "s" : ""} for ${snapshotTotalPoints} points`,
+      }
+
+      console.log("📝 Creating points transaction:", pointsTransactionData)
+
+      const { error: pointsTransactionError } = await supabase.from("points_transactions").insert(pointsTransactionData)
+
+      if (pointsTransactionError) {
+        console.error("Points transaction error:", pointsTransactionError)
+        throw new Error("Failed to create points transaction record")
+      }
+
+      console.log("✅ Points transaction created")
+
+      // Deduct points from user
+      await redeemPoints(snapshotTotalPoints)
+
+      // Clear cart first
+      console.log("🧹 Clearing cart after successful purchase")
+      await clearCart()
+
+      // Show success message
+      showSuccess(
+        "Purchase Successful!",
+        `You've successfully redeemed ${snapshotTotalItems} item${snapshotTotalItems > 1 ? "s" : ""} for ${snapshotTotalPoints} points.`,
+      )
+
+      // Navigate back after a short delay
+      setTimeout(() => {
+        console.log("🚀 Navigating back to store")
+        router.back()
+      }, 1000)
+    } catch (error) {
+      console.error("❌ Checkout error:", error)
+      showError("Purchase Failed", error instanceof Error ? error.message : "Something went wrong. Please try again.")
+    } finally {
+      setProcessing(false)
+    }
+  }, [
+    items,
+    totalItems,
+    totalPoints,
+    userId,
+    redeemPoints,
+    clearCart,
+    showSuccess,
+    showError,
+    router,
+    determineItemType,
   ])
 
-  // State for selected card
-  const [selectedCardId, setSelectedCardId] = useState<string | null>("1")
-
-  // Animation values
-  const cartHeight = useRef(new Animated.Value(0)).current
-  const shippingHeight = useRef(new Animated.Value(0)).current
-  const paymentHeight = useRef(new Animated.Value(0)).current
-
-  const shippingCost = shippingMethod === "express" ? 15.99 : shippingMethod === "standard" ? 5.99 : 1.99
-  const discount = promoCode.toLowerCase() === "team20" ? totalPrice * 0.2 : 0
-  const tax = totalPrice * 0.08 // 8% tax
-  const finalTotal = totalPrice + shippingCost + tax - discount
-
-  type Section = keyof typeof expandedSections;
-
-  const toggleSection = (section: Section) => {
-    setExpandedSections({
-      ...expandedSections,
-      [section]: !expandedSections[section],
-    });
-  };
-  // Format credit card number with spaces
-  const formatCardNumber = (text: string) => {
-    const cleaned = text.replace(/\s+/g, "").replace(/[^0-9]/gi, "")
-    const limit = 16
-
-    let formatted = ""
-    for (let i = 0; i < cleaned.length && i < limit; i++) {
-      if (i > 0 && i % 4 === 0) {
-        formatted += " "
-      }
-      formatted += cleaned[i]
-    }
-
-    // Detect card type
-    let cardType = null
-    if (/^4/.test(cleaned)) cardType = "visa"
-    else if (/^5[1-5]/.test(cleaned)) cardType = "mastercard"
-    else if (/^3[47]/.test(cleaned)) cardType = "amex"
-    else if (/^6(?:011|5)/.test(cleaned)) cardType = "discover"
-
-    setCreditCard({
-      ...creditCard,
-      cardNumber: formatted,
-      cardType,
-    })
-  }
-
-  // Format expiry date (MM/YY)
-  const formatExpiryDate = (text: string) => {
-    const cleaned = text.replace(/[^0-9]/g, "")
-    let formatted = cleaned
-
-    if (cleaned.length > 2) {
-      formatted = `${cleaned.substring(0, 2)}/${cleaned.substring(2, 4)}`
-    }
-
-    setCreditCard({
-      ...creditCard,
-      expiryDate: formatted,
-    })
-  }
-
-  // Handle adding a new card
-  const handleAddCard = () => {
-    // Validate card details
-    if (
-      creditCard.cardNumber.length < 19 ||
-      !creditCard.nameOnCard ||
-      creditCard.expiryDate.length < 5 ||
-      creditCard.cvv.length < 3
-    ) {
-      showNotification("Please fill in all card details correctly")
+  const handleCheckout = useCallback(async () => {
+    if (!userId) {
+      Alert.alert("Login Required", "Please log in to complete your purchase.")
       return
     }
 
-    // Create a new card object
-    const newCard = {
-      id: Date.now().toString(),
-      cardNumber: "•••• •••• •••• " + creditCard.cardNumber.slice(-4),
-      nameOnCard: creditCard.nameOnCard,
-      expiryDate: creditCard.expiryDate,
-      cardType: creditCard.cardType || "visa",
-      isDefault: savedCards.length === 0,
+    if (!canAfford) {
+      Alert.alert("Insufficient Points", `You need ${totalPoints - points} more points to complete this purchase.`)
+      return
     }
 
-    // Add to saved cards
-    setSavedCards([...savedCards, newCard])
-    setSelectedCardId(newCard.id)
+    if (!hasItems) {
+      Alert.alert("Empty Cart", "Please add some items to your cart before checking out.")
+      return
+    }
 
-    // Reset form
-    setCreditCard({
-      cardNumber: "",
-      nameOnCard: "",
-      expiryDate: "",
-      cvv: "",
-      cardType: null,
-    })
+    Alert.alert(
+      "Confirm Purchase",
+      `Are you sure you want to redeem ${totalItems} item${totalItems > 1 ? "s" : ""} for ${totalPoints} points?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Confirm", onPress: processCheckout },
+      ],
+    )
+  }, [userId, canAfford, hasItems, totalItems, totalPoints, points, processCheckout])
 
-    showNotification("Card added successfully")
+  // Show loading state while cart is loading
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading cart...</Text>
+        </View>
+      </SafeAreaView>
+    )
   }
 
-  // Apply promo code
-  const applyPromoCode = () => {
-    if (promoCode.toLowerCase() === "team20") {
-      showNotification("Promo code applied: 20% off")
-    } else {
-      showNotification("Invalid promo code")
-    }
-  }
+  const renderCartItem = (item: CartItem, index: number) => {
+    const itemCanAfford = points >= item.points_required * item.quantity
+    // For rendering purposes, use a simple heuristic (will be properly determined during checkout)
+    const itemIsSpecialOffer = item.category === "special_offer" || item.title.toLowerCase().includes("offer")
 
-  // Copy billing address to shipping
-  const copyBillingToShipping = () => {
-    if (sameAsBilling) {
-      setShippingAddress(billingAddress)
-    }
-  }
+    return (
+      <Animated.View key={item.id} entering={FadeInUp.duration(400).delay(index * 100)} style={styles.cartItem}>
+        <View style={styles.itemImageContainer}>
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.itemIconWrapper, itemIsSpecialOffer && styles.specialOfferIconWrapper]}>
+              <Feather
+                name={itemIsSpecialOffer ? "zap" : "gift"}
+                size={24}
+                color={itemIsSpecialOffer ? "#EF4444" : colors.primary}
+              />
+            </View>
+          )}
+        </View>
 
-  // Validate checkout
-  const validateCheckout = () => {
-    // Check if cart is empty
-    if (items.length === 0) {
-      showNotification("Your cart is empty")
-      return false
-    }
+        <View style={styles.itemInfo}>
+          <View style={styles.itemTitleRow}>
+            <Text style={styles.itemTitle}>{item.title}</Text>
+            {itemIsSpecialOffer && (
+              <View style={styles.offerBadge}>
+                <Text style={styles.offerBadgeText}>OFFER</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.itemDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+          <View style={styles.itemPointsContainer}>
+            <Feather name="star" size={14} color="#FFD700" />
+            <Text style={styles.itemPoints}>{item.points_required} points each</Text>
+          </View>
+          {!itemCanAfford && (
+            <View style={styles.itemWarning}>
+              <Feather name="alert-triangle" size={12} color="#F59E0B" />
+              <Text style={styles.itemWarningText}>Insufficient points</Text>
+            </View>
+          )}
+        </View>
 
-    // Check if billing address is complete
-    const requiredBillingFields = ["fullName", "addressLine1", "city", "state", "zipCode", "phone"]
-    for (const field of requiredBillingFields) {
-      if (!billingAddress[field as keyof Address]) {
-        showNotification("Please complete your billing address")
-        return false
-      }
-    }
+        <View style={styles.itemActions}>
+          <View style={styles.quantityContainer}>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => handleQuantityChange(item.id, -1)}
+              disabled={processing}
+            >
+              <Feather name="minus" size={16} color={colors.primary} />
+            </TouchableOpacity>
+            <Text style={styles.quantityText}>{item.quantity}</Text>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => handleQuantityChange(item.id, 1)}
+              disabled={processing}
+            >
+              <Feather name="plus" size={16} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
 
-    // Check if shipping address is complete (if not same as billing)
-    if (!sameAsBilling) {
-      const requiredShippingFields = ["fullName", "addressLine1", "city", "state", "zipCode", "phone"]
-      for (const field of requiredShippingFields) {
-        if (!shippingAddress[field as keyof Address]) {
-          showNotification("Please complete your shipping address")
-          return false
-        }
-      }
-    }
+          <TouchableOpacity style={styles.removeButton} onPress={() => handleRemoveItem(item.id)} disabled={processing}>
+            <Feather name="trash-2" size={16} color="#EF4444" />
+          </TouchableOpacity>
 
-    // Check if payment method is selected
-    if (paymentMethod === "creditCard" && !selectedCardId) {
-      showNotification("Please select or add a payment method")
-      return false
-    }
-
-    return true
-  }
-
-  // Handle checkout
-  const handleCheckout = () => {
-    if (!validateCheckout()) return
-
-    Alert.alert("Order Placed", "Your order has been successfully placed!", [
-      {
-        text: "OK",
-        onPress: () => {
-          clearCart()
-          router.push("/")
-        },
-      },
-    ])
-  }
-
-  // Update billing address field
-  const updateBillingField = (field: keyof Address, value: string) => {
-    const updatedAddress = { ...billingAddress, [field]: value }
-    setBillingAddress(updatedAddress)
-
-    // If same as billing is checked, update shipping address too
-    if (sameAsBilling) {
-      setShippingAddress(updatedAddress)
-    }
-  }
-
-  // Update shipping address field
-  const updateShippingField = (field: keyof Address, value: string) => {
-    setShippingAddress({ ...shippingAddress, [field]: value })
+          <Text style={[styles.itemTotal, !itemCanAfford && styles.itemTotalWarning]}>
+            {(item.points_required * item.quantity).toLocaleString()} pts
+          </Text>
+        </View>
+      </Animated.View>
+    )
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["left"]}>
+    <SafeAreaView style={styles.container}>
+      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
-      {items.length === 0 ? (
-        <View style={styles.emptyCartContainer}>
-          <Text style={styles.emptyCartText}>Your cart is empty</Text>
-          <TouchableOpacity style={styles.continueShoppingButton} onPress={() => router.push("../(tabs)/rewards")}>
-            <Text style={styles.continueShoppingText}>Continue Shopping</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={100}
-        >
-          <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-            {/* Cart Items Section */}
-            <View style={styles.section}>
-              <TouchableOpacity style={styles.sectionHeader} onPress={() => toggleSection("cart")} activeOpacity={0.7}>
-                <View style={styles.sectionTitleContainer}>
-                  <Text style={styles.sectionNumber}>1</Text>
-                  <Text style={styles.sectionTitle}>Cart Items</Text>
+      {hasItems ? (
+        <>
+          {/* Cart Items */}
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <Animated.View entering={FadeInUp.duration(500).delay(200)} style={styles.section}>
+              <Text style={styles.sectionTitle}>Your Cart ({totalItems} items)</Text>
+              {items.map((item, index) => renderCartItem(item, index))}
+            </Animated.View>
+
+            {/* Points Summary */}
+            <Animated.View entering={FadeInUp.duration(500).delay(400)} style={styles.summarySection}>
+              <Text style={styles.sectionTitle}>Points Summary</Text>
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Available Points</Text>
+                  <Text style={styles.summaryValue}>{points.toLocaleString()}</Text>
                 </View>
-                {expandedSections.cart ? <Feather name="chevron-up" size={20} color="#555" /> : <Feather name="chevron-down" size={20} color="#555" />}
-              </TouchableOpacity>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total Cost</Text>
+                  <Text style={styles.summaryValue}>-{totalPoints.toLocaleString()}</Text>
+                </View>
+                <View style={[styles.summaryRow, styles.summaryTotal]}>
+                  <Text style={styles.summaryTotalLabel}>Remaining Points</Text>
+                  <Text style={[styles.summaryTotalValue, !canAfford && styles.insufficientPoints]}>
+                    {(points - totalPoints).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
 
-              {expandedSections.cart && (
-                <View style={styles.sectionContent}>
-                  {items.map((item) => (
-                    <View key={`${item.product.id}-${item.size}`} style={styles.cartItem}>
-                      <Image source={{ uri: item.product.image || "/placeholder.svg?height=150&width=150" }} style={styles.itemImage} />
-
-                      <View style={styles.itemDetails}>
-                        <Text style={styles.itemName}>{item.product.name}</Text>
-                        {item.size && <Text style={styles.itemSize}>Size: {item.size}</Text>}
-                        <Text style={styles.itemPrice}>${item.product.price.toFixed(2)}</Text>
-
-                        <View style={styles.quantityContainer}>
-                          <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={() => updateQuantity(item.product.id, item.quantity - 1)}
-                          >
-                            <Feather name="minus" size={16} color="#555" />
-                          </TouchableOpacity>
-
-                          <Text style={styles.quantityText}>{item.quantity}</Text>
-
-                          <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={() => updateQuantity(item.product.id, item.quantity + 1)}
-                          >
-                            <Feather name="plus" size={16} color="#555" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      <TouchableOpacity style={styles.removeButton} onPress={() => removeFromCart(item.product.id)}>
-                        <Feather name="trash-2" size={20} color="#FF3B30" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-
-                  {/* Promo Code */}
-                  <View style={styles.promoContainer}>
-                    <TextInput
-                      style={styles.promoInput}
-                      placeholder="Enter promo code"
-                      value={promoCode}
-                      onChangeText={setPromoCode}
-                    />
-                    <TouchableOpacity style={styles.applyButton} onPress={applyPromoCode}>
-                      <Text style={styles.applyButtonText}>Apply</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.promoHint}>Try "TEAM20" for 20% off</Text>
+              {!canAfford && (
+                <View style={styles.warningContainer}>
+                  <Feather name="alert-triangle" size={20} color="#F59E0B" />
+                  <Text style={styles.warningText}>
+                    You need {(totalPoints - points).toLocaleString()} more points to complete this purchase.
+                  </Text>
                 </View>
               )}
-            </View>
-
-            {/* Shipping Section */}
-            <View style={styles.section}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection("shipping")}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sectionTitleContainer}>
-                  <Text style={styles.sectionNumber}>2</Text>
-                  <Text style={styles.sectionTitle}>Shipping</Text>
-                </View>
-                {expandedSections.shipping ? (
-                  <Feather name="chevron-up" size={20} color="#555" />
-                ) : (
-                  <Feather name="chevron-down" size={20} color="#555" />
-                )}
-              </TouchableOpacity>
-
-              {expandedSections.shipping && (
-                <View style={styles.sectionContent}>
-                  {/* Billing Address */}
-                  <Text style={styles.subsectionTitle}>Billing Address</Text>
-                  <View style={styles.addressForm}>
-                    <View style={styles.formRow}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Full Name"
-                        value={billingAddress.fullName}
-                        onChangeText={(text) => updateBillingField("fullName", text)}
-                      />
-                    </View>
-                    <View style={styles.formRow}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Address Line 1"
-                        value={billingAddress.addressLine1}
-                        onChangeText={(text) => updateBillingField("addressLine1", text)}
-                      />
-                    </View>
-                    <View style={styles.formRow}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Address Line 2 (Optional)"
-                        value={billingAddress.addressLine2}
-                        onChangeText={(text) => updateBillingField("addressLine2", text)}
-                      />
-                    </View>
-                    <View style={styles.formRowMulti}>
-                      <TextInput
-                        style={[styles.input, styles.inputHalf]}
-                        placeholder="City"
-                        value={billingAddress.city}
-                        onChangeText={(text) => updateBillingField("city", text)}
-                      />
-                      <TextInput
-                        style={[styles.input, styles.inputHalf]}
-                        placeholder="State"
-                        value={billingAddress.state}
-                        onChangeText={(text) => updateBillingField("state", text)}
-                      />
-                    </View>
-                    <View style={styles.formRowMulti}>
-                      <TextInput
-                        style={[styles.input, styles.inputHalf]}
-                        placeholder="ZIP Code"
-                        value={billingAddress.zipCode}
-                        onChangeText={(text) => updateBillingField("zipCode", text)}
-                        keyboardType="number-pad"
-                      />
-                      <TextInput
-                        style={[styles.input, styles.inputHalf]}
-                        placeholder="Phone"
-                        value={billingAddress.phone}
-                        onChangeText={(text) => updateBillingField("phone", text)}
-                        keyboardType="phone-pad"
-                      />
-                    </View>
-                  </View>
-
-                  {/* Shipping Address */}
-                  <View style={styles.shippingAddressHeader}>
-                    <Text style={styles.subsectionTitle}>Shipping Address</Text>
-                    <TouchableOpacity
-                      style={styles.sameAsBillingContainer}
-                      onPress={() => {
-                        const newValue = !sameAsBilling
-                        setSameAsBilling(newValue)
-                        if (newValue) {
-                          setShippingAddress(billingAddress)
-                        }
-                      }}
-                    >
-                      <View style={[styles.checkbox, sameAsBilling && styles.checkboxChecked]}>
-                        {sameAsBilling && <Feather name="check" size={14} color="#FFF" />}
-                      </View>
-                      <Text style={styles.sameAsBillingText}>Same as billing</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {!sameAsBilling && (
-                    <View style={styles.addressForm}>
-                      <View style={styles.formRow}>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Full Name"
-                          value={shippingAddress.fullName}
-                          onChangeText={(text) => updateShippingField("fullName", text)}
-                        />
-                      </View>
-                      <View style={styles.formRow}>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Address Line 1"
-                          value={shippingAddress.addressLine1}
-                          onChangeText={(text) => updateShippingField("addressLine1", text)}
-                        />
-                      </View>
-                      <View style={styles.formRow}>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Address Line 2 (Optional)"
-                          value={shippingAddress.addressLine2}
-                          onChangeText={(text) => updateShippingField("addressLine2", text)}
-                        />
-                      </View>
-                      <View style={styles.formRowMulti}>
-                        <TextInput
-                          style={[styles.input, styles.inputHalf]}
-                          placeholder="City"
-                          value={shippingAddress.city}
-                          onChangeText={(text) => updateShippingField("city", text)}
-                        />
-                        <TextInput
-                          style={[styles.input, styles.inputHalf]}
-                          placeholder="State"
-                          value={shippingAddress.state}
-                          onChangeText={(text) => updateShippingField("state", text)}
-                        />
-                      </View>
-                      <View style={styles.formRowMulti}>
-                        <TextInput
-                          style={[styles.input, styles.inputHalf]}
-                          placeholder="ZIP Code"
-                          value={shippingAddress.zipCode}
-                          onChangeText={(text) => updateShippingField("zipCode", text)}
-                          keyboardType="number-pad"
-                        />
-                        <TextInput
-                          style={[styles.input, styles.inputHalf]}
-                          placeholder="Phone"
-                          value={shippingAddress.phone}
-                          onChangeText={(text) => updateShippingField("phone", text)}
-                          keyboardType="phone-pad"
-                        />
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Shipping Method */}
-                  <Text style={styles.subsectionTitle}>Shipping Method</Text>
-                  <TouchableOpacity
-                    style={[styles.shippingOption, shippingMethod === "standard" && styles.selectedShippingOption]}
-                    onPress={() => setShippingMethod("standard")}
-                  >
-                    <View>
-                      <Text style={styles.shippingOptionTitle}>Standard Shipping</Text>
-                      <Text style={styles.shippingOptionDescription}>3-5 business days</Text>
-                    </View>
-                    <Text style={styles.shippingOptionPrice}>$5.99</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.shippingOption, shippingMethod === "express" && styles.selectedShippingOption]}
-                    onPress={() => setShippingMethod("express")}
-                  >
-                    <View>
-                      <Text style={styles.shippingOptionTitle}>Express Shipping</Text>
-                      <Text style={styles.shippingOptionDescription}>1-2 business days</Text>
-                    </View>
-                    <Text style={styles.shippingOptionPrice}>$15.99</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.shippingOption, shippingMethod === "pickup" && styles.selectedShippingOption]}
-                    onPress={() => setShippingMethod("pickup")}
-                  >
-                    <View>
-                      <Text style={styles.shippingOptionTitle}>Pick Up in Person</Text>
-                      <Text style={styles.shippingOptionDescription}>At the next game</Text>
-                    </View>
-                    <Text style={styles.shippingOptionPrice}>$1.99</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            {/* Payment Section */}
-            <View style={styles.section}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection("payment")}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sectionTitleContainer}>
-                  <Text style={styles.sectionNumber}>3</Text>
-                  <Text style={styles.sectionTitle}>Payment</Text>
-                </View>
-                {expandedSections.payment ? (
-                  <Feather name="chevron-up" size={20} color="#555" />
-                ) : (
-                  <Feather name="chevron-down" size={20} color="#555" />
-                )}
-              </TouchableOpacity>
-
-              {expandedSections.payment && (
-                <View style={styles.sectionContent}>
-                  <View style={styles.paymentMethodSelector}>
-                    <TouchableOpacity
-                      style={[styles.paymentTab, paymentMethod === "creditCard" && styles.activePaymentTab]}
-                      onPress={() => setPaymentMethod("creditCard")}
-                    >
-                      <Feather name="credit-card" size={18} color={paymentMethod === "creditCard" ? colors.primary : "#555"} />
-                      <Text
-                        style={[styles.paymentTabText, paymentMethod === "creditCard" && styles.activePaymentTabText]}
-                      >
-                        Credit Card
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.paymentTab, paymentMethod === "points" && styles.activePaymentTab]}
-                      onPress={() => setPaymentMethod("points")}
-                    >
-                      <Text style={[styles.pointsIcon, paymentMethod === "points" && styles.activePaymentTabText]}>
-                        P
-                      </Text>
-                      <Text style={[styles.paymentTabText, paymentMethod === "points" && styles.activePaymentTabText]}>
-                        Points
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {paymentMethod === "creditCard" && (
-                    <View style={styles.creditCardSection}>
-                      {/* Saved Cards */}
-                      {savedCards.length > 0 && (
-                        <View style={styles.savedCardsSection}>
-                          <Text style={styles.subsectionTitle}>Saved Cards</Text>
-                          {savedCards.map((card) => (
-                            <TouchableOpacity
-                              key={card.id}
-                              style={[styles.savedCard, selectedCardId === card.id && styles.selectedSavedCard]}
-                              onPress={() => setSelectedCardId(card.id)}
-                            >
-                              <View style={styles.savedCardInfo}>
-                                {card.cardType && (
-                                  <Image
-                                    source={CARD_TYPES[card.cardType as keyof typeof CARD_TYPES]}
-                                    style={styles.cardTypeIcon}
-                                  />
-                                )}
-                                <View>
-                                  <Text style={styles.savedCardNumber}>{card.cardNumber}</Text>
-                                  <Text style={styles.savedCardName}>{card.nameOnCard}</Text>
-                                </View>
-                              </View>
-                              <View style={styles.savedCardRight}>
-                                <Text style={styles.savedCardExpiry}>Expires {card.expiryDate}</Text>
-                                {card.isDefault && (
-                                  <View style={styles.defaultCardBadge}>
-                                    <Text style={styles.defaultCardText}>Default</Text>
-                                  </View>
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      )}
-
-                      {/* Add New Card */}
-                      <Text style={styles.subsectionTitle}>Add New Card</Text>
-                      <View style={styles.cardForm}>
-                        <View style={styles.cardNumberRow}>
-                          <TextInput
-                            style={styles.cardNumberInput}
-                            placeholder="Card Number"
-                            value={creditCard.cardNumber}
-                            onChangeText={formatCardNumber}
-                            keyboardType="number-pad"
-                            maxLength={19} // 16 digits + 3 spaces
-                          />
-                          {creditCard.cardType && (
-                            <Image
-                              source={CARD_TYPES[creditCard.cardType as keyof typeof CARD_TYPES]}
-                              style={styles.cardTypeIconInput}
-                            />
-                          )}
-                        </View>
-
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Name on Card"
-                          value={creditCard.nameOnCard}
-                          onChangeText={(text) => setCreditCard({ ...creditCard, nameOnCard: text })}
-                        />
-
-                        <View style={styles.formRowMulti}>
-                          <TextInput
-                            style={[styles.input, styles.inputHalf]}
-                            placeholder="MM/YY"
-                            value={creditCard.expiryDate}
-                            onChangeText={formatExpiryDate}
-                            keyboardType="number-pad"
-                            maxLength={5} // MM/YY
-                          />
-                          <TextInput
-                            style={[styles.input, styles.inputHalf]}
-                            placeholder="CVV"
-                            value={creditCard.cvv}
-                            onChangeText={(text) => setCreditCard({ ...creditCard, cvv: text.replace(/[^0-9]/g, "") })}
-                            keyboardType="number-pad"
-                            maxLength={4} // 3-4 digits
-                            secureTextEntry
-                          />
-                        </View>
-
-                        <TouchableOpacity style={styles.addCardButton} onPress={handleAddCard}>
-                          <Text style={styles.addCardButtonText}>Add Card</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-
-                  {paymentMethod === "points" && (
-                    <View style={styles.pointsPaymentSection}>
-                      <View style={styles.pointsBalanceContainer}>
-                        <Text style={styles.pointsBalanceLabel}>Your Points Balance:</Text>
-                        <Text style={styles.pointsBalance}>2,500 pts</Text>
-                      </View>
-                      <Text style={styles.pointsEquivalent}>(Equivalent to ${(2500 / 100).toFixed(2)})</Text>
-
-                      <View style={styles.pointsInfoBox}>
-                        <Text style={styles.pointsInfoText}>
-                          You need {Math.ceil(finalTotal * 100)} points to complete this purchase.
-                        </Text>
-                      </View>
-
-                      {2500 < finalTotal * 100 ? (
-                        <View style={styles.insufficientPointsContainer}>
-                          <Text style={styles.insufficientPointsText}>
-                            You don't have enough points for this purchase.
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.switchToCardButton}
-                            onPress={() => setPaymentMethod("creditCard")}
-                          >
-                            <Text style={styles.switchToCardButtonText}>Switch to Credit Card</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <View style={styles.sufficientPointsContainer}>
-                          <Text style={styles.sufficientPointsText}>You have enough points for this purchase!</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/* Order Summary */}
-            <View style={styles.section}>
-              <TouchableOpacity
-                style={styles.sectionHeader}
-                onPress={() => toggleSection("summary")}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sectionTitleContainer}>
-                  <Text style={styles.sectionNumber}>4</Text>
-                  <Text style={styles.sectionTitle}>Order Summary</Text>
-                </View>
-                {expandedSections.summary ? (
-                  <Feather name="chevron-up" size={20} color="#555" />
-                ) : (
-                  <Feather name="chevron-down" size={20} color="#555" />
-                )}
-              </TouchableOpacity>
-
-              {expandedSections.summary && (
-                <View style={styles.sectionContent}>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Subtotal</Text>
-                    <Text style={styles.summaryValue}>${totalPrice.toFixed(2)}</Text>
-                  </View>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Shipping</Text>
-                    <Text style={styles.summaryValue}>${shippingCost.toFixed(2)}</Text>
-                  </View>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Tax (8%)</Text>
-                    <Text style={styles.summaryValue}>${tax.toFixed(2)}</Text>
-                  </View>
-
-                  {discount > 0 && (
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Discount (20%)</Text>
-                      <Text style={styles.discountValue}>-${discount.toFixed(2)}</Text>
-                    </View>
-                  )}
-
-                  <View style={[styles.summaryRow, styles.totalRow]}>
-                    <Text style={styles.totalLabel}>Total</Text>
-                    <Text style={styles.totalValue}>${finalTotal.toFixed(2)}</Text>
-                  </View>
-
-                  {paymentMethod === "points" && (
-                    <View style={styles.pointsTotalRow}>
-                      <Text style={styles.pointsTotalLabel}>Points Required:</Text>
-                      <Text style={styles.pointsTotalValue}>{Math.ceil(finalTotal * 100)} pts</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
+            </Animated.View>
           </ScrollView>
 
           {/* Checkout Button */}
-          <View style={styles.bottomContainer}>
-            <TouchableOpacity 
-                activeOpacity={0.8}
-                onPress={() => handleCheckout}
-             >
-                <LinearGradient
-                    colors={[colors.primary, colors.accent]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.checkoutButton}
-                >
-                    <Text style={styles.checkoutButtonText}>
-                        {paymentMethod === "points" ? "Pay with Points" : "Place Order"}
-                    </Text>
-                </LinearGradient>
+          <Animated.View entering={FadeInUp.duration(500).delay(600)} style={styles.checkoutContainer}>
+            <TouchableOpacity
+              style={[styles.checkoutButton, (!canAfford || processing) && styles.checkoutButtonDisabled]}
+              onPress={handleCheckout}
+              disabled={!canAfford || processing}
+            >
+              {processing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Feather name="check-circle" size={20} color="#FFFFFF" />
+                  <Text style={styles.checkoutButtonText}>Complete Purchase ({totalPoints.toLocaleString()} pts)</Text>
+                </>
+              )}
             </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+          </Animated.View>
+        </>
+      ) : (
+        /* Empty Cart */
+        <View style={styles.emptyContainer}>
+          <Feather name="shopping-cart" size={64} color="#D1D5DB" />
+          <Text style={styles.emptyTitle}>Your cart is empty</Text>
+          <Text style={styles.emptySubtitle}>Add some rewards or special offers to get started!</Text>
+          <TouchableOpacity style={styles.shopButton} onPress={() => router.back()}>
+            <Text style={styles.shopButtonText}>Continue Shopping</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </SafeAreaView>
   )
@@ -836,530 +514,271 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8F9FA",
+    marginTop: -60,
   },
-  scrollView: {
+  backgroundImage: {
+    position: "absolute",
+    bottom: 0,
+    resizeMode: "cover",
+    opacity: 0.1,
+    zIndex: 0,
+  },
+  loadingContainer: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#666",
+  },
+  content: {
+    flex: 1,
+    paddingTop: 20,
   },
   section: {
-    backgroundColor: "#FFFFFF",
-    marginBottom: 16,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    overflow: "hidden",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
-  },
-  sectionTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    color: "#FFFFFF",
-    textAlign: "center",
-    lineHeight: 24,
-    fontSize: 14,
-    fontWeight: "bold",
-    marginRight: 12,
+    padding: 20,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#222",
-  },
-  sectionContent: {
-    padding: 16,
-  },
-  subsectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 12,
-    marginTop: 16,
+    fontWeight: "700",
+    color: colors.text,
+    marginBottom: 16,
   },
   cartItem: {
     flexDirection: "row",
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEEEEE",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  itemImageContainer: {
+    marginRight: 12,
   },
   itemImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
-  itemDetails: {
+  itemIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary + "20",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  specialOfferIconWrapper: {
+    backgroundColor: "#EF444420",
+  },
+  itemInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginRight: 12,
   },
-  itemName: {
+  itemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  itemTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#222",
-    marginBottom: 4,
+    color: colors.text,
+    flex: 1,
   },
-  itemSize: {
+  offerBadge: {
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  offerBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "white",
+  },
+  itemDescription: {
     fontSize: 14,
-    color: "#555",
+    color: "#6B7280",
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  itemPointsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 4,
   },
-  itemPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#222",
-    marginBottom: 8,
+  itemPoints: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginLeft: 4,
+  },
+  itemWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  itemWarningText: {
+    fontSize: 11,
+    color: "#F59E0B",
+    marginLeft: 4,
+    fontWeight: "600",
+  },
+  itemActions: {
+    alignItems: "flex-end",
   },
   quantityContainer: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 8,
+    marginBottom: 8,
   },
   quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
+    width: 32,
+    height: 32,
     justifyContent: "center",
     alignItems: "center",
   },
   quantityText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#222",
-    marginHorizontal: 12,
+    color: colors.text,
+    minWidth: 24,
+    textAlign: "center",
   },
   removeButton: {
     padding: 8,
-  },
-  promoContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 16,
-  },
-  promoInput: {
-    flex: 1,
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  applyButton: {
-    height: 48,
-    paddingHorizontal: 16,
-    backgroundColor: colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 8,
-    marginLeft: 8,
-  },
-  applyButtonText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  promoHint: {
-    fontSize: 12,
-    color: "#777",
-    marginTop: 8,
-    fontStyle: "italic",
-  },
-  addressForm: {
-    marginBottom: 16,
-  },
-  formRow: {
-    marginBottom: 12,
-  },
-  formRowMulti: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    marginTop: 12,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  inputHalf: {
-    width: "48%",
-  },
-  shippingAddressHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sameAsBillingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  sameAsBillingText: {
-    fontSize: 14,
-    color: "#555",
-  },
-  shippingOption: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  selectedShippingOption: {
-    borderColor: colors.primary,
-    backgroundColor: "rgba(59, 130, 246, 0.05)",
-  },
-  shippingOptionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#222",
-  },
-  shippingOptionDescription: {
-    fontSize: 14,
-    color: "#777",
-    marginTop: 4,
-  },
-  shippingOptionPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#222",
-  },
-  paymentMethodSelector: {
-    flexDirection: "row",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  paymentTab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    backgroundColor: "#F5F5F5",
-  },
-  activePaymentTab: {
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary,
-  },
-  paymentTabText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#555",
-    marginLeft: 8,
-  },
-  activePaymentTabText: {
-    color: colors.primary,
-  },
-  pointsIcon: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#555",
-    width: 18,
-    height: 18,
-    textAlign: "center",
-    textAlignVertical: "center",
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: "#555",
-  },
-  creditCardSection: {
-    marginBottom: 16,
-  },
-  savedCardsSection: {
-    marginBottom: 16,
-  },
-  savedCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  selectedSavedCard: {
-    borderColor: colors.primary,
-    backgroundColor: "rgba(59, 130, 246, 0.05)",
-  },
-  savedCardInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  cardTypeIcon: {
-    width: 40,
-    height: 25,
-    marginRight: 12,
-    resizeMode: "contain",
-  },
-  cardTypeIconInput: {
-    width: 40,
-    height: 25,
-    position: "absolute",
-    right: 12,
-    top: 12,
-    resizeMode: "contain",
-  },
-  savedCardNumber: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#222",
-  },
-  savedCardName: {
-    fontSize: 14,
-    color: "#555",
-    marginTop: 4,
-  },
-  savedCardRight: {
-    alignItems: "flex-end",
-  },
-  savedCardExpiry: {
-    fontSize: 14,
-    color: "#555",
-  },
-  defaultCardBadge: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  defaultCardText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  cardForm: {
-    marginBottom: 16,
-  },
-  cardNumberRow: {
-    position: "relative",
-    marginBottom: 12,
-  },
-  cardNumberInput: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    paddingRight: 60,
-  },
-  addCardButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  addCardButtonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  pointsPaymentSection: {
-    padding: 16,
-    backgroundColor: "#F9F9F9",
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  pointsBalanceContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: 4,
   },
-  pointsBalanceLabel: {
-    fontSize: 16,
-    color: "#555",
-  },
-  pointsBalance: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.primary,
-  },
-  pointsEquivalent: {
+  itemTotal: {
     fontSize: 14,
-    color: "#777",
-    textAlign: "right",
-    marginBottom: 16,
+    fontWeight: "700",
+    color: colors.text,
   },
-  pointsInfoBox: {
+  itemTotalWarning: {
+    color: "#F59E0B",
+  },
+  summarySection: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  summaryCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#DDDDDD",
-    marginBottom: 16,
-  },
-  pointsInfoText: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-  },
-  insufficientPointsContainer: {
-    alignItems: "center",
-  },
-  insufficientPointsText: {
-    fontSize: 14,
-    color: "#FF3B30",
-    marginBottom: 8,
-  },
-  switchToCardButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  switchToCardButtonText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  sufficientPointsContainer: {
-    alignItems: "center",
-  },
-  sufficientPointsText: {
-    fontSize: 14,
-    color: "#4CAF50",
-    fontWeight: "600",
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "center",
+    marginBottom: 12,
   },
   summaryLabel: {
     fontSize: 16,
-    color: "#555",
+    color: "#6B7280",
   },
   summaryValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#222",
+    color: colors.text,
   },
-  discountValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#4CAF50",
-  },
-  totalRow: {
-    marginTop: 8,
-    paddingTop: 16,
+  summaryTotal: {
     borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
+    borderTopColor: "#E5E7EB",
+    paddingTop: 12,
+    marginBottom: 0,
   },
-  totalLabel: {
+  summaryTotalLabel: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#222",
+    fontWeight: "700",
+    color: colors.text,
   },
-  totalValue: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: colors.primary,
+  summaryTotalValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
   },
-  pointsTotalRow: {
+  insufficientPoints: {
+    color: "#EF4444",
+  },
+  warningContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
-    borderStyle: "dashed",
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
   },
-  pointsTotalLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.primary,
+  warningText: {
+    fontSize: 14,
+    color: "#92400E",
+    marginLeft: 8,
+    flex: 1,
   },
-  pointsTotalValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colors.primary,
-  },
-  bottomContainer: {
-    padding: 16,
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
-    marginBottom: 12
+  checkoutContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   checkoutButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 25,
-    paddingVertical: 16,
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom:12,
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    borderRadius: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  checkoutButtonDisabled: {
+    backgroundColor: "#D1D5DB",
   },
   checkoutButtonText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: "#FFFFFF",
+    marginLeft: 8,
   },
-  emptyCartContainer: {
+  emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 40,
   },
-  emptyCartText: {
-    fontSize: 18,
-    color: "#555",
-    marginBottom: 20,
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: 24,
+    marginBottom: 8,
   },
-  continueShoppingButton: {
+  emptySubtitle: {
+    fontSize: 16,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 32,
+  },
+  shopButton: {
     backgroundColor: colors.primary,
+    borderRadius: 12,
     paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    paddingHorizontal: 24,
   },
-  continueShoppingText: {
-    color: "#FFFFFF",
+  shopButtonText: {
     fontSize: 16,
     fontWeight: "600",
+    color: "#FFFFFF",
   },
 })
 
-export default CheckoutScreen
+export default RewardsCheckoutScreen

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   View,
   Text,
@@ -12,13 +13,15 @@ import {
   Pressable,
   Dimensions,
   Image,
-  Alert,
+  Modal,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import { useUserStore } from "@/hooks/userStore"
 import { Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import { useCart } from "@/context/cart-context"
+import { useNotifications } from "@/context/notification-context"
 import Animated, { FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated"
 import { StatusBar } from "expo-status-bar"
 import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
@@ -28,7 +31,6 @@ import {
   fetchScanHistory,
   fetchUserStatus,
   fetchUserAchievements,
-  redeemReward,
   checkUserAchievements,
   type Reward,
   type SpecialOffer,
@@ -36,9 +38,212 @@ import {
   type UserStatusWithLevel,
   type UserAchievement,
 } from "@/app/actions/points"
+import { supabase } from "@/lib/supabase"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 
-const { width } = Dimensions.get("window")
+const { width, height } = Dimensions.get("window")
+
+// Enhanced types for rewards and special offers
+// type Reward = {
+//   id: string
+//   title: string
+//   description?: string
+//   points_required: number
+//   category?: string
+//   image_url?: string
+//   stock_quantity?: number
+//   is_sold: boolean
+//   created_at: string
+// }
+
+// type SpecialOffer = {
+//   id: string
+//   title: string
+//   description?: string
+//   points_required: number
+//   original_points?: number
+//   category?: string
+//   image_url?: string
+//   limited_quantity?: number
+//   claimed_count?: number
+//   is_active: boolean
+//   expires_at?: string
+//   created_at: string
+// }
+
+type PurchaseHistory = {
+  id: string
+  item_id: string
+  item_title: string
+  item_type: "reward" | "special_offer"
+  points_used: number
+  quantity: number
+  purchase_date: string
+  status: string
+}
+
+// Reward Image Component
+type RewardImageProps = {
+  imageUrl?: string
+  containerStyle?: any
+}
+
+const RewardImage: React.FC<RewardImageProps> = ({ imageUrl, containerStyle }) => {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  if (!imageUrl || imageError) {
+    return (
+      <View style={[styles.fallbackIconContainer, containerStyle]}>
+        <Feather name="gift" size={32} color={colors.primary} />
+      </View>
+    )
+  }
+
+  return (
+    <View style={[styles.fullImageContainer, containerStyle]}>
+      {imageLoading && (
+        <View style={styles.imageLoadingOverlay}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      )}
+      <Image
+        source={{ uri: imageUrl }}
+        style={styles.fullImage}
+        onError={() => {
+          setImageError(true)
+          setImageLoading(false)
+        }}
+        onLoad={() => setImageLoading(false)}
+        onLoadStart={() => setImageLoading(true)}
+        resizeMode="cover"
+      />
+    </View>
+  )
+}
+
+// Full Screen Detail Modal Component
+const DetailModal: React.FC<{
+  visible: boolean
+  onClose: () => void
+  item: Reward | SpecialOffer | null
+  type: "reward" | "offer"
+  userPoints: number
+  onClaim: (item: Reward | SpecialOffer) => void
+}> = ({ visible, onClose, item, type, userPoints, onClaim }) => {
+  if (!item) return null
+
+  const canAfford = userPoints >= item.points_required
+  const isOffer = type === "offer"
+  const offer = isOffer ? (item as SpecialOffer) : null
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={styles.modalContainer}>
+        <StatusBar style="dark" />
+
+        {/* Header */}
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Feather name="x" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.modalHeaderTitle}>{isOffer ? "Special Offer" : "Reward Details"}</Text>
+          <View style={styles.closeButton} />
+        </View>
+
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          {/* Hero Image */}
+          <View style={styles.modalImageContainer}>
+            <RewardImage imageUrl={item.image_url ?? undefined} containerStyle={styles.modalImage} />
+            {isOffer && (
+              <View style={styles.modalOfferBadge}>
+                <View style={styles.offerBadgeGradient}>
+                  <Feather name="zap" size={16} color="white" />
+                  <Text style={styles.modalOfferBadgeText}>LIMITED TIME</Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Content */}
+          <View style={styles.modalDetailsContainer}>
+            <Text style={[styles.modalTitle, !canAfford && styles.disabledText]}>{item.title}</Text>
+
+            {item.category && <Text style={styles.modalCategory}>{item.category.toUpperCase()}</Text>}
+
+            <Text style={[styles.modalDescription, !canAfford && styles.disabledText]}>{item.description}</Text>
+
+            {/* Points Section */}
+            <View style={styles.modalPointsSection}>
+              <View style={styles.modalPointsContainer}>
+                {isOffer && offer?.original_points && (
+                  <View style={styles.modalPricingRow}>
+                    <View style={styles.modalCurrentPoints}>
+                      <Feather name="star" size={20} color={canAfford ? "#FFD700" : "#999"} />
+                      <Text style={[styles.modalPointsText, !canAfford && styles.disabledText]}>
+                        Get it for {item.points_required} pts
+                      </Text>
+                    </View>
+                    <Text style={styles.modalOriginalPoints}>{offer.original_points} pts</Text>
+
+                    <View style={styles.modalSavingsBadge}>
+                      <Text style={styles.modalSavingsText}>
+                        Save {offer.original_points - item.points_required} PTS!
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {(!isOffer || !offer?.original_points) && (
+                  <View style={styles.modalCurrentPoints}>
+                    <Feather name="star" size={20} color={canAfford ? "#FFD700" : "#999"} />
+                    <Text style={[styles.modalPointsText, !canAfford && styles.disabledText]}>
+                      {item.points_required} points
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {!canAfford && (
+                <View style={styles.modalInsufficientBadge}>
+                  <Feather name="lock" size={16} color="#EF4444" />
+                  <Text style={styles.modalInsufficientText}>
+                    Need {(item.points_required - userPoints).toLocaleString()} more points
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Your Points */}
+            <View style={styles.modalUserPointsSection}>
+              <Text style={styles.modalUserPointsLabel}>Your Points</Text>
+              <View style={styles.modalUserPointsContainer}>
+                <Feather name="star" size={18} color="#FFD700" />
+                <Text style={styles.modalUserPointsText}>{userPoints.toLocaleString()} points</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Action Button */}
+        <View style={styles.modalFooter}>
+          <TouchableOpacity
+            style={[styles.modalActionButton, !canAfford && styles.modalActionButtonDisabled]}
+            onPress={() => onClaim(item)}
+            disabled={!canAfford}
+          >
+            <Text style={[styles.modalActionButtonText, !canAfford && styles.modalActionButtonTextDisabled]}>
+              {!canAfford
+                ? "Insufficient Points"
+                : isOffer
+                  ? `Claim Offer for ${item.points_required} PTS`
+                  : "Add to Cart"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  )
+}
 
 // Achievement icon mapping
 const achievementIconMap = {
@@ -63,17 +268,25 @@ const achievementColorMap = {
 }
 
 export default function PointsScreen() {
-  const { points, redeemPoints, userId, getUserFirstName } = useUserStore()
+  const { points, userId, getUserFirstName } = useUserStore()
+  const { addToCart, totalItems } = useCart()
+  const { showSuccess, showError, showInfo } = useNotifications()
   const router = useRouter()
 
   const [rewards, setRewards] = useState<Reward[]>([])
   const [specialOffers, setSpecialOffers] = useState<SpecialOffer[]>([])
   const [scanHistory, setScanHistory] = useState<ScanHistory[]>([])
+  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistory[]>([])
   const [userStatus, setUserStatus] = useState<UserStatusWithLevel | null>(null)
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<"overview" | "rewards" | "offers" | "history">("overview")
+
+  // Modal states
+  const [detailModalVisible, setDetailModalVisible] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<Reward | SpecialOffer | null>(null)
+  const [modalType, setModalType] = useState<"reward" | "offer">("reward")
 
   useEffect(() => {
     if (userId) {
@@ -81,22 +294,56 @@ export default function PointsScreen() {
     }
   }, [userId])
 
+  // Fetch user purchase history
+  const fetchPurchaseHistory = async (userId: string): Promise<PurchaseHistory[]> => {
+    try {
+      const { data, error } = await supabase.rpc("get_user_purchase_history", {
+        p_user_id: userId,
+      })
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error("Error fetching purchase history:", error)
+      return []
+    }
+  }
+
   const fetchData = async () => {
     if (!userId) return
 
     setLoading(true)
     try {
-      const [rewardsData, offersData, historyData, statusData, achievementsData] = await Promise.all([
-        fetchRewards(),
-        fetchSpecialOffers(),
-        fetchScanHistory(userId),
-        fetchUserStatus(userId),
-        fetchUserAchievements(userId),
-      ])
+      const [rewardsData, offersData, historyData, purchaseHistoryData, statusData, achievementsData] =
+        await Promise.all([
+          fetchRewards(),
+          fetchSpecialOffers(),
+          fetchScanHistory(userId),
+          fetchPurchaseHistory(userId),
+          fetchUserStatus(userId),
+          fetchUserAchievements(userId),
+        ])
 
-      setRewards(rewardsData)
-      setSpecialOffers(offersData)
+      // Filter out sold rewards and rewards with no stock
+      const availableRewards = rewardsData.filter((reward) => {
+        if (reward.is_sold) return false
+        const stockQuantity = Number(reward.stock_quantity)
+        return isNaN(stockQuantity) || stockQuantity > 0
+      })
+
+      // Filter out special offers with no remaining quantity
+      const availableOffers = offersData.filter((offer) => {
+        if (!offer.is_active) return false
+        if (offer.limited_quantity) {
+          const remainingQuantity = offer.limited_quantity - (offer.claimed_count || 0)
+          return remainingQuantity > 0
+        }
+        return true
+      })
+
+      setRewards(availableRewards)
+      setSpecialOffers(availableOffers)
       setScanHistory(historyData)
+      setPurchaseHistory(purchaseHistoryData)
       setUserStatus(statusData)
       setUserAchievements(achievementsData)
 
@@ -104,11 +351,10 @@ export default function PointsScreen() {
       if (statusData) {
         const newAchievements = await checkUserAchievements(userId)
         if (newAchievements.length > 0) {
-          // Show achievement notification
-          Alert.alert(
+          // Show achievement notification using notification context
+          showSuccess(
             "🎉 Achievement Unlocked!",
             `You earned: ${newAchievements.map((a) => a.achievement_name).join(", ")}`,
-            [{ text: "Awesome!", style: "default" }],
           )
           // Refresh achievements
           const updatedAchievements = await fetchUserAchievements(userId)
@@ -117,7 +363,7 @@ export default function PointsScreen() {
       }
     } catch (error) {
       console.error("Error fetching data:", error)
-      Alert.alert("Error", "Failed to load data. Please try again.")
+      showError("Error", "Failed to load data. Please try again.")
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -129,46 +375,88 @@ export default function PointsScreen() {
     fetchData()
   }
 
-  const handleRedeemReward = async (reward: Reward) => {
+  const handleItemPress = (item: Reward | SpecialOffer, type: "reward" | "offer") => {
+    setSelectedItem(item)
+    setModalType(type)
+    setDetailModalVisible(true)
+  }
+
+  const handleClaimItem = useCallback(
+    (item: Reward | SpecialOffer) => {
+      if (!userId) {
+        showError("Login Required", "Please log in to claim rewards.")
+        return
+      }
+
+      if (points < item.points_required) {
+        showError(
+          "Insufficient Points",
+          `You need ${item.points_required - points} more points to claim this ${modalType}.`,
+        )
+        return
+      }
+
+      // Add to cart
+      addToCart({
+        id: item.id,
+        title: item.title,
+        description: item.description || "",
+        points_required: item.points_required,
+        category: item.category || undefined,
+        image_url: item.image_url || undefined,
+      })
+
+      // Show success notification
+      showSuccess(
+        `${modalType === "offer" ? "Offer Claimed!" : "Added to Cart!"}`,
+        `${item.title} has been added to your cart.`,
+      )
+
+      // Close modal and navigate to cart
+      setDetailModalVisible(false)
+      setTimeout(() => {
+        router.push("../store/Checkout")
+      }, 1000)
+    },
+    [userId, points, modalType, addToCart, showSuccess, showError, router],
+  )
+
+  const handleAddToCart = (reward: Reward) => {
     if (!userId) {
-      Alert.alert("Login Required", "Please log in to redeem rewards.")
+      showError("Login Required", "Please log in to add rewards to cart.")
       return
     }
 
     if (points < reward.points_required) {
-      Alert.alert(
-        "Insufficient Points",
-        `You need ${reward.points_required - points} more points to redeem this reward.`,
-      )
+      showError("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
       return
     }
 
-    Alert.alert(
-      "Redeem Reward",
-      `Are you sure you want to redeem "${reward.title}" for ${reward.points_required} points?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Redeem",
-          onPress: async () => {
-            try {
-              const success = await redeemReward(userId, reward.id, reward.points_required)
-              if (success) {
-                // Also update local points
-                await redeemPoints(reward.points_required)
-                Alert.alert("Success!", `You have successfully redeemed "${reward.title}".`)
-                fetchData() // Refresh data
-              } else {
-                Alert.alert("Error", "Failed to redeem reward. Please try again.")
-              }
-            } catch (error) {
-              console.error("Error redeeming reward:", error)
-              Alert.alert("Error", "Something went wrong. Please try again.")
-            }
-          },
-        },
-      ],
-    )
+    // Add to cart
+    addToCart({
+      id: reward.id,
+      title: reward.title,
+      description: reward.description || "",
+      points_required: reward.points_required,
+      category: reward.category || undefined,
+      image_url: reward.image_url || undefined,
+    })
+
+    // Show success notification
+    showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
+
+    // Navigate to cart after a short delay
+    setTimeout(() => {
+      router.push("../store/Checkout")
+    }, 1000)
+  }
+
+  const handleRedeemReward = async (reward: Reward) => {
+    handleItemPress(reward, "reward")
+  }
+
+  const handleClaimOffer = (offer: SpecialOffer) => {
+    handleItemPress(offer, "offer")
   }
 
   const formatDate = (dateString: string) => {
@@ -213,227 +501,244 @@ export default function PointsScreen() {
 
   const renderOverview = () => (
     <>
-      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
-    <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
-        
-      <View style={{ paddingTop: 20 }}></View>
-      {/* Status Card */}
-      <PointsStatusCard
-        userFirstName={getUserFirstName()}
-        points={points}
-        name={true}
-        userStatus={userStatus}
-        animationDelay={100}
-      />
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
+        <View style={{ paddingTop: 20 }}></View>
+        {/* Status Card */}
+        <PointsStatusCard
+          userFirstName={getUserFirstName()}
+          points={points}
+          name={true}
+          userStatus={userStatus}
+          animationDelay={100}
+        />
 
-      {/* Quick Stats */}
-      <Animated.View entering={FadeInUp.duration(600).delay(200)} style={styles.quickStats}>
-        <View style={styles.statCard}>
-          <Feather name="zap" size={24} color="#FF6B35" />
-          <Text style={styles.statValue}>{userStatus?.current_streak || 0}</Text>
-          <Text style={styles.statLabel}>Day Streak</Text>
-        </View>
-        <View style={styles.statCard}>
-          <MaterialCommunityIcons name="qrcode-scan" size={24} color="#4ECDC4" />
-          <Text style={styles.statValue}>{userStatus?.total_scans || 0}</Text>
-          <Text style={styles.statLabel}>Games Scanned</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Feather name="trending-up" size={24} color="#45B7D1" />
-          <Text style={styles.statValue}>{userAchievements.length}</Text>
-          {userAchievements.length < 2 ? (
-            <Text style={styles.statLabel}>Achievement</Text>
-            ) : (
-            <Text style={styles.statLabel}>Achievements</Text>
-            )}
-        </View>
-      </Animated.View>
+        {/* Quick Stats */}
+        <Animated.View entering={FadeInUp.duration(600).delay(200)} style={styles.quickStats}>
+          <View style={styles.statCard}>
+            <Feather name="zap" size={24} color="#FF6B35" />
+            <Text style={styles.statValue}>{userStatus?.current_streak || 0}</Text>
+            <Text style={styles.statLabel}>Day Streak</Text>
+          </View>
+          <View style={styles.statCard}>
+            <MaterialCommunityIcons name="qrcode-scan" size={24} color="#4ECDC4" />
+            <Text style={styles.statValue}>{userStatus?.total_scans || 0}</Text>
+            <Text style={styles.statLabel}>Games Scanned</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Feather name="shopping-bag" size={24} color="#45B7D1" />
+            <Text style={styles.statValue}>{purchaseHistory.length}</Text>
+            <Text style={styles.statLabel}>Purchases</Text>
+          </View>
+        </Animated.View>
 
-     
-      {/* Featured Rewards */}
-      <Animated.View entering={FadeInUp.duration(600).delay(400)} style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Featured Rewards</Text>
-          <TouchableOpacity onPress={() => setActiveTab("rewards")}>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        {rewards.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-            {rewards.slice(0, 3).map((reward) => (
-              <TouchableOpacity
-                key={reward.id}
-                style={styles.featuredRewardCard}
-                onPress={() => handleRedeemReward(reward)}
-              >
-                <View style={styles.rewardImageContainer}>
-                  <Feather name="gift" size={32} color={colors.primary} />
-                </View>
-                <Text style={styles.rewardTitle} numberOfLines={2}>
-                  {reward.title}
-                </Text>
-                <View style={styles.rewardPoints}>
-                  <Feather name="star" size={14} color="#FFD700" />
-                  <Text style={styles.rewardPointsText}>{reward.points_required}</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.rewardButton, points < reward.points_required && styles.rewardButtonDisabled]}
-                >
-                  <Text
-                    style={[
-                      styles.rewardButtonText,
-                      points < reward.points_required && styles.rewardButtonTextDisabled,
-                    ]}
+        {/* Featured Rewards */}
+        <Animated.View entering={FadeInUp.duration(600).delay(400)} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Featured Rewards</Text>
+            <TouchableOpacity onPress={() => setActiveTab("rewards")}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          {rewards.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              {rewards.slice(0, 3).map((reward) => {
+                const canAfford = points >= reward.points_required
+                return (
+                  <TouchableOpacity
+                    key={reward.id}
+                    style={[styles.featuredRewardCard, !canAfford && styles.featuredRewardCardDisabled]}
+                    onPress={() => handleRedeemReward(reward)}
                   >
-                    {points < reward.points_required ? "Need More" : "Redeem"}
-                  </Text>
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : (
-          <View style={styles.emptyState}>
-            <Feather name="gift" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyStateText}>No rewards available</Text>
-            <Text style={styles.emptyStateSubtext}>Check back soon for new rewards!</Text>
-          </View>
-        )}
-      </Animated.View>
-
-       {/* Recent Activity */}
-       <Animated.View entering={FadeInUp.duration(600).delay(300)} style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <TouchableOpacity onPress={() => setActiveTab("history")}>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-        {scanHistory.length > 0 ? (
-          scanHistory.slice(0, 3).map((scan) => (
-            <View key={scan.id} style={styles.activityCard}>
-              <View style={styles.activityIcon}>
-                <Feather name="check-circle" size={20} color="#10B981" />
-              </View>
-              <View style={styles.activityInfo}>
-                <Text style={styles.activityTitle}>{scan.description}</Text>
-                <Text style={styles.activityDate}>{formatDate(scan.scanned_at || scan.created_at)}</Text>
-              </View>
-              <View style={styles.activityPoints}>
-                <Text style={styles.activityPointsValue}>+{scan.points}</Text>
-              </View>
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Feather name="activity" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyStateText}>No scan history yet</Text>
-            <Text style={styles.emptyStateSubtext}>Start scanning QR codes at games to earn points!</Text>
-          </View>
-        )}
-      </Animated.View>
-
-
-      {/* Enhanced Achievements Section */}
-      <Animated.View entering={FadeInUp.duration(600).delay(500)} style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <TouchableOpacity onPress={() => setActiveTab("history")}>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-
-        {userAchievements.length > 0 ? (
-          <View style={styles.achievementsContainer}>
-            {userAchievements.slice(0, 6).map((achievement) => {
-              const iconName = getAchievementIcon(achievement)
-              const iconColor = getAchievementColor(achievement)
-
-              return (
-                <Animated.View
-                  key={achievement.id}
-                  entering={FadeInUp.duration(400).delay(100 * userAchievements.indexOf(achievement))}
-                  style={styles.achievementCard}
-                >
-                  <View style={[styles.achievementIconContainer, { backgroundColor: `${iconColor}20` }]}>
-                    <Feather name={iconName as any} size={24} color={iconColor} />
-                  </View>
-                  <View style={styles.achievementContent}>
-                    <Text style={styles.achievementTitle}>{achievement.achievement_name}</Text>
-                    <Text style={styles.achievementDescription} numberOfLines={2}>
-                      {achievement.achievement_description || "Complete special tasks to earn points"}
+                    {!canAfford && <View style={styles.rewardOverlay} />}
+                    <View style={styles.rewardImageContainer}>
+                      <RewardImage
+                        imageUrl={reward.image_url ?? undefined}
+                        containerStyle={styles.rewardImageWrapper}
+                      />
+                    </View>
+                    <Text style={[styles.rewardTitle, !canAfford && styles.disabledText]} numberOfLines={2}>
+                      {reward.title}
                     </Text>
-                    <View style={styles.achievementMeta}>
-                      <View style={styles.achievementPoints}>
-                        <Feather name="star" size={12} color="#FFD700" />
-                        <Text style={styles.achievementPointsText}>{achievement.points_earned || 0} points</Text>
-                      </View>
-                      <Text style={styles.achievementDate}>
-                        {achievement.earned_at ? formatDate(achievement.earned_at) : "Recently earned"}
+                    <View style={styles.rewardPoints}>
+                      <Feather name="star" size={14} color={canAfford ? "#FFD700" : "#999"} />
+                      <Text style={[styles.rewardPointsText, !canAfford && styles.disabledText]}>
+                        {reward.points_required}
                       </Text>
                     </View>
-                  </View>
-                </Animated.View>
-              )
-            })}
+                    <TouchableOpacity
+                      style={[styles.rewardButton, !canAfford && styles.rewardButtonDisabled]}
+                      onPress={(e) => {
+                        e.stopPropagation()
+                        if (canAfford) {
+                          handleAddToCart(reward)
+                        }
+                      }}
+                      disabled={!canAfford}
+                    >
+                      <Text style={[styles.rewardButtonText, !canAfford && styles.rewardButtonTextDisabled]}>
+                        {!canAfford ? "Not Enough PTS" : "Add to Cart"}
+                      </Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                )
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyState}>
+              <Feather name="gift" size={48} color={colors.textSecondary} />
+              <Text style={styles.emptyStateText}>No rewards available</Text>
+              <Text style={styles.emptyStateSubtext}>Check back soon for new rewards!</Text>
+            </View>
+          )}
+        </Animated.View>
+
+        {/* Recent Activity */}
+        <Animated.View entering={FadeInUp.duration(600).delay(300)} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <TouchableOpacity onPress={() => setActiveTab("history")}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={styles.emptyAchievements}>
-            <Feather name="award" size={48} color={colors.textSecondary} />
-            <Text style={styles.emptyStateText}>No achievements yet</Text>
-            <Text style={styles.emptyStateSubtext}>Keep scanning to unlock achievements!</Text>
+          {scanHistory.length > 0 ? (
+            scanHistory.slice(0, 3).map((scan) => (
+              <View key={scan.id} style={styles.activityCard}>
+                <View style={styles.activityIcon}>
+                  <Feather name="check-circle" size={20} color="#10B981" />
+                </View>
+                <View style={styles.activityInfo}>
+                  <Text style={styles.activityTitle}>{scan.description}</Text>
+                  <Text style={styles.activityDate}>{formatDate(scan.scanned_at || scan.created_at)}</Text>
+                </View>
+                <View style={styles.activityPoints}>
+                  <Text style={styles.activityPointsValue}>+{scan.points}</Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Feather name="activity" size={48} color={colors.textSecondary} />
+              <Text style={styles.emptyStateText}>No scan history yet</Text>
+              <Text style={styles.emptyStateSubtext}>Start scanning QR codes at games to earn points!</Text>
+            </View>
+          )}
+        </Animated.View>
+
+        {/* Enhanced Achievements Section */}
+        <Animated.View entering={FadeInUp.duration(600).delay(500)} style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Achievements</Text>
+            <TouchableOpacity onPress={() => setActiveTab("history")}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </Animated.View>
-    </ScrollView>
+
+          {userAchievements.length > 0 ? (
+            <View style={styles.achievementsContainer}>
+              {userAchievements.slice(0, 6).map((achievement) => {
+                const iconName = getAchievementIcon(achievement)
+                const iconColor = getAchievementColor(achievement)
+
+                return (
+                  <Animated.View
+                    key={achievement.id}
+                    entering={FadeInUp.duration(400).delay(100 * userAchievements.indexOf(achievement))}
+                    style={styles.achievementCard}
+                  >
+                    <View style={[styles.achievementIconContainer, { backgroundColor: `${iconColor}20` }]}>
+                      <Feather name={iconName as any} size={24} color={iconColor} />
+                    </View>
+                    <View style={styles.achievementContent}>
+                      <Text style={styles.achievementTitle}>{achievement.achievement_name}</Text>
+                      <Text style={styles.achievementDescription} numberOfLines={2}>
+                        {achievement.achievement_description || "Complete special tasks to earn points"}
+                      </Text>
+                      <View style={styles.achievementMeta}>
+                        <View style={styles.achievementPoints}>
+                          <Feather name="star" size={12} color="#FFD700" />
+                          <Text style={styles.achievementPointsText}>{achievement.points_earned || 0} points</Text>
+                        </View>
+                        <Text style={styles.achievementDate}>
+                          {achievement.earned_at ? formatDate(achievement.earned_at) : "Recently earned"}
+                        </Text>
+                      </View>
+                    </View>
+                  </Animated.View>
+                )
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyAchievements}>
+              <Feather name="award" size={48} color={colors.textSecondary} />
+              <Text style={styles.emptyStateText}>No achievements yet</Text>
+              <Text style={styles.emptyStateSubtext}>Keep scanning to unlock achievements!</Text>
+            </View>
+          )}
+        </Animated.View>
+      </ScrollView>
     </>
   )
-
-  // ... rest of the render methods remain the same ...
 
   const renderRewards = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       {rewards.length > 0 ? (
-        rewards.map((reward) => (
-          <Animated.View key={reward.id} entering={FadeInUp.duration(400)} style={styles.rewardCard}>
-            <View style={styles.rewardCardContent}>
-              <View style={styles.rewardCardHeader}>
-                <View style={styles.rewardIconContainer}>
-                  <Feather name="gift" size={24} color={colors.primary} />
+        rewards.map((reward) => {
+          const canAfford = points >= reward.points_required
+          return (
+            <Animated.View key={reward.id} entering={FadeInUp.duration(400)} style={styles.rewardCard}>
+              <TouchableOpacity style={styles.rewardCardContent} onPress={() => handleRedeemReward(reward)}>
+                <View style={styles.rewardCardHeader}>
+                  <View style={styles.rewardIconContainer}>
+                    <RewardImage imageUrl={reward.image_url ?? undefined} containerStyle={styles.rewardImageWrapper} />
+                  </View>
+                  <View style={styles.rewardCardInfo}>
+                    <Text style={[styles.rewardCardTitle, !canAfford && styles.disabledText]}>{reward.title}</Text>
+                    <Text style={styles.rewardCardCategory}>{(reward.category || "REWARD").toUpperCase()}</Text>
+                    {reward.stock_quantity && reward.stock_quantity <= 5 && (
+                      <View style={styles.stockWarning}>
+                        <Feather name="alert-triangle" size={12} color="#F59E0B" />
+                        <Text style={styles.stockWarningText}>Only {reward.stock_quantity} left!</Text>
+                      </View>
+                    )}
+                    {!canAfford && (
+                      <View style={styles.insufficientBadge}>
+                        <Feather name="lock" size={12} color="#EF4444" />
+                        <Text style={styles.insufficientText}>
+                          Need {(reward.points_required - points).toLocaleString()} more
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.rewardCardInfo}>
-                  <Text style={styles.rewardCardTitle}>{reward.title}</Text>
-                  <Text style={styles.rewardCardCategory}>{(reward.category || "REWARD").toUpperCase()}</Text>
-                  {reward.popularity_score && (
-                    <View style={styles.popularityBadge}>
-                      <Feather name="trending-up" size={12} color="#10B981" />
-                      <Text style={styles.popularityText}>{reward.popularity_score}% popular</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-              <Text style={styles.rewardCardDescription}>{reward.description}</Text>
-              <View style={styles.rewardCardFooter}>
-                <View style={styles.rewardCardPoints}>
-                  <Feather name="star" size={16} color="#FFD700" />
-                  <Text style={styles.rewardCardPointsText}>{reward.points_required} points</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.rewardCardButton, points < reward.points_required && styles.rewardCardButtonDisabled]}
-                  onPress={() => handleRedeemReward(reward)}
-                >
-                  <Text
-                    style={[
-                      styles.rewardCardButtonText,
-                      points < reward.points_required && styles.rewardCardButtonTextDisabled,
-                    ]}
+                <Text style={[styles.rewardCardDescription, !canAfford && styles.disabledText]}>
+                  {reward.description}
+                </Text>
+                <View style={styles.rewardCardFooter}>
+                  <View style={styles.rewardCardPoints}>
+                    <Feather name="star" size={16} color={canAfford ? "#FFD700" : "#999"} />
+                    <Text style={[styles.rewardCardPointsText, !canAfford && styles.disabledText]}>
+                      {reward.points_required} points
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.rewardCardButton, !canAfford && styles.rewardCardButtonDisabled]}
+                    onPress={(e) => {
+                      e.stopPropagation()
+                      if (canAfford) {
+                        handleAddToCart(reward)
+                      }
+                    }}
+                    disabled={!canAfford}
                   >
-                    {points < reward.points_required ? "Insufficient Points" : "Redeem Now"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
-        ))
+                    <Text style={[styles.rewardCardButtonText, !canAfford && styles.rewardCardButtonTextDisabled]}>
+                      {!canAfford ? "Insufficient Points" : "Add to Cart"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          )
+        })
       ) : (
         <View style={styles.emptyState}>
           <Feather name="gift" size={64} color={colors.textSecondary} />
@@ -447,42 +752,102 @@ export default function PointsScreen() {
   const renderOffers = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       {specialOffers.length > 0 ? (
-        specialOffers.map((offer) => (
-          <Animated.View key={offer.id} entering={FadeInUp.duration(400)} style={styles.offerCard}>
-            <View style={styles.offerBadge}>
-              <Feather name="zap" size={12} color="white" />
-              <Text style={styles.offerBadgeText}>LIMITED TIME</Text>
-            </View>
-            <View style={styles.offerContent}>
-              <View style={styles.offerHeader}>
-                <Text style={styles.offerTitle}>{offer.title}</Text>
-                <View style={styles.offerPricing}>
-                  {offer.original_points && <Text style={styles.originalPrice}>{offer.original_points}</Text>}
-                  <Text style={styles.offerPrice}>{offer.points_required} pts</Text>
+        specialOffers.map((offer) => {
+          const canAfford = points >= offer.points_required
+          const remainingQuantity = offer.limited_quantity ? offer.limited_quantity - (offer.claimed_count || 0) : null
+
+          return (
+            <Animated.View key={offer.id} entering={FadeInUp.duration(400)} style={styles.offerCard}>
+              <TouchableOpacity style={styles.offerCardTouchable} onPress={() => handleClaimOffer(offer)}>
+                <View style={styles.offerBadge}>
+                  <Feather name="zap" size={12} color="white" />
+                  <Text style={styles.offerBadgeText}>LIMITED TIME</Text>
                 </View>
-              </View>
-              <Text style={styles.offerDescription}>{offer.description}</Text>
-              {offer.limited_quantity && (
-                <View style={styles.quantityInfo}>
-                  <View style={styles.quantityBar}>
-                    <View
-                      style={[
-                        styles.quantityFill,
-                        { width: `${((offer.claimed_count || 0) / offer.limited_quantity) * 100}%` },
-                      ]}
-                    />
+
+                <View style={styles.offerContent}>
+                  {/* Header with image */}
+                  <View style={styles.offerCardHeader}>
+                    <View style={styles.offerImageContainer}>
+                      <RewardImage imageUrl={offer.image_url ?? undefined} containerStyle={styles.offerImageWrapper} />
+                    </View>
+                    <View style={styles.offerCardInfo}>
+                      <Text style={[styles.offerTitle, !canAfford && styles.disabledText]}>{offer.title}</Text>
+                      {offer.category && <Text style={styles.offerCategory}>{offer.category.toUpperCase()}</Text>}
+
+                      {/* Stock warning for limited offers */}
+                      {remainingQuantity && remainingQuantity <= 5 && (
+                        <View style={styles.stockWarning}>
+                          <Feather name="alert-triangle" size={12} color="#F59E0B" />
+                          <Text style={styles.stockWarningText}>Only {remainingQuantity} left!</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                  <Text style={styles.quantityText}>
-                    {offer.limited_quantity - (offer.claimed_count || 0)} of {offer.limited_quantity} left
+
+                  <Text style={[styles.offerDescription, !canAfford && styles.disabledText]}>
+                    {offer.description || "Limited time special offer"}
                   </Text>
+
+                  {/* Points and Discount Section */}
+                  <View style={styles.offerPricingSection}>
+                    <View style={styles.offerPricingRow}>
+                      {offer.original_points && (
+                        <View style={styles.originalPriceContainer}>
+                          <Text style={styles.originalPriceLabel}>Regular Price</Text>
+                          <Text style={[styles.originalPrice, !canAfford && styles.disabledText]}>
+                            {offer.original_points} pts
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={styles.currentPriceContainer}>
+                        <Text style={styles.offerPriceLabel}>Special Price</Text>
+                        <View style={styles.offerPriceRow}>
+                          <Feather name="star" size={16} color={canAfford ? "#FFD700" : "#999"} />
+                          <Text style={[styles.offerPrice, !canAfford && styles.disabledText]}>
+                            {offer.points_required} pts
+                          </Text>
+                        </View>
+                      </View>
+
+                      {offer.original_points && (
+                        <View style={styles.savingsBadge}>
+                          <Text style={styles.savingsText}>
+                            Save {offer.original_points - offer.points_required} PTS!
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {!canAfford && (
+                    <View style={styles.offerInsufficientBadge}>
+                      <Feather name="lock" size={12} color="#EF4444" />
+                      <Text style={styles.offerInsufficientText}>
+                        Need {(offer.points_required - points).toLocaleString()} more points
+                      </Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.offerButton, !canAfford && styles.offerButtonDisabled]}
+                    onPress={(e) => {
+                      e.stopPropagation()
+                      if (canAfford) {
+                        handleClaimItem(offer)
+                      }
+                    }}
+                    disabled={!canAfford}
+                  >
+                    <Text style={[styles.offerButtonText, !canAfford && styles.offerButtonTextDisabled]}>
+                      {!canAfford ? "Insufficient Points" : `Claim Offer for ${offer.points_required} PTS`}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              )}
-              <TouchableOpacity style={styles.offerButton}>
-                <Text style={styles.offerButtonText}>Claim Offer</Text>
               </TouchableOpacity>
-            </View>
-          </Animated.View>
-        ))
+            </Animated.View>
+          )
+        })
       ) : (
         <View style={styles.emptyState}>
           <Feather name="zap" size={64} color={colors.textSecondary} />
@@ -495,6 +860,39 @@ export default function PointsScreen() {
 
   const renderHistory = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
+      {/* Purchase History Section */}
+      <Text style={styles.sectionTitle3}>Purchase History</Text>
+      {purchaseHistory.length > 0 ? (
+        purchaseHistory.map((purchase) => (
+          <Animated.View key={purchase.id} entering={FadeInUp.duration(400)} style={styles.historyCard}>
+            <View style={styles.historyIcon}>
+              <Feather
+                name={purchase.item_type === "special_offer" ? "zap" : "gift"}
+                size={24}
+                color={purchase.item_type === "special_offer" ? "#EF4444" : "#10B981"}
+              />
+            </View>
+            <View style={styles.historyInfo}>
+              <Text style={styles.historyTitle}>{purchase.item_title}</Text>
+              <Text style={styles.historySubtitle}>
+                {purchase.item_type === "special_offer" ? "Special Offer" : "Reward"} • Qty: {purchase.quantity}
+              </Text>
+              <Text style={styles.historyDate}>{formatDate(purchase.purchase_date)}</Text>
+            </View>
+            <View style={styles.historyPoints}>
+              <Text style={styles.historyPointsValue}>-{purchase.points_used}</Text>
+              <Text style={styles.historyPointsLabel}>points</Text>
+            </View>
+          </Animated.View>
+        ))
+      ) : (
+        <View style={styles.emptyState}>
+          <Feather name="shopping-bag" size={64} color={colors.textSecondary} />
+          <Text style={styles.emptyStateText}>No purchases yet</Text>
+          <Text style={styles.emptyStateSubtext}>Start redeeming rewards to see your purchase history!</Text>
+        </View>
+      )}
+
       {/* Scan History Section */}
       <Text style={styles.sectionTitle3}>Scan History</Text>
       {scanHistory.length > 0 ? (
@@ -509,6 +907,7 @@ export default function PointsScreen() {
             </View>
             <View style={styles.historyPoints}>
               <Text style={styles.historyPointsValue}>+{scan.points}</Text>
+              <Text style={styles.historyPointsLabel}>points</Text>
             </View>
           </Animated.View>
         ))
@@ -581,6 +980,7 @@ export default function PointsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <StatusBar style="dark" />
 
       {/* Header with centered title */}
@@ -591,7 +991,14 @@ export default function PointsScreen() {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Rewards & Points</Text>
         </View>
-        <View style={styles.headerRightPlaceholder} />
+        <TouchableOpacity style={styles.cartButton} onPress={() => router.push("../store/Checkout")}>
+          <Feather name="shopping-cart" size={20} color={colors.text} />
+          {totalItems > 0 && (
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{totalItems}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </Animated.View>
 
       {/* Tab Navigation */}
@@ -634,6 +1041,16 @@ export default function PointsScreen() {
           {activeTab === "history" && renderHistory()}
         </ScrollView>
       </View>
+
+      {/* Detail Modal */}
+      <DetailModal
+        visible={detailModalVisible}
+        onClose={() => setDetailModalVisible(false)}
+        item={selectedItem}
+        type={modalType}
+        userPoints={points}
+        onClaim={handleClaimItem}
+      />
     </SafeAreaView>
   )
 }
@@ -641,7 +1058,6 @@ export default function PointsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -685,8 +1101,28 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text,
   },
-  headerRightPlaceholder: {
+  cartButton: {
     width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  cartBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#EF4444",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
   },
   tabContainer: {
     flexDirection: "row",
@@ -736,6 +1172,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    marginBottom: -40,
   },
   quickStats: {
     flexDirection: "row",
@@ -767,62 +1204,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
   },
-  levelProgressSection: {
-    marginBottom: 24,
-    paddingHorizontal: 20,
-  },
-  levelProgressCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  levelProgressHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  currentLevelBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.background,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  currentLevelText: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  progressPercentage: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  progressBarContainer: {
-    marginBottom: 8,
-  },
-  progressBarBackground: {
-    height: 8,
-    backgroundColor: colors.border,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
   section: {
     marginBottom: 24,
   },
@@ -838,20 +1219,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text,
   },
-  sectionTitle2: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.text,
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
   sectionTitle3: {
     fontSize: 20,
     fontWeight: "700",
     color: colors.text,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom:10
+    paddingBottom: 10,
   },
   seeAllText: {
     fontSize: 14,
@@ -918,6 +1292,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    position: "relative",
+  },
+  featuredRewardCardDisabled: {
+    opacity: 0.6,
   },
   rewardImageContainer: {
     width: 60,
@@ -928,6 +1306,41 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
     alignSelf: "center",
+    overflow: "hidden",
+  },
+  rewardImageWrapper: {
+    width: "100%",
+    height: "100%",
+  },
+  fullImageContainer: {
+    width: "100%",
+    height: "100%",
+    position: "relative",
+  },
+  fullImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 30,
+  },
+  fallbackIconContainer: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.05)",
+    borderRadius: 30,
+  },
+  imageLoadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    zIndex: 1,
+    borderRadius: 30,
   },
   rewardTitle: {
     fontSize: 14,
@@ -951,7 +1364,7 @@ const styles = StyleSheet.create({
   },
   rewardButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: 38,
     paddingVertical: 8,
     alignItems: "center",
   },
@@ -965,6 +1378,19 @@ const styles = StyleSheet.create({
   },
   rewardButtonTextDisabled: {
     color: colors.textSecondary,
+  },
+  rewardOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(128, 128, 128, 0.5)",
+    borderRadius: 16,
+    zIndex: 1,
+  },
+  disabledText: {
+    color: "#999",
   },
   // Enhanced achievement styles
   achievementsContainer: {
@@ -1024,42 +1450,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  achievementsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  achievementBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.primary + "15",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  achievementText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.primary,
-    marginLeft: 4,
-  },
   emptyAchievements: {
     alignItems: "center",
     padding: 20,
-  },
-  emptyAchievementsText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.text,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  emptyAchievementsSubtext: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
   },
   rewardCard: {
     backgroundColor: colors.card,
@@ -1072,6 +1465,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     marginHorizontal: 20,
+    position: "relative",
   },
   rewardCardContent: {
     padding: 20,
@@ -1089,6 +1483,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+    overflow: "hidden",
   },
   rewardCardInfo: {
     flex: 1,
@@ -1105,19 +1500,35 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginBottom: 4,
   },
-  popularityBadge: {
+  stockWarning: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#10B981" + "20",
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  stockWarningText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#D97706",
+    marginLeft: 4,
+  },
+  insufficientBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEE2E2",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: "flex-start",
   },
-  popularityText: {
+  insufficientText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#10B981",
+    color: "#EF4444",
     marginLeft: 4,
   },
   rewardCardDescription: {
@@ -1145,7 +1556,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 22,
   },
   rewardCardButtonDisabled: {
     backgroundColor: colors.border,
@@ -1158,23 +1569,27 @@ const styles = StyleSheet.create({
   rewardCardButtonTextDisabled: {
     color: colors.textSecondary,
   },
+  // Special Offer Styles
   offerCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    marginBottom: 16,
-    marginHorizontal: 20,
-    overflow: "hidden",
+    marginTop: 15,
+    marginBottom: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    marginHorizontal: 20,
     position: "relative",
+  },
+  offerCardTouchable: {
+    borderRadius: 16,
   },
   offerBadge: {
     position: "absolute",
-    top: 16,
-    right: 16,
+    top: -5,
+    right: 0,
     backgroundColor: "#EF4444",
     flexDirection: "row",
     alignItems: "center",
@@ -1205,54 +1620,94 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  offerPricing: {
-    alignItems: "flex-end",
-  },
-  originalPrice: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textDecorationLine: "line-through",
-    marginBottom: 2,
-  },
-  offerPrice: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#EF4444",
-  },
   offerDescription: {
     fontSize: 14,
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 16,
   },
-  quantityInfo: {
+  // Points and Discount on Same Row
+  offerPricingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
   },
-  quantityBar: {
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  quantityFill: {
-    height: "100%",
-    backgroundColor: "#EF4444",
-  },
-  quantityText: {
-    fontSize: 12,
+  originalPrice: {
+    fontSize: 14,
     color: colors.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  currentPriceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  offerPrice: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#EF4444",
+    marginLeft: 4,
+  },
+  savingsBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  savingsText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#D97706",
+  },
+  offerInsufficientBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginBottom: 16,
+  },
+  offerInsufficientText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#EF4444",
+    marginLeft: 4,
   },
   offerButton: {
     backgroundColor: "#EF4444",
-    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderRadius: 38,
     paddingVertical: 12,
     alignItems: "center",
+  },
+  offerButtonDisabled: {
+    backgroundColor: colors.border,
   },
   offerButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  offerButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  offerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(128, 128, 128, 0.5)",
+    borderRadius: 16,
+    zIndex: 1,
   },
   historyCard: {
     flexDirection: "row",
@@ -1286,6 +1741,11 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 4,
   },
+  historySubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
   historyDate: {
     fontSize: 12,
     color: colors.textSecondary,
@@ -1296,8 +1756,12 @@ const styles = StyleSheet.create({
   historyPointsValue: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#10B981",
-    marginBottom: 4,
+    color: "#EF4444",
+    marginBottom: 2,
+  },
+  historyPointsLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
   },
   emptyState: {
     alignItems: "center",
@@ -1321,5 +1785,251 @@ const styles = StyleSheet.create({
   achievementsHistorySection: {
     marginTop: 32,
     paddingBottom: 20,
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+  },
+  modalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  modalContent: {
+    flex: 1,
+  },
+  modalImageContainer: {
+    height: 250,
+    backgroundColor: colors.primary + "10",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  modalImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+  },
+  modalOfferBadge: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  offerBadgeGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#EF4444",
+  },
+  modalOfferBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "700",
+    marginLeft: 6,
+  },
+  modalDetailsContainer: {
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 8,
+    lineHeight: 34,
+  },
+  modalCategory: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primary,
+    marginBottom: 16,
+    letterSpacing: 1,
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalPointsSection: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  modalPointsContainer: {
+    alignItems: "flex-start",
+  },
+  modalPricingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+  modalOriginalPoints: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textDecorationLine: "line-through",
+  },
+  modalCurrentPoints: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  modalPointsText: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.text,
+    marginLeft: 8,
+  },
+  modalSavingsBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  modalSavingsText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#D97706",
+  },
+  modalInsufficientBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  modalInsufficientText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#EF4444",
+    marginLeft: 8,
+  },
+  modalUserPointsSection: {
+    backgroundColor: "#F0F9FF",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  modalUserPointsLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  modalUserPointsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modalUserPointsText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.text,
+    marginLeft: 8,
+  },
+  modalFooter: {
+    padding: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalActionButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalActionButtonDisabled: {
+    backgroundColor: colors.border,
+    opacity: 0.6,
+  },
+  modalActionButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+    letterSpacing: 0.5,
+  },
+  modalActionButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  offerCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  offerImageContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#EF444420",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    overflow: "hidden",
+  },
+  offerImageWrapper: {
+    width: "100%",
+    height: "100%",
+  },
+  offerCardInfo: {
+    flex: 1,
+  },
+  offerCategory: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#EF4444",
+    marginBottom: 4,
+  },
+  offerPricingSection: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  originalPriceContainer: {
+    alignItems: "flex-start",
+  },
+  originalPriceLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  offerPriceLabel: {
+    fontSize: 12,
+    color: "#EF4444",
+    marginBottom: 2,
+    fontWeight: "600",
+  },
+  offerPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 })

@@ -34,7 +34,6 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
     const fetchPhotos = async () => {
       try {
         const photos = await getTeamPhotos(teamId)
-        console.log("Fetched photos with URLs:", photos)
         setTeamPhotos(photos)
       } catch (error) {
         console.error("Error fetching team photos:", error)
@@ -85,7 +84,6 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
             console.log("Image load error:", error.nativeEvent.error)
             console.log("Failed URL:", item.photo_url)
           }}
-          onLoad={() => console.log("Image loaded successfully:", item.photo_url)}
         />
         <View style={styles.photoOverlay} />
       </View>
@@ -233,18 +231,21 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           </View>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
-          <Text style={styles.sectionTitle}>About the Team</Text>
 
-          {team.about_team &&
-            Array.isArray(JSON.parse(team.about_team)) &&
-            JSON.parse(team.about_team).map((item: string, index: number) => (
-              <View key={index} style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-                <Feather name="star" size={20} color={team.primaryColor} style={{ marginRight: 6 }} />
-                <Text style={styles.aboutText}>{item}</Text>
-              </View>
-            ))}
-        </Animated.View>
+        {(() => {
+          const aboutArray = JSON.parse(team.about_team || "[]");
+          return Array.isArray(aboutArray) && aboutArray.length > 0 ? (
+            <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
+              <Text style={styles.sectionTitle}>About the Team</Text>
+              {aboutArray.map((item: string, index: number) => (
+                <View key={index} style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+                  <Feather name="star" size={20} color={team.primaryColor} style={{ marginRight: 6 }} />
+                  <Text style={styles.aboutText}>{item}</Text>
+                </View>
+              ))}
+            </Animated.View>
+          ) : null;
+        })()}
 
 
         

@@ -381,6 +381,15 @@ export default function GameDetailsScreen() {
               </View>
               )}
 
+              {/* News Story Link */}
+            {isCompleted && gameNewsStory && (
+              <Pressable style={styles.newsButton} onPress={handleNewsPress}>
+                <Feather name="book-open" size={20} />
+                <Text style={styles.newsButtonText}>Read Game Story</Text>
+                <Feather name="chevron-right" size={20} />
+              </Pressable>
+            )}
+
             </View>
           </Animated.View>
 
@@ -431,20 +440,14 @@ export default function GameDetailsScreen() {
               <Feather name="chevron-right" size={20} color={colors.textSecondary} />
             </Pressable>
 
-            <Pressable style={styles.infoLink} onPress={handleTicketPress}>
-              <Ionicons name="ticket-outline" size={20} color={teamColor} />
-              <Text style={styles.infoLinkText}>Tickets available online or at the entrance</Text>
-              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-            </Pressable>
-
-            {/* News Story Link */}
-            {isCompleted && gameNewsStory && (
-              <Pressable style={styles.newsButton} onPress={handleNewsPress}>
-                <Ionicons name="newspaper-outline" size={20} color={teamColor} />
-                <Text style={styles.newsButtonText}>Read Game Story</Text>
-                <Feather name="chevron-right" size={20} color={teamColor} />
+            {!isCompleted && (
+              <Pressable style={styles.infoLink} onPress={handleTicketPress}>
+                <Ionicons name="ticket-outline" size={20} color={teamColor} />
+                <Text style={styles.infoLinkText}>Tickets available online or at the entrance</Text>
+                <Feather name="chevron-right" size={20} color={colors.textSecondary} />
               </Pressable>
             )}
+
           </Animated.View>
         </View>
       </ScrollView>
@@ -483,6 +486,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: 24,
   },
+  
   errorText: {
     fontSize: 18,
     fontWeight: "500",
@@ -689,9 +693,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 22,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -790,19 +794,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "white",
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: colors.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginTop: 16,
+    paddingVertical: 10,
+    borderRadius: 18,
+    marginTop: 8,
   },
   newsButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "500",
     color: colors.primary,
-    marginLeft: 10,
-    marginRight: 10,
+    marginLeft: 6,
+    marginRight: 6,
   },
 })

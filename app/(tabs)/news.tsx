@@ -20,6 +20,7 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState(true)
   const [searchLoading, setSearchLoading] = useState(false)
   const [teamsLoading, setTeamsLoading] = useState(true)
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false)
 
   // Load teams on component mount
   useEffect(() => {
@@ -119,7 +120,16 @@ export default function NewsScreen() {
     setSearchQuery("")
   }
 
-  // Enhanced dropdown options with better UX (same as calendar screen)
+  const handleSearchFocus = () => {
+    setIsSearchExpanded(true)
+  }
+
+  const handleSearchClose = () => {
+    setIsSearchExpanded(false)
+    setSearchQuery("")
+  }
+
+  // Enhanced dropdown options with better UX
   const teamOptions = useMemo(
     () => [
       {
@@ -131,7 +141,6 @@ export default function NewsScreen() {
         label: team.name,
         value: team.id,
         color: team.primaryColor,
-        subtitle: `${team.sport} • ${team.gender}`,
       })),
     ],
     [teams],
@@ -143,66 +152,77 @@ export default function NewsScreen() {
     : newsArticles
 
   return (
-    <SafeAreaView style={styles.container} edges={["left"]}>
-      <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Feather name="search" size={20} color={colors.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search news..."
-              placeholderTextColor={colors.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <Pressable onPress={clearSearch} style={styles.clearSearchButton}>
-                <Feather name="x" size={20} color={colors.textSecondary} />
-              </Pressable>
-            )}
-          </View>
-        </View>
+    <SafeAreaView style={styles.container} edges={["top"]}>
 
-        {/* Team Selector and Controls */}
-        <View style={styles.teamSelectorContainer}>
-          <View style={styles.teamSelectorRow}>
-            <Text style={styles.filterLabel}>Filter by Team</Text>
-            <EnhancedDropdown
-              options={teamOptions}
-              selectedValue={selectedTeam?.id || null}
-              onSelect={handleTeamSelect}
-              placeholder="Select a team"
-              variant="team"
-            />
-          </View>
-
-          {/* Show All Button */}
-          {selectedTeam && (
-            <View style={styles.controlsRow}>
-              <View style={styles.selectedTeamContainer}>
-                <Feather name="filter" size={16} color={colors.primary} />
-                <Text style={styles.selectedTeamText}>Showing news for: {selectedTeam.name}</Text>
+        {/* Search and Team Selector Row */}
+        <View style={styles.searchAndFilterRow}>
+          {isSearchExpanded ? (
+            // Expanded Search Bar
+            <View style={styles.expandedSearchContainer}>
+              <View style={styles.expandedSearchBar}>
+                <Feather name="search" size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search news"
+                  placeholderTextColor={colors.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  numberOfLines={1}
+                  autoFocus={true}
+                />
+                {searchLoading && <ActivityIndicator size="small" color={colors.primary} style={styles.searchLoader} />}
+                <Pressable onPress={handleSearchClose} style={styles.closeSearchButton}>
+                  <Feather name="x" size={20} color={colors.textSecondary} />
+                </Pressable>
               </View>
-              <Pressable style={styles.clearButton} onPress={clearTeamSelection}>
-                <Text style={styles.clearButtonText}>Show All</Text>
-              </Pressable>
             </View>
+          ) : (
+            // Normal Row Layout
+            <>
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
+                <Pressable style={styles.searchBar} onPress={handleSearchFocus}>
+                  <Feather name="search" size={20} color={colors.textSecondary} />
+                  <Text style={[styles.searchPlaceholder, searchQuery && styles.searchText]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  >
+                    {searchQuery || "Search news"}
+                  </Text>
+                  {searchQuery.length > 0 && (
+                    <Pressable onPress={clearSearch} style={styles.clearSearchButton}>
+                      <Feather name="x" size={18} color={colors.textSecondary} />
+                    </Pressable>
+                  )}
+                </Pressable>
+              </View>
+
+              <View style={styles.dropdownContainer}>
+                <EnhancedDropdown
+                  options={teamOptions}
+                  selectedValue={selectedTeam?.id || null}
+                  onSelect={handleTeamSelect}
+                  placeholder="Select a team"
+                />
+              </View>
+            </>
           )}
         </View>
 
+      
+
         {/* Loading State */}
-        {(loading || searchLoading || teamsLoading) && (
+        {(loading || teamsLoading) && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>
-              {searchLoading ? "Searching..." : teamsLoading ? "Loading teams..." : "Loading news..."}
-            </Text>
+            <Text style={styles.loadingText}>{teamsLoading ? "Loading teams..." : "Loading news..."}</Text>
           </View>
         )}
 
+        <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
+
         {/* News Articles */}
-        {!loading && !searchLoading && !teamsLoading && (
+        {!loading && !teamsLoading && (
           <>
             {filteredArticles.length > 0 ? (
               <View style={styles.newsContainer}>
@@ -212,7 +232,7 @@ export default function NewsScreen() {
               </View>
             ) : (
               <View style={styles.emptyStateContainer}>
-                <Feather name="search" size={48} color={colors.primary + '40'} />
+                <Feather name="search" size={48} color={colors.primary + "40"} />
                 <Text style={styles.emptyStateTitle}>No news articles found</Text>
                 <Text style={styles.emptyStateText}>
                   {searchQuery.trim()
@@ -252,7 +272,7 @@ const styles = StyleSheet.create({
   scrollC: {
     ...Platform.select({
       ios: {
-        marginTop: 100,
+        marginTop: 0,
       },
       android: {
         marginTop: 110,
@@ -260,15 +280,42 @@ const styles = StyleSheet.create({
     }),
     paddingTop: 10,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
+
+  // Header Section - No background
+  headerSection: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "ios" ? 20 : 40,
+    paddingBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: colors.text,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+
+  // Search and Filter Row - Same row layout
+  searchAndFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginTop:40,
     paddingVertical: 12,
+    gap: 12,
+  },
+  searchContainer: {
+    flex: 2, // Takes up more space than dropdown
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 22,
+    flexShrink: 1,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: colors.border,
@@ -277,7 +324,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
       },
       android: {
-        paddingVertical: 2,
+        paddingVertical: 8,
       },
     }),
   },
@@ -288,51 +335,50 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     marginRight: 8,
   },
+  searchPlaceholder: {
+    flex: 1,
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  searchText: {
+    color: colors.text,
+  },
+  searchLoader: {
+    marginRight: 8,
+  },
   clearSearchButton: {
   },
-  teamSelectorContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-  },
-  teamSelectorRow: {
-    gap: 8,
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: colors.text,
-    marginLeft: 4,
-  },
-  controlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-  },
-  selectedTeamContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+
+  // Expanded Search Styles
+  expandedSearchContainer: {
     flex: 1,
   },
-  selectedTeamText: {
-    fontSize: 14,
-    color: colors.text,
-    marginLeft: 8,
-    fontWeight: "500",
-  },
-  clearButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  expandedSearchBar: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
+    marginHorizontal: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  clearButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "white",
+  closeSearchButton: {
   },
+
+  // Dropdown Container
+  dropdownContainer: {
+    flex: 1, // Takes up less space than search
+    minWidth: 120, // Ensure minimum width for dropdown
+  },
+
+  // Content Sections
   loadingContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -362,7 +408,7 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 15,
-    color: colors.text + '80',
+    color: colors.text + "80",
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 18,

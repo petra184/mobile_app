@@ -1,13 +1,16 @@
 "use client"
 
-import type React from "react"
-import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator } from "react-native"
+import React, { useMemo } from "react"
+import { View, Text, StyleSheet, Image, ActivityIndicator, SectionList } from "react-native"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
 import type { Game } from "@/types/game"
+// Your powerful, multi-layout GameCard is imported here.
 import { GameCard } from "@/components/games/new_game_card"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { Feather } from "@expo/vector-icons"
+import { useNotifications } from "@/context/notification-context" // Assuming you have this for notifications
+import { sortGamesByPriority } from '@/utils/sortGame'
 
 interface ScheduleTabProps {
   games: Game[]
@@ -16,28 +19,47 @@ interface ScheduleTabProps {
 
 export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false }) => {
   const router = useRouter()
+  const { showSuccess } = useNotifications()
 
-  // Sort games by date (upcoming first, then past)
-  const sortedGames = [...games].sort((a, b) => {
-    const dateA = new Date(a.date)
-    const dateB = new Date(b.date)
-    return dateA.getTime() - dateB.getTime()
-  })
+  // Use useMemo to efficiently sort and group games only when the `games` prop changes.
+  const sections = useMemo(() => {
+    // 1. Sort all games by priority (Live > Upcoming > Past)
+    const sortedGames = sortGamesByPriority(games)
 
-  // Separate upcoming and past games with proper date comparison
-  const now = new Date()
+    // 2. Group games into different sections in a single pass
+    const liveGames: Game[] = []
+    const upcomingGames: Game[] = []
+    const pastGames: Game[] = []
 
-  const upcomingGames = sortedGames.filter((game) => {
-    const gameDate = new Date(game.date)
-    return gameDate >= now || game.status === "scheduled" || game.status === "live"
-  })
+    for (const game of sortedGames) {
+      if (game.status === 'live') {
+        liveGames.push(game)
+      } else if (game.status === 'scheduled') {
+        upcomingGames.push(game)
+      } else { // Catches 'completed', 'postponed', etc.
+        pastGames.push(game)
+      }
+    }
 
-  const pastGames = sortedGames.filter((game) => {
-    const gameDate = new Date(game.date)
-    return gameDate < now && (game.status === "completed" || game.status === "canceled" || game.status === "postponed")
-  })
+    // 3. Create the data structure for the SectionList component
+    const sectionData = []
+    if (liveGames.length > 0) {
+      sectionData.push({ title: "Live Games", data: liveGames })
+    }
+    if (upcomingGames.length > 0) {
+      sectionData.push({ title: "Upcoming Games", data: upcomingGames })
+    }
+    if (pastGames.length > 0) {
+      // For past games, it's nice to show the most recent first
+      pastGames.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      sectionData.push({ title: "Past Games", data: pastGames })
+    }
+
+    return sectionData
+  }, [games])
 
   const handleGamePress = (game: Game) => {
+    // This is the default action when any card is pressed
     router.push({
       pathname: "../all_cards/game_details",
       params: { id: game.id },
@@ -45,11 +67,16 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
   }
 
   const handleNotifyPress = (game: Game) => {
-    // Handle notification logic here
-    console.log("Notify for game:", game.id)
+    // This will only be called from cards that show the "Notify Me" button (i.e., upcoming games)
+    showSuccess("Notification Set", `You'll be notified about the game on ${new Date(game.date).toLocaleDateString()}`)
   }
 
-  // Enhanced loading state with ActivityIndicator
+  const handleQRScanPress = (game: Game) => {
+    // This will only be called from cards that show the "Scan QR" button (i.e., live or soon-to-start games)
+    console.log("Navigating to QR Scan for game:", game.id)
+    // Example: router.push({ pathname: '/qr-scanner', params: { gameId: game.id } });
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -57,78 +84,33 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
         <Text style={styles.loadingText}>Loading schedule...</Text>
       </View>
     )
-  }
-
-  // Prepare data for FlatList
-  const sections = []
-
-  if (upcomingGames.length > 0) {
-    sections.push({
-      type: "header",
-      title: `Upcoming Games (${upcomingGames.length})`,
-      id: "upcoming-header",
-    })
-    upcomingGames.forEach((game) => {
-      sections.push({
-        type: "game",
-        game,
-        id: `upcoming-${game.id}`,
-      })
-    })
-  }
-
-  if (pastGames.length > 0) {
-    sections.push({
-      type: "header",
-      title: `Past Games (${pastGames.length})`,
-      id: "past-header",
-    })
-    pastGames.forEach((game) => {
-      sections.push({
-        type: "game",
-        game,
-        id: `past-${game.id}`,
-      })
-    })
-  }
-
-  const renderItem = ({ item }: { item: any }) => {
-    if (item.type === "header") {
-      return (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{item.title}</Text>
-        </View>
-      )
-    }
-
-    if (item.type === "game") {
-      return (
-        <GameCard
-          game={item.game}
-          onPress={() => handleGamePress(item.game)}
-          onNotifyPress={() => handleNotifyPress(item.game)}
-        />
-      )
-    }
-
-    return null
-  }
+  } 
+  const renderGameItem = ({ item }: { item: Game }) => (
+    <GameCard
+      game={item} // We pass the game object to the card
+      onPress={handleGamePress} // The card will call this when pressed
+      onNotifyPress={handleNotifyPress} // The card will call this if the "Notify" button is pressed
+      onQRScanPress={handleQRScanPress} // The card will call this if the "QR Scan" button is pressed
+    />
+  )
 
   return (
     <View style={styles.container}>
-      <Image
-        source={require("../../IMAGES/crowd.jpg")}
-        style={styles.backgroundImage}
-      />
-
+      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.content}>
         {sections.length > 0 ? (
-          <FlatList
-            data={sections}
-            renderItem={renderItem}
+          <SectionList
+            sections={sections}
             keyExtractor={(item) => item.id}
+            renderItem={renderGameItem}
+            renderSectionHeader={({ section }) => (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{`${section.title} (${section.data.length})`}</Text>
+              </View>
+            )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
           />
         ) : (
           <View style={styles.emptyContainer}>
@@ -136,12 +118,7 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
               <Feather name="calendar" size={60} color={colors.primary + '40'} />
             </View>
             <Text style={styles.emptyTitle}>No Games Scheduled</Text>
-            <Text style={styles.emptyText}>
-              This team doesn't have any games scheduled yet.
-            </Text>
-            <Text style={styles.emptySubtext}>
-              Check back later for schedule updates!
-            </Text>
+            <Text style={styles.emptyText}>This team doesn't have any games scheduled yet.</Text>
           </View>
         )}
       </Animated.View>
@@ -149,6 +126,7 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
   )
 }
 
+// --- Styles are unchanged ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -156,6 +134,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    paddingHorizontal:5
   },
   backgroundImage: {
     position: "absolute",
@@ -210,12 +189,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: colors.text + '60',
-    textAlign: "center",
-    fontStyle: "italic",
   },
 })
 

@@ -7,6 +7,16 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import { getNewsById, type NewsArticle } from "@/app/actions/news"
 import { Feather } from "@expo/vector-icons"
+import { StatusBar } from "expo-status-bar"
+import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler"
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  runOnJS,
+  interpolate,
+  Extrapolation,
+} from "react-native-reanimated"
 
 export default function NewsDetailsScreen() {
   const router = useRouter()
@@ -14,6 +24,24 @@ export default function NewsDetailsScreen() {
   const [article, setArticle] = useState<NewsArticle | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Zoom functionality with smoother values
+  const scale = useSharedValue(1)
+  const savedScale = useSharedValue(1)
+  const translateX = useSharedValue(0)
+  const translateY = useSharedValue(0)
+  const savedTranslateX = useSharedValue(0)
+  const savedTranslateY = useSharedValue(0)
+  const [isZoomed, setIsZoomed] = useState(false)
+
+  // Smooth spring configuration
+  const springConfig = {
+    damping: 20,
+    stiffness: 90,
+    mass: 0.8,
+    restDisplacementThreshold: 0.01,
+    restSpeedThreshold: 0.01,
+  }
 
   useEffect(() => {
     if (id) {
@@ -53,24 +81,112 @@ export default function NewsDetailsScreen() {
     })
   }
 
+  // Smooth reset zoom function
+  const resetZoom = () => {
+    scale.value = withSpring(1, springConfig)
+    savedScale.value = 1
+    translateX.value = withSpring(0, springConfig)
+    translateY.value = withSpring(0, springConfig)
+    savedTranslateX.value = 0
+    savedTranslateY.value = 0
+    setIsZoomed(false)
+  }
+
+  // Enhanced pinch gesture with smoother scaling
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((event) => {
+      // Smoother scaling with interpolation
+      const newScale = savedScale.value * event.scale
+      // More granular zoom limits with smooth interpolation
+      scale.value = interpolate(newScale, [0.5, 1, 4], [1, 1, 3], Extrapolation.CLAMP)
+
+      // Update zoom state with smoother threshold
+      if (scale.value > 1.05) {
+        runOnJS(setIsZoomed)(true)
+      }
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value
+
+      // Smoother snap back with lower threshold
+      if (scale.value < 1.05) {
+        scale.value = withSpring(1, springConfig)
+        savedScale.value = 1
+        translateX.value = withSpring(0, springConfig)
+        translateY.value = withSpring(0, springConfig)
+        savedTranslateX.value = 0
+        savedTranslateY.value = 0
+        runOnJS(setIsZoomed)(false)
+      }
+    })
+
+  // Enhanced pan gesture with smoother movement
+  const panGesture = Gesture.Pan()
+    .enabled(isZoomed)
+    .onUpdate((event) => {
+      // Smoother panning with velocity consideration
+      translateX.value = savedTranslateX.value + event.translationX * 0.8
+      translateY.value = savedTranslateY.value + event.translationY * 0.8
+    })
+    .onEnd((event) => {
+      // Smooth deceleration based on velocity
+      const velocityFactor = 0.2
+      translateX.value = withSpring(
+        savedTranslateX.value + event.translationX + event.velocityX * velocityFactor,
+        springConfig,
+      )
+      translateY.value = withSpring(
+        savedTranslateY.value + event.translationY + event.velocityY * velocityFactor,
+        springConfig,
+      )
+
+      savedTranslateX.value = translateX.value
+      savedTranslateY.value = translateY.value
+    })
+
+  // Smoother double tap gesture
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (scale.value > 1.05) {
+        // Smooth zoom out
+        runOnJS(resetZoom)()
+      } else {
+        // Smooth zoom in to 2x
+        scale.value = withSpring(2, springConfig)
+        savedScale.value = 2
+        runOnJS(setIsZoomed)(true)
+      }
+    })
+
+  // Combine gestures
+  const composedGesture = Gesture.Simultaneous(Gesture.Race(doubleTapGesture, pinchGesture), panGesture)
+
+  // Enhanced animated style with smoother transforms
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
+    }
+  })
+
   // Loading state
   if (loading) {
     return (
-      <>
+      <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaView style={styles.container} edges={["left"]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>Loading article...</Text>
           </View>
         </SafeAreaView>
-      </>
+      </GestureHandlerRootView>
     )
   }
 
   // Error state
   if (error || !article) {
     return (
-      <>
+      <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaView style={styles.container} edges={["left"]}>
           <View style={styles.notFoundContainer}>
             <Feather name="alert-circle" size={48} color={colors.textSecondary} />
@@ -85,14 +201,22 @@ export default function NewsDetailsScreen() {
             )}
           </View>
         </SafeAreaView>
-      </>
+      </GestureHandlerRootView>
     )
   }
 
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureDetector gesture={composedGesture}>
       <SafeAreaView style={styles.container} edges={["left"]}>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <StatusBar style="dark" />
+        
+          
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!isZoomed} // Disable scroll when zoomed
+          bounces={!isZoomed}
+        >
           {/* Article Image */}
           {article.imageUrl ? (
             <Image source={{ uri: article.imageUrl }} style={styles.image} resizeMode="cover" />
@@ -102,57 +226,47 @@ export default function NewsDetailsScreen() {
             </View>
           )}
 
-          <View style={styles.content}>
+            <Animated.View style={[styles.content, animatedStyle]}>
+              {/* Article Title */}
+              <Text style={styles.title}>{article.title}</Text>
 
-            {/* Article Title */}
-            <Text style={styles.title}>{article.title}</Text>
+              {/* Article Headline */}
+              {article.headline && <Text style={styles.headline}>{article.headline}</Text>}
 
-            {/* Article Headline */}
-            {article.headline && <Text style={styles.headline}>{article.headline}</Text>}
+              {/* Meta Information */}
+              <View style={styles.metaContainer}>
+                <View style={styles.metaItem}>
+                  <Feather name="user" size={16} color={colors.textSecondary} style={styles.metaIcon} />
+                  <Text style={styles.metaText}>{article.author}</Text>
+                </View>
 
-            {/* Meta Information */}
-            <View style={styles.metaContainer}>
-              <View style={styles.metaItem}>
-                <Feather name="user" size={16} color={colors.textSecondary} style={styles.metaIcon} />
-                <Text style={styles.metaText}>{article.author}</Text>
-              </View>
-
-              <View style={styles.metaItem}>
-                <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.metaIcon} />
-                <Text style={styles.metaText}>
-                  {formatDate(article.createdAt)} • {formatTime(article.createdAt)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Team Information */}
-            {article.team && (
-              <View style={styles.teamContainer}>
-                <View style={styles.teamInfo}>
-                  <Feather name="users" size={16} color={colors.primary} />
-                  <Text style={styles.teamText}>
-                    {article.team.name}
+                <View style={styles.metaItem}>
+                  <Feather name="calendar" size={16} color={colors.textSecondary} style={styles.metaIcon} />
+                  <Text style={styles.metaText}>
+                    {formatDate(article.createdAt)} • {formatTime(article.createdAt)}
                   </Text>
                 </View>
               </View>
-            )}
 
-            <View style={styles.divider} />
+              <View style={styles.divider} />
 
-            {/* Article Content */}
-            <View style={styles.articleContent}>
-              {article.content ? (
-                <Text style={styles.contentText}>{article.content}</Text>
-              ) : (
-                <Text style={styles.noContentText}>No content available for this article.</Text>
-              )}
-            </View>
+              {/* Article Content */}
+              <View style={styles.articleContent}>
+                {article.content ? (
+                  <Text style={styles.contentText}>{article.content}</Text>
+                ) : (
+                  <Text style={styles.noContentText}>No content available for this article.</Text>
+                )}
+              </View>
 
               <View style={styles.footerDivider} />
-          </View>
+            </Animated.View>
+          
         </ScrollView>
+        
       </SafeAreaView>
-    </>
+      </GestureDetector>
+    </GestureHandlerRootView>
   )
 }
 
@@ -226,6 +340,27 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
+
+  // Subtle zoom hint - made smaller and less intrusive
+  zoomHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary + "08",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginBottom: 16,
+    alignSelf: "center",
+    opacity: 0.7,
+  },
+  zoomHintText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: "500",
+    marginLeft: 4,
+  },
+
   tagContainer: {
     marginBottom: 16,
   },

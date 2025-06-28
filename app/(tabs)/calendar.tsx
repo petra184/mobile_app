@@ -1,23 +1,38 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { View, Text, StyleSheet, ScrollView, Platform, Pressable, LayoutAnimation, UIManager, Image } from "react-native"
+import { useState, useEffect, useMemo, useCallback } from "react"
+
+import { View, Text, StyleSheet, ScrollView, Platform, Pressable, LayoutAnimation, UIManager } from "react-native"
+
 import { SafeAreaView } from "react-native-safe-area-context"
+
 import { useRouter } from "expo-router"
+
 import { LinearGradient } from "expo-linear-gradient"
+
 import { colors } from "@/constants/colors"
+
 import type { Team } from "@/app/actions/teams"
+
 import type { Team as DbTeam } from "@/types"
+
 import type { Game } from "@/types/game"
+
 import { CalendarView } from "@/components/games/CalendarView"
+
 import { GameCard } from "@/components/games/new_game_card"
+
 import { EnhancedDropdown } from "@/components/ui/new_dropdown"
+
 import { Feather } from "@expo/vector-icons"
+
 import { getTeams } from "@/app/actions/teams"
 
+import { useNotifications } from "@/context/notification-context"
+
 // Enable LayoutAnimation for smooth transitions on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true)
 }
 
 // Helper function to convert UI Team to Database Team
@@ -42,33 +57,38 @@ function convertUiTeamToDbTeam(uiTeam: Team): DbTeam {
   }
 }
 
-// --- NEW: Interactive, Selectable Game Item Component ---
+// --- OPTIMIZED: Interactive, Selectable Game Item Component ---
 const SelectableGameItem = ({ game }: { game: Game }) => {
+  const { showSuccess } = useNotifications()
   const router = useRouter()
-  const [isExpanded, setIsExpanded] = useState(false)
 
-  const handleToggle = () => {
-    // Animate the layout change
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsExpanded(!isExpanded)
-  }
-
-  const handleGameSelect = () => {
+  const handleGameSelect = useCallback(() => {
     router.push({
       pathname: "../all_cards/game_details",
       params: { id: game.id },
     })
-  }
+  }, [game.id, router])
+
+  const handleNotifyPress = useCallback(
+    (selectedGame: Game) => {
+      try {
+        showSuccess(
+          "Notification Set",
+          `You'll be notified about ${selectedGame.homeTeam?.name} vs ${selectedGame.awayTeam?.name}`,
+        )
+      } catch (error) {
+        console.error("Error showing notification:", error)
+      }
+    },
+    [showSuccess],
+  )
 
   return (
     <View style={styles.selectableGameContainer}>
-      <Pressable onPress={handleToggle}>
-        <GameCard game={game} />
-      </Pressable>
+      <GameCard game={game} onPress={handleGameSelect} onNotifyPress={handleNotifyPress} />
     </View>
   )
 }
-
 
 export default function EnhancedCalendarScreen() {
   const router = useRouter()
@@ -78,54 +98,76 @@ export default function EnhancedCalendarScreen() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [gamesOnSelectedDate, setGamesOnSelectedDate] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtersExpanded, setFiltersExpanded] = useState(false) // Filters start collapsed
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
 
-  useEffect(() => {
-    loadTeams()
-  }, [])
-
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     try {
       const teamsData = await getTeams()
       setTeams(teamsData)
     } catch (error) {
-      console.error("Error loading teams:", error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const handleDateSelect = (date: Date, games: Game[]) => {
+  useEffect(() => {
+    loadTeams()
+  }, [loadTeams])
+
+  const handleDateSelect = useCallback((date: Date, games: Game[]) => {
     setSelectedDate(date)
     setGamesOnSelectedDate(games)
-  }
+  }, [])
 
-  const handleTeamSelect = (teamId: string | null) => {
-    const team = teams.find((t) => t.id === teamId) || null
-    setSelectedTeam(team)
-  }
+  const handleTeamSelect = useCallback(
+    (teamId: string | null) => {
+      const team = teams.find((t) => t.id === teamId) || null
+      setSelectedTeam(team)
+    },
+    [teams],
+  )
 
-  const handleLocationTypeChange = (type: string | null) => {
+  const handleLocationTypeChange = useCallback((type: string | null) => {
     setLocationType(type)
-  }
+  }, [])
 
-  const clearAllFilters = () => {
+  const clearTeamFilter = useCallback(() => {
     setSelectedTeam(null)
+  }, [])
+
+  const clearLocationFilter = useCallback(() => {
     setLocationType(null)
-  }
+  }, [])
 
-  const toggleFilters = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFiltersExpanded(!filtersExpanded)
-  }
+  const toggleFilters = useCallback(() => {
+    // Use requestAnimationFrame to avoid insertion effect conflicts
+    requestAnimationFrame(() => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+      setFiltersExpanded((prev) => !prev)
+    })
+  }, [filtersExpanded])
 
-  const formatSelectedDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
+  const formatSelectedDate = useCallback((date: Date) => {
+    const formatted = date.toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
       day: "numeric",
     })
-  }
+    return formatted
+  }, [])
+
+  const getLocationDisplayName = useCallback((type: string) => {
+    switch (type) {
+      case "home":
+        return "Home Games"
+      case "away":
+        return "Away Games"
+      case "neutral":
+        return "Neutral Games"
+      default:
+        return ""
+    }
+  }, [])
 
   const teamOptions = useMemo(
     () => [
@@ -138,72 +180,122 @@ export default function EnhancedCalendarScreen() {
         label: team.name,
         value: team.id,
         color: team.primaryColor,
-        subtitle: `${team.sport} • ${team.gender}`,
       })),
     ],
     [teams],
   )
 
-  const locationOptions = [
-    {
-      label: "All Games",
-      value: null,
-      icon: "globe",
-    },
-    {
-      label: "Home Games",
-      value: "home",
-      subtitle: "Games at home venue",
-      icon: "home",
-    },
-    {
-      label: "Away Games",
-      value: "away",
-      subtitle: "Games at opponent venue",
-      icon: "map-pin",
-    },
-    {
-      label: "Neutral Games",
-      value: "neutral",
-      subtitle: "Games at neutral venue",
-      icon: "navigation",
-    },
-  ]
+  const locationOptions = useMemo(
+    () => [
+      {
+        label: "All Games",
+        value: null,
+        icon: "globe",
+      },
+      {
+        label: "Home Games",
+        value: "home",
+        subtitle: "Games at home venue",
+        icon: "home",
+      },
+      {
+        label: "Away Games",
+        value: "away",
+        subtitle: "Games at opponent venue",
+        icon: "map-pin",
+      },
+      {
+        label: "Neutral Games",
+        value: "neutral",
+        subtitle: "Games at neutral venue",
+        icon: "navigation",
+      },
+    ],
+    [],
+  )
 
-  const hasActiveFilters = selectedTeam || locationType
+  const hasActiveFilters = useMemo(() => selectedTeam || locationType, [selectedTeam, locationType])
+
+  const renderGameItem = useCallback(
+    (game: Game) => {
+      return <SelectableGameItem key={game.id} game={game} />
+    },
+    [selectedDate],
+  )
+
+  const getNoGamesMessage = useCallback(() => {
+    if (selectedTeam && locationType) {
+      return `No ${getLocationDisplayName(locationType).toLowerCase()} found for ${selectedTeam.name} on this date.`
+    } else if (selectedTeam) {
+      return `No games found for ${selectedTeam.name} on this date.`
+    } else if (locationType) {
+      return `No ${getLocationDisplayName(locationType).toLowerCase()} found on this date.`
+    }
+    return "There are no games on this date with your current filters."
+  }, [selectedTeam, locationType, getLocationDisplayName])
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {/* NEW: Polished Header */}
-      <LinearGradient colors={[colors.primary, colors.accent]} style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerSubtitle}>Find games by date and team</Text>
-        </View>
-        <Pressable onPress={toggleFilters} style={styles.filterToggle}>
-          <Feather name="sliders" size={20} color="white" />
-        </Pressable>
-      </LinearGradient>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <LinearGradient colors={[colors.primary, colors.accent]} style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerSubtitle}>Find games by date and team</Text>
+          </View>
+          <Pressable onPress={toggleFilters} style={styles.filterToggle}>
+            <Feather name="sliders" size={20} color="white" />
+          </Pressable>
+        </LinearGradient>
 
-
-        {/* NEW: Collapsible Advanced Filters Section */}
+        {/* Collapsible Advanced Filters Section */}
         {filtersExpanded && (
           <View style={styles.filtersSection}>
             <View style={styles.filtersGrid}>
               <View style={styles.filterItem}>
                 <Text style={styles.filterLabel}>Filter by Team</Text>
-                <EnhancedDropdown options={teamOptions} selectedValue={selectedTeam?.id || null} onSelect={handleTeamSelect} placeholder="Select a team" />
+                <EnhancedDropdown
+                  options={teamOptions}
+                  selectedValue={selectedTeam?.id || null}
+                  onSelect={handleTeamSelect}
+                  placeholder="Select a team"
+                />
               </View>
               <View style={styles.filterItem}>
                 <Text style={styles.filterLabel}>Filter by Location</Text>
-                <EnhancedDropdown options={locationOptions} selectedValue={locationType} onSelect={handleLocationTypeChange} placeholder="Game location" />
+                <EnhancedDropdown
+                  options={locationOptions}
+                  selectedValue={locationType}
+                  onSelect={handleLocationTypeChange}
+                  placeholder="Game location"
+                />
               </View>
-              {hasActiveFilters &&
-                <Pressable onPress={clearAllFilters} style={styles.clearFiltersButton}>
-                    <Feather name="x-circle" size={14} color={colors.primary} />
-                    <Text style={styles.clearFiltersButtonText}>Clear All Filters</Text>
-                </Pressable>
-              }
+
+              {/* Active Filters Display */}
+              {hasActiveFilters && (
+                <View style={styles.activeFiltersContainer}>
+                  {selectedTeam && (
+                    <View style={styles.activeFilterChip}>
+                      <Text style={styles.activeFilterText}>{selectedTeam.name}</Text>
+                      <Pressable onPress={clearTeamFilter} style={styles.filterRemoveButton}>
+                        <Feather name="x" size={14} color={colors.primary} />
+                      </Pressable>
+                    </View>
+                  )}
+                  {locationType && (
+                    <View style={styles.activeFilterChip}>
+                      <Text style={styles.activeFilterText}>{getLocationDisplayName(locationType)}</Text>
+                      <Pressable onPress={clearLocationFilter} style={styles.filterRemoveButton}>
+                        <Feather name="x" size={14} color={colors.primary} />
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -228,19 +320,14 @@ export default function EnhancedCalendarScreen() {
             </View>
 
             {gamesOnSelectedDate.length > 0 ? (
-              <View style={styles.gamesList}>
-                {gamesOnSelectedDate.map((game) => (
-                   // NEW: Use the interactive SelectableGameItem component
-                  <SelectableGameItem key={game.id} game={game} />
-                ))}
-              </View>
+              <View style={styles.gamesList}>{gamesOnSelectedDate.map(renderGameItem)}</View>
             ) : (
               <View style={styles.noGamesContainer}>
                 <View style={styles.noGamesIcon}>
                   <Feather name="calendar" size={32} color={colors.textSecondary} />
                 </View>
                 <Text style={styles.noGamesTitle}>No Games Scheduled</Text>
-                <Text style={styles.noGamesText}>There are no games on this date with your current filters.</Text>
+                <Text style={styles.noGamesText}>{getNoGamesMessage()}</Text>
               </View>
             )}
           </View>
@@ -250,12 +337,12 @@ export default function EnhancedCalendarScreen() {
   )
 }
 
-// --- NEW, POLISHED STYLES ---
+// Optimized styles - removed any potential style conflicts
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop:40,
-    backgroundColor: '#F3F4F6', // A slightly off-white background
+    paddingTop: 40,
+    backgroundColor: "#F3F4F6",
   },
   scrollContainer: {
     paddingBottom: 40,
@@ -265,46 +352,73 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 20 : 40,
+    paddingTop: Platform.OS === "ios" ? 20 : 40,
     paddingBottom: 20,
   },
-  headerContent: { flex: 1 },
-  headerTitle: { fontSize: 28, fontWeight: "bold", color: "white" },
-  headerSubtitle: { fontSize: 16, color: "rgba(255, 255, 255, 0.8)" },
-  filterToggle: { padding: 8, backgroundColor: "rgba(255, 255, 255, 0.2)", borderRadius: 20 },
-  
+  headerContent: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "white",
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  filterToggle: {
+    padding: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 20,
+  },
   card: {
     borderRadius: 16,
     marginHorizontal: 16,
     marginTop: 16,
     padding: 8,
   },
-  
   filtersSection: {
     padding: 20,
     paddingBottom: 24,
     borderBottomWidth: 1,
-    borderColor: colors.border
+    borderColor: colors.border,
   },
-  filtersGrid: { gap: 16 },
-  filterItem: { gap: 8 },
-  filterLabel: { fontSize: 14, fontWeight: "500", color: colors.textSecondary },
-  clearFiltersButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    marginTop: 8,
-    borderRadius: 8,
-    backgroundColor: `${colors.primary}1A`,
+  filtersGrid: {
+    gap: 16,
+  },
+  filterItem: {
     gap: 8,
   },
-  clearFiltersButtonText: {
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.textSecondary,
+  },
+  activeFiltersContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  activeFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: `${colors.primary}1A`,
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  activeFilterText: {
     color: colors.primary,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "500",
   },
-
+  filterRemoveButton: {
+    padding: 2,
+  },
   gamesSection: {
     marginTop: 24,
     paddingHorizontal: 16,
@@ -313,63 +427,27 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingLeft: 4,
   },
-  gamesTitle: { fontSize: 22, fontWeight: "bold", color: colors.text },
-  gamesSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
-  
+  gamesTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: colors.text,
+  },
+  gamesSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
   gamesList: {
     gap: 16,
   },
-
-  // SelectableGameItem styles
   selectableGameContainer: {
+    // Simplified container without complex styling
   },
-  expandedContent: {
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderColor: colors.border
-  },
-  qrTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: colors.text,
-  },
-  qrCodeContainer: {
-    padding: 10,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  qrCodeImage: {
-    width: 150,
-    height: 150,
-  },
-  detailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    gap: 8,
-  },
-  detailsButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-
   noGamesContainer: {
     alignItems: "center",
     padding: 40,
-    backgroundColor: 'white',
-    borderRadius: 16
+    backgroundColor: "white",
+    borderRadius: 16,
   },
   noGamesIcon: {
     width: 64,
@@ -380,6 +458,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  noGamesTitle: { fontSize: 18, fontWeight: "600", color: colors.text, marginBottom: 8 },
-  noGamesText: { fontSize: 14, color: colors.textSecondary, textAlign: "center", lineHeight: 20 },
-});
+  noGamesTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  noGamesText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+})

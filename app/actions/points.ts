@@ -34,6 +34,10 @@ export type Reward = {
   description: string
   points_required: number
   category?: string | null
+  is_sold?: boolean | null
+  stock_quantity?: number | null | undefined
+  created_at: string
+  updated_at: string
   popularity_score?: number | null
   image_url?: string | null
 }
@@ -46,6 +50,7 @@ export type SpecialOffer = {
   original_points?: number | null
   start_date: string
   end_date: string
+  is_active: boolean
   limited_quantity?: number | null
   claimed_count?: number | null
   category?: string | null
@@ -148,15 +153,11 @@ export async function fetchSpecialOffers(): Promise<SpecialOffer[]> {
     .from("special_offers")
     .select("*")
     .eq("is_active", true)
-    .lte("start_date", now)
-    .gte("end_date", now)
-    .order("end_date", { ascending: true })
+    .order("points_required", { ascending: true })
 
   if (error) {
-    console.error("Error fetching special offers:", error)
     return []
   }
-
   return data as SpecialOffer[]
 }
 

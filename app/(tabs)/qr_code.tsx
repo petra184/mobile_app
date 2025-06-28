@@ -17,26 +17,23 @@ import {
   FlatList,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
+import { useLocalSearchParams } from "expo-router"
 import { colors } from "@/constants/colors"
 import { useUserStore } from "@/hooks/userStore"
 import Ionicons from "@expo/vector-icons/Ionicons"
 import { LinearGradient } from "expo-linear-gradient"
 import QRCode from "react-native-qrcode-svg"
 import { supabase } from "@/lib/supabase"
-import type { Database } from "@/types/supabase"
+import { sortGamesByPriority } from "@/utils/sortGame" // Assuming a sorting utility exists
+import { Team } from "@/types"
+import { Game, OpposingTeamRow } from "@/types/game"
 
-// --- NEW: Define clear types for our data structures ---
-type GameSchedule = Database["public"]["Tables"]["game_schedule"]["Row"]
-type Team = Database["public"]["Tables"]["teams"]["Row"]
-type OpposingTeam = Database["public"]["Tables"]["opposing_teams"]["Row"]
 
-// Combine them into a single, more useful type for our app
-interface GameWithTeams extends GameSchedule {
+interface GameWithTeams extends Game {
   teams?: Team | null
-  opposing_teams?: OpposingTeam | null
+  opposing_teams?: OpposingTeamRow | null
 }
 
-// --- NEW: Define props interface for GameSelectionModal ---
 interface GameSelectionModalProps {
   visible: boolean;
   onClose: () => void;
@@ -45,8 +42,7 @@ interface GameSelectionModalProps {
   onSelect: (game: GameWithTeams) => void;
 }
 
-
-// --- HELPER FUNCTIONS (with type safety) ---
+// --- Helper Functions ---
 const formatDate = (dateString: string): string => new Date(dateString).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 const formatTime = (timeString: string | null): string => {
   if (!timeString) return "TBD"
@@ -56,11 +52,11 @@ const formatTime = (timeString: string | null): string => {
     date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
     return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
   } catch {
-    return timeString; // Fallback
+    return timeString;
   }
 }
 
-// --- UPDATED: Game Selection Modal Component with typed props ---
+// --- Game Selection Modal Component ---
 const GameSelectionModal = ({ visible, onClose, games, selectedGame, onSelect }: GameSelectionModalProps) => {
   const modalSlideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
@@ -81,16 +77,16 @@ const GameSelectionModal = ({ visible, onClose, games, selectedGame, onSelect }:
     }
   }, [visible]);
 
-  const renderGameItem = ({ item }: { item: GameWithTeams }) => (
+  const renderGameItem = ({ item }: { item: Game }) => (
     <TouchableOpacity
       style={styles.modalGameItem}
       onPress={() => onSelect(item)}
     >
       <View style={styles.modalGameItemContent}>
-        <Text style={styles.modalGameItemTitle}>{item.teams?.name || "Game"} vs {item.opposing_teams?.name || "Away"}</Text>
-        <Text style={styles.modalGameItemSubtitle}>{formatDate(item.date)} at {formatTime(item.game_time)}</Text>
+        <Text style={styles.modalGameItemTitle}>{item.homeTeam?.name || "Game"} vs {item.awayTeam?.name || "Away"}</Text>
+        <Text style={styles.modalGameItemSubtitle}>{formatDate(item.date)} at {formatTime(item.time)}</Text>
       </View>
-      {selectedGame?.game_id === item.game_id && (
+      {selectedGame?.id === item.id && (
         <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
       )}
     </TouchableOpacity>
@@ -115,7 +111,7 @@ const GameSelectionModal = ({ visible, onClose, games, selectedGame, onSelect }:
             <FlatList
               data={games}
               renderItem={renderGameItem}
-              keyExtractor={(item) => item.game_id}
+              keyExtractor={(item) => item.id}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
@@ -124,16 +120,14 @@ const GameSelectionModal = ({ visible, onClose, games, selectedGame, onSelect }:
         </Animated.View>
       </Pressable>
     </Modal>
-
-    
   );
 };
 
 
 export default function QRCodeScreen() {
   const { userId, isLoading: userLoading } = useUserStore()
+  const { id: gameIdFromParams } = useLocalSearchParams<{ id?: string }>();
   
-  // --- UPDATED: Use the specific GameWithTeams type for state ---
   const [games, setGames] = useState<GameWithTeams[]>([])
   const [selectedGame, setSelectedGame] = useState<GameWithTeams | null>(null)
   
@@ -146,39 +140,61 @@ export default function QRCodeScreen() {
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (!userId) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
-    if (!isRefresh) setLoading(true)
+    if (!isRefresh) setLoading(true);
 
     try {
-      const { data: gameData, error: gameError } = await supabase
-        .from("game_schedule")
-        .select(`*, teams:sport_id(*), opposing_teams:opponent_id(*)`)
-        .gte("date", new Date().toISOString().split("T")[0])
-        .order("date", { ascending: true }).limit(10)
+      let finalGamesList: GameWithTeams[] = [];
+      
+      if (gameIdFromParams && !isRefresh) {
+        const [specificGameRes, upcomingGamesRes] = await Promise.all([
+          supabase.from("game_schedule").select(`*, teams:sport_id(*), opposing_teams:opponent_id(*)`).eq("id", gameIdFromParams).single(),
+          supabase.from("game_schedule").select(`*, teams:sport_id(*), opposing_teams:opponent_id(*)`).gte("date", new Date().toISOString().split("T")[0]).order("date", { ascending: true }).limit(10)
+        ]);
+        
+        if (specificGameRes.error && specificGameRes.error.code !== 'PGRST116') throw specificGameRes.error;
+        if (upcomingGamesRes.error) throw upcomingGamesRes.error;
 
-      if (gameError) throw gameError
+        const gamesMap = new Map<string, GameWithTeams>();
+        if (specificGameRes.data) {
+          gamesMap.set(specificGameRes.data.id, specificGameRes.data as GameWithTeams);
+        }
+        (upcomingGamesRes.data as GameWithTeams[] || []).forEach(game => {
+          if (!gamesMap.has(game.id)) {
+            gamesMap.set(game.id, game);
+          }
+        });
+        finalGamesList = Array.from(gamesMap.values());
 
-      const typedGameData = gameData as GameWithTeams[];
-      setGames(typedGameData || []);
+      } else {
+        const { data: gameData, error: gameError } = await supabase
+          .from("game_schedule")
+          .select(`*, teams:sport_id(*), opposing_teams:opponent_id(*)`)
+          .gte("date", new Date().toISOString().split("T")[0])
+          .order("date", { ascending: true }).limit(10);
 
-      if (typedGameData && typedGameData.length > 0 && !selectedGame) {
-        handleSelectGame(typedGameData[0], true);
-      } else if (selectedGame) {
-        // Find the latest version of the selected game in case its data changed
-        const updatedSelectedGame = typedGameData.find(g => g.game_id === selectedGame.game_id) || selectedGame;
-        handleSelectGame(updatedSelectedGame, true);
+        if (gameError) throw gameError;
+        finalGamesList = (gameData as GameWithTeams[]) || [];
+      }
+      
+      const sortedGames = sortGamesByPriority(finalGamesList);
+      setGames(sortedGames);
+
+      if (sortedGames.length > 0) {
+        const gameToSelect = gameIdFromParams ? sortedGames.find(g => g.id === gameIdFromParams) : sortedGames[0];
+        handleSelectGame(gameToSelect || sortedGames[0], true);
       }
 
     } catch (error) {
-      console.error("Error loading games:", error)
-      Alert.alert("Error", "Failed to load game schedule.")
+      console.error("Error loading games:", error);
+      Alert.alert("Error", "Failed to load game schedule.");
     } finally {
-      setLoading(false)
-      if (isRefresh) setRefreshing(false)
+      setLoading(false);
+      if (isRefresh) setRefreshing(false);
     }
-  }, [userId])
+  }, [userId, gameIdFromParams]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true)
@@ -186,9 +202,9 @@ export default function QRCodeScreen() {
   }, [loadData])
 
   const checkQRAvailability = (game: GameWithTeams) => {
-    if (!game?.date || !game?.game_time) return;
+    if (!game?.date || !game?.time) return;
   
-    const gameDateTime = new Date(`${game.date}T${game.game_time}`);
+    const gameDateTime = new Date(`${game.date}T${game.time}`);
     const now = new Date();
     const oneHourBefore = new Date(gameDateTime.getTime() - 60 * 60 * 1000);
   
@@ -197,19 +213,14 @@ export default function QRCodeScreen() {
       setTimeUntilAvailable("");
     } else {
       const diff = oneHourBefore.getTime() - now.getTime();
-  
       const days = Math.floor(diff / (24 * 60 * 60 * 1000));
       const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
       const minutes = Math.floor((diff % (60 * 60 * 1000)) / 60000);
-  
-      const timeString =
-        days > 0 ? `in ${days}d ${hours}h ${minutes}m` : `in ${hours}h ${minutes}m`;
-  
+      const timeString = days > 0 ? `in ${days}d ${hours}h ${minutes}m` : `in ${hours}h ${minutes}m`;
       setTimeUntilAvailable(timeString);
       setIsQRAvailable(false);
     }
   };
-  
 
   const checkIfAlreadyScanned = async (gameId: string) => {
     if (!userId) return
@@ -222,11 +233,11 @@ export default function QRCodeScreen() {
   const handleSelectGame = (game: GameWithTeams, isInitialLoad = false) => {
     setSelectedGame(game)
     checkQRAvailability(game)
-    checkIfAlreadyScanned(game.game_id)
+    checkIfAlreadyScanned(game.id)
     if (!isInitialLoad) setIsModalVisible(false)
   }
 
-  useEffect(() => { if (userId) loadData() }, [userId])
+  useEffect(() => { if (userId) loadData() }, [userId, loadData])
   useEffect(() => {
     if (!selectedGame) return
     const interval = setInterval(() => checkQRAvailability(selectedGame), 30000)
@@ -241,7 +252,7 @@ export default function QRCodeScreen() {
     )
   }
 
-  const qrData = selectedGame ? JSON.stringify({ userId, gameId: selectedGame.game_id }) : ""
+  const qrData = selectedGame ? JSON.stringify({ userId, gameId: selectedGame.id }) : ""
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -264,11 +275,8 @@ export default function QRCodeScreen() {
           <View style={styles.mainCard}>
             <TouchableOpacity style={styles.cardHeader} onPress={() => setIsModalVisible(true)}>
               <View style={styles.cardHeaderContent}>
-                <Text style={styles.cardTitle}>{selectedGame.teams?.sport || "Game"}</Text>
-                <Text style={styles.cardSubtitle}>
-                  {selectedGame.teams?.short_name || "Home"} vs {selectedGame.opposing_teams?.name || "Away"}
-                </Text>
-                 <Text style={styles.cardDetails}>{formatDate(selectedGame.date)} at {formatTime(selectedGame.game_time)}</Text>
+                <Text style={styles.cardTitle}>{selectedGame.teams?.sport || "Game"} vs {selectedGame.opposing_teams?.name || "Away"}</Text>
+                 <Text style={styles.cardDetails}>{formatDate(selectedGame.date)} at {formatTime(selectedGame.time)}</Text>
               </View>
               <Ionicons name="chevron-down" size={24} color={colors.primary} />
             </TouchableOpacity>
@@ -430,5 +438,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     lineHeight: 20,
+    marginBottom: 8, // Added for better spacing
   },
 });

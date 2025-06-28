@@ -10,7 +10,7 @@ import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import TeamSelector from "@/components/teams/SwipingCard"
 import { GameCard } from "@/components/games/new_game_card"
-import { GameFilter, type GameFilterOptions } from "@/components/games/GameFilter"
+import { type GameFilterOptions } from "@/components/games/GameFilter"
 import Feather from "@expo/vector-icons/Feather"
 import type { Team } from "@/app/actions/teams"
 import { getUpcomingGames, getPastGames, getLiveGames } from "@/app/actions/games"
@@ -18,6 +18,7 @@ import { fetchUserStatus, type UserStatusWithLevel } from "@/app/actions/points"
 import type { Game } from "@/types/game"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 import { sortGamesByPriority } from '@/utils/sortGame'
+import { StatusBar } from "expo-status-bar"
 
 export default function HomeScreen() {
   const router = useRouter()
@@ -110,12 +111,6 @@ export default function HomeScreen() {
 
   const handleViewAllGames = () => {
     router.push("../all_cards/all_games")
-  }
-
-  const handleFilterChange = (filters: GameFilterOptions) => {
-    setGameFilters(filters)
-    // You might want to remove this toast for a smoother user experience
-    // showInfo("Filters Applied", "Games list updated")
   }
 
   const getTimeBasedGreeting = () => {
@@ -216,6 +211,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
+    <StatusBar style='dark' />
       <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
         {/* Enhanced Welcome Card */}
         <View style={styles.welcomeCard}>
@@ -282,7 +278,6 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={styles.headerActions}>
-              <GameFilter onFilterChange={handleFilterChange} currentFilters={gameFilters} />
               <Pressable style={styles.viewAllButton} onPress={handleViewAllGames}>
                 <Text style={styles.viewAllText}>View All</Text>
               </Pressable>
@@ -313,7 +308,7 @@ export default function HomeScreen() {
               {upcomingGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
-                    <Feather name="clock" size={16} color={colors.primary} />
+                    <Feather name="clock" size={18} color={colors.primary} />
                     <Text style={styles.gameGroupTitle}>Upcoming ({upcomingGames.length})</Text>
                   </View>
                   {upcomingGames.map((game) => (
@@ -325,7 +320,7 @@ export default function HomeScreen() {
               {completedGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
-                    <Feather name="check-circle" size={16} color={colors.primary} />
+                    <Feather name="check-circle" size={18} color={colors.primary} />
                     <Text style={styles.gameGroupTitle}>Recent ({completedGames.length})</Text>
                   </View>
                   {completedGames.map((game) => (
@@ -420,7 +415,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(59, 130, 246, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 18,
   },
   viewAllText: {
     fontSize: 14,
@@ -439,6 +434,7 @@ const styles = StyleSheet.create({
   },
   gameGroup: {
     marginBottom: 20,
+    paddingHorizontal:5
   },
   gameGroupHeader: {
     flexDirection: "row",
@@ -447,7 +443,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   gameGroupTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "600",
     color: colors.text,
     marginLeft: 8,

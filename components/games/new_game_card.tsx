@@ -137,8 +137,7 @@ export const GameCard: React.FC<GameCardProps> = ({
     onNotifyPress?.(game)
   }
   const handleQRScanPress = (e: any) => {
-    e.stopPropagation()
-    onQRScanPress?.(game)
+    router.push({ pathname: "../(tabs)/qr_code", params: { id: game.id } })
   }
   const handleNewsPress = (e: any) => {
     e.stopPropagation()
@@ -161,6 +160,14 @@ export const GameCard: React.FC<GameCardProps> = ({
 
   // Render completed game layout
   if (isCompleted) {
+    const getColor = () => {
+      if (game.score)
+        if (game.score?.away < game.score?.home )
+          return ["#F0FDF4", "#10B981"]
+        else 
+        return ["rgba(204, 93, 81, 0.12)","rgba(129, 25, 25, 0.84)"]
+      return "#F0FDF4"
+    }
     return (
       <Animated.View style={animatedStyle}>
         <View style={styles.shadowWrapper}>
@@ -195,13 +202,13 @@ export const GameCard: React.FC<GameCardProps> = ({
             </View>
             <View style={styles.contentSection}>
               <View style={styles.completedGameContainer}>
-                {game.score && (
-                  <View style={styles.scoreContainer}>
-                    <Text style={styles.scoreText}>{game.score.home}</Text>
-                    <Text style={styles.scoreDivider}>-</Text>
-                    <Text style={styles.scoreText}>{game.score.away}</Text>
-                  </View>
-                )}
+              {game.score && (
+                <View style={[styles.scoreContainer, { backgroundColor: getColor()[0] }]}>
+                  <Text style={[styles.scoreText, { color: getColor()[1] }]}>{game.score.home}</Text>
+                  <Text style={[styles.scoreDivider, { color: getColor()[1] }]}>-</Text>
+                  <Text style={[styles.scoreText, { color: getColor()[1] }]}>{game.score.away}</Text>
+                </View>
+              )}
               </View>
               <View style={styles.completedGameInfo}>
                 <View style={styles.completedDateContainer}>
@@ -544,7 +551,6 @@ const styles = StyleSheet.create({
   scoreContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0FDF4",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
@@ -552,12 +558,10 @@ const styles = StyleSheet.create({
   scoreText: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#10B981",
   },
   scoreDivider: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#10B981",
     marginHorizontal: 8,
   },
   completedGameInfo: {
@@ -606,7 +610,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     padding: 12,
     borderRadius: 8,
-    marginBottom: 16,
   },
   specialEventBadge: {
     flexDirection: "row",
@@ -640,7 +643,7 @@ const styles = StyleSheet.create({
     borderColor: "#6366F1",
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 22,
   },
   notifyButtonText: {
     fontSize: 16,
@@ -654,7 +657,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#3B82F6",
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 22,
   },
   qrScanButtonText: {
     fontSize: 16,

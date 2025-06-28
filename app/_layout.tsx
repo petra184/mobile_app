@@ -291,7 +291,7 @@ function RootLayoutNav() {
       <Stack.Screen 
         name="store/Checkout" 
         options={{ 
-          title: "",
+          title: "Checkout",
           headerShown: true,
           headerLeft: () => (
             <Pressable 

@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Pressable, Image } from "react-native"
 import { colors } from "@/constants/colors"
 import { Feather } from "@expo/vector-icons"
 import type { NewsArticle } from "@/app/actions/news"
+import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 
 interface NewsCardProps {
   article: NewsArticle
@@ -27,9 +28,31 @@ export function NewsCard({ article, onPress }: NewsCardProps) {
     })
   }
 
+  const scale = useSharedValue(1)
+    const opacity = useSharedValue(1)
+      
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    }))
+
+  const handlePressIn = () => {
+        scale.value = withSpring(0.96, { damping: 15 })
+        opacity.value = withTiming(0.8, { duration: 100 })
+      }
+        
+  const handlePressOut = () => {
+        scale.value = withSpring(1, { damping: 15 })
+        opacity.value = withTiming(1, { duration: 150 })
+      }
+
   return (
+    <Animated.View style={animatedStyle}>
     <View style={styles.shadowWrapper}>
-     <Pressable style={styles.container} onPress={() => onPress(article)}>
+     <Pressable style={styles.container} 
+     onPressIn={handlePressIn}
+     onPressOut={handlePressOut}
+     onPress={() => onPress(article)}>
       {/* Article Image */}
       {article.imageUrl ? (
         <Image source={{ uri: article.imageUrl }} style={styles.image} resizeMode="cover" />
@@ -84,6 +107,7 @@ export function NewsCard({ article, onPress }: NewsCardProps) {
       </View>
     </Pressable>
     </View>
+    </Animated.View>
   )
 }
 

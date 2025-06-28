@@ -274,8 +274,6 @@ export async function getTeamById(id: string): Promise<Team | null> {
       return null
     }
 
-    
-    console.log("team data:", data)
 
     return transformTeamForUI(data)
   } catch (error) {
@@ -448,7 +446,6 @@ export async function getTeamsWithUpcomingGames(): Promise<Team[]> {
  */
 export async function getRandomTeamPhoto(teamId: string): Promise<string | null> {
   try {
-    console.log("Fetching photos for team ID:", teamId)
 
     const { data, error } = await supabase
       .from("team_photos")

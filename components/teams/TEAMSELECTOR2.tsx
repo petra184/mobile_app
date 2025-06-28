@@ -227,8 +227,6 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
       setLoadingTeams(true)
       let fetchedTeams: Team[] = []
 
-      console.log("Loading teams with gender filter:", filterByGender)
-
       if (filterByGender === "men") {
         fetchedTeams = await getTeamsByGender("men")
       } else if (filterByGender === "women") {
@@ -236,15 +234,6 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
       } else {
         fetchedTeams = await getTeams()
       }
-
-      console.log(
-        `Fetched ${fetchedTeams.length} teams:`,
-        fetchedTeams.map((t) => ({
-          name: t.name,
-          gender: t.gender,
-          sport: t.sport,
-        })),
-      )
 
       setTeams(fetchedTeams)
     } catch (error) {

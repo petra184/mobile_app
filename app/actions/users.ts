@@ -66,22 +66,15 @@ export interface UserProfile {
 
 // Get user profile with stats - now using the view
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
-  console.log("=== getUserProfile CALLED ===")
-  console.log("Input userId:", userId)
   
   try {
-    console.log("=== QUERYING user_profiles_with_stats VIEW ===")
     
     const { data, error } = await supabase
       .from('user_profiles_with_stats')
       .select('*')
       .eq('user_id', userId)
       .single();
-    
-    console.log("=== QUERY RESULT ===")
-    console.log("Error:", error)
-    console.log("Data:", JSON.stringify(data, null, 2))
-    
+        
     if (error) {
       console.error('=== getUserProfile ERROR ===');
       console.error('Error code:', error.code);
@@ -89,8 +82,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
       
       // If no user found in view, try to create the user record
       if (error.code === 'PGRST116') {
-        console.log("=== USER NOT FOUND IN VIEW, ATTEMPTING CREATION ===")
-        
         // Get the current authenticated user
         const { data: authUser, error: authError } = await supabase.auth.getUser();
         
@@ -99,7 +90,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
           throw new Error("User not authenticated");
         }
         
-        console.log("=== CREATING MISSING USER RECORD ===")
         
         // Use your existing initialize_user_status function approach
         const createResult = await createCompleteUserRecord(
@@ -113,8 +103,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
         if (!createResult.success) {
           throw new Error(`Failed to create user record: ${createResult.error}`);
         }
-        
-        console.log("=== USER RECORD CREATED, RETRYING QUERY ===")
         
         // Retry the query
         const { data: retryData, error: retryError } = await supabase
@@ -150,7 +138,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 
 // Helper function to transform database data to app interface
 function transformUserProfileData(data: any): UserProfile {
-  console.log("=== TRANSFORMING DATA ===")
   
   const transformedData: UserProfile = {
     id: data.user_id || '',
@@ -173,9 +160,6 @@ function transformUserProfileData(data: any): UserProfile {
     benefits: data.benefits || [],
   };
   
-  console.log("=== TRANSFORMED DATA ===")
-  console.log(JSON.stringify(transformedData, null, 2))
-  
   return transformedData;
 }
 
@@ -190,8 +174,6 @@ export async function createCompleteUserRecord(
   username?: string
 ) {
   try {
-    console.log("=== CREATING COMPLETE USER RECORD ===");
-    console.log("userId:", userId, "email:", email, "firstName:", firstName);
     
     // Create user record
     const { error: userError } = await supabase
@@ -249,7 +231,6 @@ export async function createCompleteUserRecord(
       }
     }
     
-    console.log("=== USER RECORD CREATED SUCCESSFULLY ===");
     return { success: true };
     
   } catch (error) {
@@ -260,9 +241,7 @@ export async function createCompleteUserRecord(
 
 // Function to manually trigger user initialization for existing users
 export async function initializeExistingUsers() {
-  try {
-    console.log("=== INITIALIZING EXISTING USERS ===");
-    
+  try {    
     const { data, error } = await supabase
       .rpc('initialize_user_status');
       
@@ -271,7 +250,6 @@ export async function initializeExistingUsers() {
       throw new Error(`Failed to initialize users: ${error.message}`);
     }
     
-    console.log("=== INITIALIZED", data, "USERS ===");
     return { success: true, count: data };
     
   } catch (error) {
@@ -489,197 +467,287 @@ export async function createUser(userData: {
   }
 }
 
-// Get teams with full type safety (using your existing teams table)
-export async function getTeams(): Promise<Tables['teams']['Row'][]> {
-  const { data, error } = await supabase
-    .from('teams')
-    .select('*')
-    .order('name');
-    
-  if (error) {
-    console.error('Error fetching teams:', error);
-    throw new Error(`Failed to fetch teams: ${error.message}`);
-  }
-  
-  return data || [];
-}
-
-// Get rewards with full type safety
-export async function getRewards(teamId?: string): Promise<Tables['rewards']['Row'][]> {
-  let query = supabase
-    .from('rewards')
-    .select('*')
-    .eq('is_active', true);
-    
-  if (teamId) {
-    query = query.eq('team_id', teamId);
-  }
-  
-  const { data, error } = await query.order('points_required');
-    
-  if (error) {
-    console.error('Error fetching rewards:', error);
-    throw new Error(`Failed to fetch rewards: ${error.message}`);
-  }
-  
-  return data || [];
-}
-
 export async function uploadProfileImage(userId: string, imageUri: string): Promise<string | undefined> {
-    try {
-      // Get file info
-      const fileInfo = await FileSystem.getInfoAsync(imageUri);
-      if (!fileInfo.exists) {
-        throw new Error('File does not exist');
-      }
-  
-      // Create a unique filename
-      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `profile-images/${fileName}`;
-  
-      // Read the file as base64
-      const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-  
-      // Convert base64 to blob
-      const byteCharacters = atob(base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: `image/${fileExt}` });
-  
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('profile-images')
-        .upload(filePath, blob, {
-          cacheControl: '3600',
-          upsert: true,
-        });
-  
-      if (error) {
-        console.error('Error uploading image:', error);
-        throw new Error(`Failed to upload image: ${error.message}`);
-      }
-  
-      // Get the public URL
-      const { data: urlData } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(filePath);
-  
-      return urlData.publicUrl;
-    } catch (error) {
-      console.error('Error in uploadProfileImage:', error);
-      return undefined;
+  try {
+    console.log("Starting image upload for user:", userId)
+    console.log("Image URI:", imageUri)
+
+    // Get file info to verify it exists
+    const fileInfo = await FileSystem.getInfoAsync(imageUri)
+    if (!fileInfo.exists) {
+      throw new Error("File does not exist")
     }
+
+    console.log("File info:", fileInfo)
+
+    // Create a unique filename
+    const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpg"
+    const fileName = `${userId}-${Date.now()}.${fileExt}`
+    const filePath = fileName
+
+    console.log("Uploading to path:", filePath)
+
+    // Use fetch to get ArrayBuffer directly from the image URI (consistent with React Native best practices)
+    const response = await fetch(imageUri)
+    const arraybuffer = await response.arrayBuffer()
+
+    console.log("ArrayBuffer size:", arraybuffer.byteLength)
+
+    if (arraybuffer.byteLength === 0) {
+      throw new Error("Image data is empty")
+    }
+
+    // Upload to Supabase Storage using the ArrayBuffer
+    const { data, error } = await supabase.storage.from("profile-images").upload(filePath, arraybuffer, {
+      cacheControl: "3600",
+      upsert: true,
+      contentType: `image/${fileExt}`,
+    })
+
+    if (error) {
+      console.error("Supabase upload error:", error)
+      throw new Error(`Failed to upload image: ${error.message}`)
+    }
+
+    console.log("Upload successful:", data)
+
+    // Get the public URL
+    const { data: urlData } = supabase.storage.from("profile-images").getPublicUrl(filePath)
+
+    console.log("Public URL:", urlData.publicUrl)
+    return urlData.publicUrl
+  } catch (error) {
+    console.error("Error in uploadProfileImage:", error)
+    throw error
   }
+}
+
+export async function uploadProfileImageBase64(userId: string, imageUri: string): Promise<string | undefined> {
+  try {
+    console.log("Starting base64 image upload for user:", userId)
+
+    // Get file info
+    const fileInfo = await FileSystem.getInfoAsync(imageUri)
+    if (!fileInfo.exists) {
+      throw new Error("File does not exist")
+    }
+
+    // Create a unique filename
+    const fileExt = imageUri.split(".").pop()?.toLowerCase() || "jpg"
+    const fileName = `${userId}-${Date.now()}.${fileExt}`
+    const filePath = `${fileName}`
+
+    // Read the file as base64
+    const base64 = await FileSystem.readAsStringAsync(imageUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+
+    // Convert base64 to binary string for upload
+    const binaryString = atob(base64)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage.from("profile-images").upload(filePath, bytes, {
+      cacheControl: "3600",
+      upsert: true,
+      contentType: `image/${fileExt}`,
+    })
+
+    if (error) {
+      console.error("Supabase upload error:", error)
+      throw new Error(`Failed to upload image: ${error.message}`)
+    }
+
+    // Get the public URL
+    const { data: urlData } = supabase.storage.from("profile-images").getPublicUrl(filePath)
+
+    return urlData.publicUrl
+  } catch (error) {
+    console.error("Error in uploadProfileImageBase64:", error)
+    throw error
+  }
+}
+
+export async function getProfileImageDataUrl(userId: string, fileName: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.storage.from("profile-images").download(fileName)
+
+    if (error) {
+      console.error("Error downloading profile image:", error)
+      return null
+    }
+
+    // Use FileReader to convert blob to data URL (same as ImageItem component)
+    return new Promise((resolve) => {
+      const fr = new FileReader()
+      fr.readAsDataURL(data!)
+      fr.onload = () => {
+        resolve(fr.result as string)
+      }
+      fr.onerror = () => {
+        resolve(null)
+      }
+    })
+  } catch (error) {
+    console.error("Error in getProfileImageDataUrl:", error)
+    return null
+  }
+}
+
+export async function getProfileImageUrl(imageUrl: string): Promise<string | null> {
+  try {
+    // If it's already a data URL or http URL, return as is
+    if (imageUrl.startsWith("data:") || imageUrl.startsWith("http")) {
+      return imageUrl
+    }
+
+    // If it's a Supabase storage path, download and convert
+    if (imageUrl.includes("profile-images/")) {
+      const fileName = imageUrl.split("/").pop()
+      if (fileName) {
+        return await getProfileImageDataUrl("", fileName)
+      }
+    }
+
+    return imageUrl
+  } catch (error) {
+    console.error("Error getting profile image URL:", error)
+    return null
+  }
+}
   
   /**
    * Update user profile with new data including profile image
    */
-  export async function updateUserProfile(
-    userId: string,
-    updates: {
-      first_name?: string;
-      last_name?: string;
-      username?: string;
-      phone_number?: string;
-      profile_image_url?: string;
+export async function updateUserProfile(
+  userId: string,
+  updates: {
+    first_name?: string
+    last_name?: string
+    username?: string
+    phone_number?: string
+    birthday?: string
+    profile_image_url?: string
+  },
+): Promise<boolean> {
+  try {
+    console.log("Updating user profile:", userId, updates)
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+
+    if (error) {
+      console.error("Error updating user profile:", error)
+      throw new Error(`Failed to update profile: ${error.message}`)
     }
-  ): Promise<boolean> {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId);
-  
-      if (error) {
-        console.error('Error updating user profile:', error);
-        throw new Error(`Failed to update profile: ${error.message}`);
-      }
-  
-      return true;
-    } catch (error) {
-      console.error('Unexpected error updating user profile:', error);
-      return false;
-    }
+
+    console.log("Profile updated successfully")
+    return true
+  } catch (error) {
+    console.error("Unexpected error updating user profile:", error)
+    return false
   }
+}
   
   /**
    * Delete old profile image from storage
    */
   export async function deleteProfileImage(imageUrl: string): Promise<boolean> {
-    try {
-      // Extract the file path from the URL
-      const urlParts = imageUrl.split('/');
-      const fileName = urlParts[urlParts.length - 1];
-      const filePath = `profile-images/${fileName}`;
-  
-      const { error } = await supabase.storage
-        .from('profile-images')
-        .remove([filePath]);
-  
-      if (error) {
-        console.error('Error deleting image:', error);
-        return false;
-      }
-  
-      return true;
-    } catch (error) {
-      console.error('Error in deleteProfileImage:', error);
-      return false;
+  try {
+    if (!imageUrl || !imageUrl.includes("profile-images")) {
+      return true // Nothing to delete
     }
+
+    // Extract the file path from the URL
+    const urlParts = imageUrl.split("/")
+    const fileName = urlParts[urlParts.length - 1]
+
+    console.log("Deleting image:", fileName)
+
+    const { error } = await supabase.storage.from("profile-images").remove([fileName])
+
+    if (error) {
+      console.error("Error deleting image:", error)
+      return false
+    }
+
+    return true
+  } catch (error) {
+    console.error("Error in deleteProfileImage:", error)
+    return false
   }
+}
   
   /**
    * Update profile with image upload
    */
   export async function updateProfileWithImage(
-    userId: string,
-    profileData: {
-      first_name?: string;
-      last_name?: string;
-      username?: string;
-      phone_number?: string;
-    },
-    imageUri?: string,
-    oldImageUrl?: string
-  ): Promise<boolean> {
-    try {
-      let profileImageUrl: string | undefined = oldImageUrl;
-  
-      // Upload new image if provided
-      if (imageUri) {
-        // Delete old image if it exists
-        if (oldImageUrl) {
-          await deleteProfileImage(oldImageUrl);
-        }
-  
-        // Upload new image
-        profileImageUrl = await uploadProfileImage(userId, imageUri);
+  userId: string,
+  profileData: {
+    first_name?: string
+    last_name?: string
+    username?: string
+    phone_number?: string
+    birthday?: string
+  },
+  imageUri?: string,
+  oldImageUrl?: string,
+): Promise<boolean> {
+  try {
+    console.log("Starting profile update with image...")
+    let profileImageUrl: string | undefined = oldImageUrl
+
+    // Upload new image if provided
+    if (imageUri) {
+      console.log("Uploading new image...")
+
+      try {
+        // Upload new image using the consistent method
+        profileImageUrl = await uploadProfileImage(userId, imageUri)
+
         if (!profileImageUrl) {
-          throw new Error('Failed to upload profile image');
+          throw new Error("Failed to upload profile image")
         }
+
+        console.log("Image uploaded successfully:", profileImageUrl)
+
+        // Delete old image after successful upload
+        if (oldImageUrl && oldImageUrl !== profileImageUrl) {
+          console.log("Deleting old image...")
+          await deleteProfileImage(oldImageUrl)
+        }
+      } catch (uploadError) {
+        console.error("Error uploading image:", uploadError)
+        throw new Error("Failed to upload profile image")
       }
-  
-      // Update user profile
-      const success = await updateUserProfile(userId, {
-        ...profileData,
-        profile_image_url: profileImageUrl,
-      });
-  
-      return success;
-    } catch (error) {
-      console.error('Error updating profile with image:', error);
-      return false;
     }
+
+    // Update user profile
+    console.log("Updating profile data...")
+    const success = await updateUserProfile(userId, {
+      ...profileData,
+      profile_image_url: profileImageUrl,
+    })
+
+    if (!success) {
+      throw new Error("Failed to update profile data")
+    }
+
+    console.log("Profile update completed successfully")
+    return true
+  } catch (error) {
+    console.error("Error updating profile with image:", error)
+    throw error
   }
+}
 
   export async function updateUserPassword(currentPassword: string, newPassword: string) {
     try {
