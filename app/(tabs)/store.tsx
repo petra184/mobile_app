@@ -21,12 +21,12 @@ import {
 import { Feather } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
 import BirthdayBanner from "@/components/rewards/BirthdayBanner"
+import SpecialOfferCard from "@/components/rewards/SpecialOfferCard"
 import { colors } from "@/constants/colors"
 import { useRouter } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import { useCart } from "@/context/cart-context"
-import Animated, { FadeInUp, FadeInDown } from "react-native-reanimated"
 import {
   fetchRewards,
   fetchSpecialOffers,
@@ -64,45 +64,6 @@ const RewardImage: React.FC<RewardImageProps> = ({ imageUrl, containerStyle }) =
       {imageLoading && (
         <View style={styles.imageLoadingOverlay}>
           <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      )}
-      <Image
-        source={{ uri: imageUrl }}
-        style={styles.fullImage}
-        onError={() => {
-          setImageError(true)
-          setImageLoading(false)
-        }}
-        onLoad={() => setImageLoading(false)}
-        onLoadStart={() => setImageLoading(true)}
-        resizeMode="cover"
-      />
-    </View>
-  )
-}
-
-type OfferImageProps = {
-  imageUrl?: string
-  containerStyle?: any
-}
-
-const OfferImage: React.FC<OfferImageProps> = ({ imageUrl, containerStyle }) => {
-  const [imageError, setImageError] = useState(false)
-  const [imageLoading, setImageLoading] = useState(true)
-
-  if (!imageUrl || imageError) {
-    return (
-      <View style={[styles.fallbackIconContainer, containerStyle]}>
-        <Feather name="zap" size={28} color="#EF4444" />
-      </View>
-    )
-  }
-
-  return (
-    <View style={[styles.fullImageContainer, containerStyle]}>
-      {imageLoading && (
-        <View style={styles.imageLoadingOverlay}>
-          <ActivityIndicator size="small" color="#EF4444" />
         </View>
       )}
       <Image
@@ -165,6 +126,7 @@ const RewardDetailModal: React.FC<{
                 <Feather name="star" size={20} color="#FFD700" />
                 <Text style={styles.modalRewardPoints}>{reward.points_required} points</Text>
               </View>
+
               {reward.category && (
                 <View style={styles.modalCategoryBadge}>
                   <Text style={styles.modalCategoryText}>{reward.category}</Text>
@@ -192,9 +154,11 @@ const RewardDetailModal: React.FC<{
                 <Feather name="minus" size={20} color="#EF4444" />
                 <Text style={styles.modalRemoveButtonText}>Remove</Text>
               </TouchableOpacity>
+
               <View style={styles.modalQuantityDisplay}>
                 <Text style={styles.modalQuantityText}>In Cart: {quantity}</Text>
               </View>
+
               <TouchableOpacity
                 style={[styles.modalAddButton, !canAfford && styles.modalButtonDisabled]}
                 onPress={() => onAddToCart(reward)}
@@ -246,6 +210,7 @@ const RewardsStoreScreen: React.FC = () => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
     }, 500)
+
     return () => clearTimeout(timer)
   }, [searchQuery])
 
@@ -260,6 +225,7 @@ const RewardsStoreScreen: React.FC = () => {
 
     setLoading(true)
     setError(null)
+
     try {
       const [rewardsData, offersData, achievementsData, statusData] = await Promise.all([
         fetchRewards(),
@@ -370,6 +336,24 @@ const RewardsStoreScreen: React.FC = () => {
     showInfo("Removed from Cart", `One ${reward.title} has been removed from your cart.`)
   }
 
+  const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
+    if (!userId) {
+      Alert.alert("Login Required", "Please log in to redeem special offers.")
+      return
+    }
+
+    if (points < offer.points_required) {
+      Alert.alert("Insufficient Points", `You need ${offer.points_required - points} more points to redeem this offer.`)
+      return
+    }
+
+    // In a real app, you would call an API to redeem the special offer
+    showSuccess("Offer Redeemed!", `${offer.title} has been redeemed successfully!`)
+
+    // Refresh data to update claimed count
+    fetchData()
+  }
+
   const resetFilters = () => {
     setSortOption("none")
     setSearchQuery("")
@@ -395,9 +379,8 @@ const RewardsStoreScreen: React.FC = () => {
     const isDisabled = !canAfford
 
     return (
-      <Animated.View
+      <View
         key={reward.id}
-        entering={FadeInUp.duration(400).delay(index * 100)}
         style={[styles.rewardCard, { marginHorizontal: 8 }, isDisabled && styles.rewardCardDisabled]}
       >
         <TouchableOpacity
@@ -408,6 +391,7 @@ const RewardsStoreScreen: React.FC = () => {
         >
           <View style={styles.rewardImageContainer}>
             <RewardImage imageUrl={reward.image_url ?? undefined} containerStyle={styles.rewardImageWrapper} />
+
             <TouchableOpacity
               style={styles.favoriteButton}
               onPress={(e) => {
@@ -423,16 +407,19 @@ const RewardsStoreScreen: React.FC = () => {
                 style={{ opacity: isFavorite ? 1 : 0.8 }}
               />
             </TouchableOpacity>
+
             {inCart && (
               <View style={styles.inCartBadge}>
                 <Text style={styles.inCartText}>{quantity}</Text>
               </View>
             )}
+
             {(reward.stock_quantity ?? 0) <= 5 && (reward.stock_quantity ?? 0) > 0 && (
               <View style={styles.lowStockBadge}>
                 <Text style={styles.lowStockText}>Only {reward.stock_quantity} left!</Text>
               </View>
             )}
+
             {isDisabled && (
               <View style={styles.disabledOverlay}>
                 <Feather name="lock" size={24} color="#999" />
@@ -449,6 +436,7 @@ const RewardsStoreScreen: React.FC = () => {
             >
               {reward.title}
             </Text>
+
             <Text
               style={[styles.rewardDescription, isDisabled && styles.rewardDescriptionDisabled]}
               numberOfLines={2}
@@ -456,6 +444,7 @@ const RewardsStoreScreen: React.FC = () => {
             >
               {reward.description || "Add this amazing reward to your cart!"}
             </Text>
+
             <View style={styles.pointsContainer}>
               <View style={styles.pointsRow}>
                 <Feather name="star" size={16} color={isDisabled ? "#999" : "#FFD700"} />
@@ -478,6 +467,7 @@ const RewardsStoreScreen: React.FC = () => {
                 >
                   <Feather name="minus" size={16} color="#EF4444" />
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={(e) => {
@@ -501,29 +491,9 @@ const RewardsStoreScreen: React.FC = () => {
             ) : null}
           </View>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     )
   }
-
-  const renderSpecialOfferCard = (offer: SpecialOffer) => (
-    <TouchableOpacity key={offer.id} style={styles.featuredOfferCard} activeOpacity={0.7}>
-      <View style={styles.offerBadge}>
-        <Feather name="zap" size={12} color="white" />
-        <Text style={styles.offerBadgeText}>LIMITED</Text>
-      </View>
-      <View style={styles.featuredImageContainer}>
-        <OfferImage imageUrl={offer.image_url ?? undefined} containerStyle={styles.offerImageWrapper} />
-      </View>
-      <View style={styles.featuredOfferInfo}>
-        <Text style={styles.offerCategory}>SPECIAL OFFER</Text>
-        <Text style={styles.featuredOfferName}>{offer.title}</Text>
-        <View style={styles.featuredPriceContainer}>
-          {offer.original_points && <Text style={styles.originalPrice}>{offer.original_points} pts</Text>}
-          <Text style={styles.featuredOfferPrice}>{offer.points_required} pts</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  )
 
   if (loading && rewards.length === 0) {
     return (
@@ -573,9 +543,16 @@ const RewardsStoreScreen: React.FC = () => {
     ])
   }
 
+  // In the RewardsStoreScreen component, filter expired offers:
+  const activeSpecialOffers = specialOffers.filter((offer) => {
+    const isExpired = new Date() > new Date(offer.end_date)
+    return !isExpired && offer.is_active
+  })
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
@@ -585,7 +562,7 @@ const RewardsStoreScreen: React.FC = () => {
         <BirthdayBanner />
 
         {/* Points Status */}
-        <Animated.View entering={FadeInDown.duration(500).delay(100)} style={styles.pointsStatus}>
+        <View style={styles.pointsStatus}>
           <View style={styles.pointsCard}>
             <View style={styles.pointsHeader}>
               <View style={styles.pointsIconContainer}>
@@ -596,6 +573,7 @@ const RewardsStoreScreen: React.FC = () => {
                 <Text style={styles.pointsValue}>{points.toLocaleString()}</Text>
               </View>
             </View>
+
             {userStatus && (
               <View style={styles.levelContainer}>
                 <View style={styles.levelBadge}>
@@ -606,11 +584,11 @@ const RewardsStoreScreen: React.FC = () => {
               </View>
             )}
           </View>
-        </Animated.View>
+        </View>
 
         {/* Special Offers */}
-        {specialOffers.length > 0 && (
-          <Animated.View entering={FadeInUp.duration(600).delay(300)} style={styles.section}>
+        {activeSpecialOffers.length > 0 && (
+          <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Special Offers</Text>
               <TouchableOpacity>
@@ -624,12 +602,18 @@ const RewardsStoreScreen: React.FC = () => {
               style={styles.featuredScrollView}
               contentContainerStyle={styles.featuredContainer}
             >
-              {specialOffers.map((offer) => renderSpecialOfferCard(offer))}
+              {activeSpecialOffers.map((offer) => (
+                <SpecialOfferCard
+                  key={offer.id}
+                  offer={offer}
+                  userPoints={points}
+                  onRedeem={handleSpecialOfferRedeem}
+                />
+              ))}
             </ScrollView>
-          </Animated.View>
+          </View>
         )}
 
-        
         {/* All Rewards */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle2}>All Rewards</Text>
@@ -659,7 +643,7 @@ const RewardsStoreScreen: React.FC = () => {
         </View>
 
         {/* Search Bar */}
-        <Animated.View entering={FadeInDown.duration(500).delay(400)} style={styles.searchBar}>
+        <View style={styles.searchBar}>
           <Feather name="search" size={20} color="#777" />
           <TextInput
             style={styles.searchInput}
@@ -668,11 +652,10 @@ const RewardsStoreScreen: React.FC = () => {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-        </Animated.View>
-
+        </View>
 
         {(sortOption !== "none" || searchQuery.trim()) && (
-          <Animated.View entering={FadeInDown.duration(300)} style={styles.activeFiltersContainer}>
+          <View style={styles.activeFiltersContainer}>
             <Text style={styles.activeFiltersTitle}>Active Filters:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.activeFiltersScroll}>
               {sortOption !== "none" && (
@@ -688,16 +671,18 @@ const RewardsStoreScreen: React.FC = () => {
                   </Text>
                 </View>
               )}
+
               {searchQuery.trim() && (
                 <View style={styles.activeFilterBadge}>
                   <Text style={styles.activeFilterText}>"{searchQuery}"</Text>
                 </View>
               )}
+
               <TouchableOpacity style={styles.clearFiltersButton} onPress={resetFilters}>
                 <Text style={styles.clearFiltersText}>Clear All</Text>
               </TouchableOpacity>
             </ScrollView>
-          </Animated.View>
+          </View>
         )}
 
         {/* Loading indicator for rewards */}
@@ -927,77 +912,6 @@ const styles = StyleSheet.create({
   featuredContainer: {
     paddingHorizontal: 16,
     paddingBottom: 8,
-  },
-  featuredOfferCard: {
-    width: width * 0.7,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    marginRight: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    position: "relative",
-  },
-  offerBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "#EF4444",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    zIndex: 1,
-  },
-  offerBadgeText: {
-    color: "white",
-    fontSize: 10,
-    fontWeight: "bold",
-    marginLeft: 4,
-  },
-  featuredImageContainer: {
-    width: "100%",
-    height: 120,
-    backgroundColor: "#F8F9FA",
-    position: "relative",
-  },
-  offerImageWrapper: {
-    width: "100%",
-    height: "100%",
-  },
-  featuredOfferInfo: {
-    padding: 16,
-  },
-  offerCategory: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#EF4444",
-    marginBottom: 4,
-  },
-  featuredOfferName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#222",
-    marginBottom: 8,
-  },
-  featuredPriceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  originalPrice: {
-    fontSize: 14,
-    color: "#999",
-    textDecorationLine: "line-through",
-    marginRight: 8,
-  },
-  featuredOfferPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#EF4444",
   },
   filterButton: {
     flexDirection: "row",

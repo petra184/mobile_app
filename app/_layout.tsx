@@ -278,7 +278,7 @@ function RootLayoutNav() {
         name="store/CelebrateBirthday" 
         options={{ 
           title: "",
-          headerShown: true,
+          headerShown: false,
           headerLeft: () => (
             <Pressable 
               onPress={() => router.back()} 

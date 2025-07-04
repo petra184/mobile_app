@@ -10,11 +10,11 @@ import { getTeams, type Team } from "@/app/actions/teams"
 import { signOut } from "@/app/actions/main_actions"
 import { getProfileImageDataUrl } from "@/app/actions/users"
 import Feather from "@expo/vector-icons/Feather"
+import ProfileImageWithFallback from "@/components/ui/profile_fallback"
 
 export default function ProfileScreen() {
   const router = useRouter()
 
-  // Get user data from userStore
   const {
     userId,
     userEmail,
@@ -47,7 +47,6 @@ export default function ProfileScreen() {
     }
   }
 
-  // Load profile image using consistent principles (same as ImageItem)
   const loadProfileImage = async () => {
     if (!profile_image_url || !userId) {
       setProfileImageDataUrl(null)
@@ -63,12 +62,19 @@ export default function ProfileScreen() {
         return
       }
 
-      // If it's a Supabase storage path, download and convert (same as ImageItem)
+      // If it's a Supabase storage path, download and convert
       if (profile_image_url.includes("profile-images/")) {
         const fileName = profile_image_url.split("/").pop()
         if (fileName) {
           const dataUrl = await getProfileImageDataUrl(userId, fileName)
-          setProfileImageDataUrl(dataUrl)
+          // Validate that we actually got image data
+          if (dataUrl && dataUrl.length > 100) {
+            // Basic check for non-empty data URL
+            setProfileImageDataUrl(dataUrl)
+          } else {
+            console.warn("Received empty or invalid image data")
+            setProfileImageDataUrl(null)
+          }
         }
       } else {
         setProfileImageDataUrl(profile_image_url)
@@ -82,17 +88,14 @@ export default function ProfileScreen() {
   }
 
   useEffect(() => {
-    // Refresh user data to ensure we have the latest points and name
     refreshUserData()
     loadTeams()
   }, [])
 
   useEffect(() => {
-    // Load profile image when profile_image_url changes
     loadProfileImage()
   }, [profile_image_url, userId])
 
-  // Get favorite teams
   const favoriteTeams = teams.filter((team) => preferences.favoriteTeams.includes(team.id))
 
   const handleToggleNotifications = async (value: boolean) => {
@@ -122,28 +125,26 @@ export default function ProfileScreen() {
     <>
       <SafeAreaView style={styles.container} edges={["left"]}>
         <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <Pressable onPress={() => router.back()} style={{ marginRight: 16 }}>
             <Feather name="chevron-left" size={24} color={colors.primary} style={styles.arrow} />
           </Pressable>
+
           <View style={styles.profileImageContainer}>
-            {loadingProfileImage ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : profileImageDataUrl ? (
-              <Image
-                source={{ uri: profileImageDataUrl }}
-                style={styles.profileImage}
-                onError={(error) => {
-                  console.error("Profile image display error:", error)
-                  setProfileImageDataUrl(null)
-                }}
-                onLoad={() => console.log("Profile image displayed successfully")}
-              />
-            ) : (
-              <Feather name="user" size={60} color={colors.primary} />
-            )}
+            <ProfileImageWithFallback
+              imageUrl={profileImageDataUrl}
+              size={80}
+              isLoading={loadingProfileImage}
+              onError={(error) => {
+                console.error("Profile image display error:", error)
+                setProfileImageDataUrl(null)
+              }}
+              onLoad={() => console.log("Profile image displayed successfully")}
+            />
           </View>
+
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{getUserName()}</Text>
             <Text style={styles.profileEmail}>{userEmail || "No email"}</Text>
@@ -156,6 +157,7 @@ export default function ProfileScreen() {
               )}
             </View>
           </View>
+
           <View style={styles.editProfileButtonBck}>
             <Pressable style={styles.editProfileButton} onPress={navigateToEditProfile}>
               <Feather name="edit-2" size={20} color={colors.primary} />
@@ -170,7 +172,6 @@ export default function ProfileScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Favorite Teams</Text>
               </View>
-
               {loadingTeams ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -205,7 +206,6 @@ export default function ProfileScreen() {
           <View style={styles.bottomContainer}>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Settings</Text>
-
               <View style={styles.settingsContainer}>
                 <View style={styles.settingItem}>
                   <View style={styles.settingLeft}>
@@ -247,7 +247,6 @@ export default function ProfileScreen() {
                 onPress={async () => {
                   try {
                     const result = await signOut()
-
                     if (result.success) {
                       router.push("/")
                     } else {
@@ -269,7 +268,7 @@ export default function ProfileScreen() {
   )
 }
 
-// Keep all your existing styles
+// Keep all your existing styles - they remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -336,19 +335,8 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   profileImageContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    alignItems: "center",
-    justifyContent: "center",
     marginRight: 16,
     marginTop: 30,
-  },
-  profileImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 40,
   },
   profileInfo: {
     flex: 1,

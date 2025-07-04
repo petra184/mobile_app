@@ -20,7 +20,7 @@ import * as ImagePicker from "expo-image-picker"
 import Feather from "@expo/vector-icons/Feather"
 import { useUserStore } from "@/hooks/userStore"
 import { getCurrentUser } from "@/app/actions/main_actions"
-import { updateProfileWithImage, updateUserProfile, checkUsernameAvailability, getUserById } from "@/app/actions/users"
+import { updateProfileWithImage, updateUserProfileData, checkUsernameAvailability, getUserById } from "@/app/actions/users"
 
 function capitalize(name: string) {
   return name.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
@@ -176,7 +176,7 @@ export default function EditProfileScreen() {
         success = await updateProfileWithImage(userId, profileData, newImageUri, originalProfileImage || undefined)
       } else {
         // Update profile without changing image
-        success = await updateUserProfile(userId, profileData)
+        success = await updateUserProfileData(userId, profileData)
       }
 
       if (success) {
@@ -210,7 +210,7 @@ export default function EditProfileScreen() {
 
   return (
     <>
-      <SafeAreaView style={styles.container} edges={["bottom"]}>
+      <SafeAreaView style={styles.container} edges={["right"]}>
         {/* Back Button */}
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Feather name="chevron-left" size={24} color={colors.primary} />

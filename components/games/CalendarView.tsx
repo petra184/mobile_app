@@ -93,11 +93,11 @@ export function CalendarView({ selectedTeam, locationType, onDateSelect }: Calen
       if (!locationType) return true
 
       if (locationType === "home") {
-        return selectedTeam ? game.homeTeam.id === selectedTeam.id : game.locationType === "home"
+        return selectedTeam ? game.homeTeam.id === selectedTeam.id : game.location_type === "home"
       } else if (locationType === "away") {
-        return selectedTeam ? game.awayTeam.id === selectedTeam.id : game.locationType === "away"
+        return selectedTeam ? game.awayTeam.id === selectedTeam.id : game.location_type === "away"
       } else {
-        return game.locationType === locationType
+        return game.location_type === locationType
       }
     })
   }, [allGames, selectedTeam, locationType])
@@ -564,6 +564,7 @@ const styles = StyleSheet.create({
   gameCountBadge: {
     minWidth: 16,
     height: 16,
+    top:2,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",

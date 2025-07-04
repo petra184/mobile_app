@@ -1,60 +1,25 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-
 import { View, Text, StyleSheet, ScrollView, Platform, Pressable, LayoutAnimation, UIManager } from "react-native"
-
 import { SafeAreaView } from "react-native-safe-area-context"
-
 import { useRouter } from "expo-router"
-
 import { LinearGradient } from "expo-linear-gradient"
-
 import { colors } from "@/constants/colors"
-
 import type { Team } from "@/app/actions/teams"
-
 import type { Team as DbTeam } from "@/types"
-
 import type { Game } from "@/types/game"
-
 import { CalendarView } from "@/components/games/CalendarView"
-
 import { GameCard } from "@/components/games/new_game_card"
-
 import { EnhancedDropdown } from "@/components/ui/new_dropdown"
-
 import { Feather } from "@expo/vector-icons"
-
 import { getTeams } from "@/app/actions/teams"
-
 import { useNotifications } from "@/context/notification-context"
+import { convertUiTeamToDbTeam } from "@/app/actions/games"
 
 // Enable LayoutAnimation for smooth transitions on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
-}
-
-// Helper function to convert UI Team to Database Team
-function convertUiTeamToDbTeam(uiTeam: Team): DbTeam {
-  return {
-    id: uiTeam.id,
-    name: uiTeam.name,
-    short_name: uiTeam.shortName,
-    color: uiTeam.primaryColor,
-    photo: uiTeam.logo,
-    sport: uiTeam.sport,
-    gender: uiTeam.gender,
-    additional_info: null,
-    about_team: null,
-    facebook: null,
-    instagram: null,
-    twitter: null,
-    website: null,
-    image_fit: null,
-    image_position: null,
-    image_scale: null,
-  }
 }
 
 // --- OPTIMIZED: Interactive, Selectable Game Item Component ---

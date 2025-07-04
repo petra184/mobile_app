@@ -65,7 +65,7 @@ export default function AccountSettingsScreen() {
   }
   
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['right']}>
       <Image
         source={require('../../IMAGES/crowd.jpg')}
         style={styles.backgroundImage}

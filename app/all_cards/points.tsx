@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
 import {
@@ -11,9 +10,9 @@ import {
   ActivityIndicator,
   RefreshControl,
   Pressable,
-  Dimensions,
   Image,
   Modal,
+  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -25,6 +24,7 @@ import { useNotifications } from "@/context/notification-context"
 import Animated, { FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated"
 import { StatusBar } from "expo-status-bar"
 import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
+import SpecialOfferCard from "@/components/rewards/SpecialOfferCard"
 import {
   fetchRewards,
   fetchSpecialOffers,
@@ -40,36 +40,6 @@ import {
 } from "@/app/actions/points"
 import { supabase } from "@/lib/supabase"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
-
-const { width, height } = Dimensions.get("window")
-
-// Enhanced types for rewards and special offers
-// type Reward = {
-//   id: string
-//   title: string
-//   description?: string
-//   points_required: number
-//   category?: string
-//   image_url?: string
-//   stock_quantity?: number
-//   is_sold: boolean
-//   created_at: string
-// }
-
-// type SpecialOffer = {
-//   id: string
-//   title: string
-//   description?: string
-//   points_required: number
-//   original_points?: number
-//   category?: string
-//   image_url?: string
-//   limited_quantity?: number
-//   claimed_count?: number
-//   is_active: boolean
-//   expires_at?: string
-//   created_at: string
-// }
 
 type PurchaseHistory = {
   id: string
@@ -115,7 +85,7 @@ const RewardImage: React.FC<RewardImageProps> = ({ imageUrl, containerStyle }) =
           setImageLoading(false)
         }}
         onLoad={() => setImageLoading(false)}
-        onLoadStart={() => setImageLoading(true)}
+        onLoadEnd={() => setImageLoading(false)}
         resizeMode="cover"
       />
     </View>
@@ -141,7 +111,6 @@ const DetailModal: React.FC<{
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={styles.modalContainer}>
         <StatusBar style="dark" />
-
         {/* Header */}
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -168,9 +137,7 @@ const DetailModal: React.FC<{
           {/* Content */}
           <View style={styles.modalDetailsContainer}>
             <Text style={[styles.modalTitle, !canAfford && styles.disabledText]}>{item.title}</Text>
-
             {item.category && <Text style={styles.modalCategory}>{item.category.toUpperCase()}</Text>}
-
             <Text style={[styles.modalDescription, !canAfford && styles.disabledText]}>{item.description}</Text>
 
             {/* Points Section */}
@@ -185,7 +152,6 @@ const DetailModal: React.FC<{
                       </Text>
                     </View>
                     <Text style={styles.modalOriginalPoints}>{offer.original_points} pts</Text>
-
                     <View style={styles.modalSavingsBadge}>
                       <Text style={styles.modalSavingsText}>
                         Save {offer.original_points - item.points_required} PTS!
@@ -202,7 +168,6 @@ const DetailModal: React.FC<{
                   </View>
                 )}
               </View>
-
               {!canAfford && (
                 <View style={styles.modalInsufficientBadge}>
                   <Feather name="lock" size={16} color="#EF4444" />
@@ -310,7 +275,6 @@ export default function PointsScreen() {
 
   const fetchData = async () => {
     if (!userId) return
-
     setLoading(true)
     try {
       const [rewardsData, offersData, historyData, purchaseHistoryData, statusData, achievementsData] =
@@ -330,9 +294,16 @@ export default function PointsScreen() {
         return isNaN(stockQuantity) || stockQuantity > 0
       })
 
-      // Filter out special offers with no remaining quantity
+      // Filter out expired and inactive special offers
       const availableOffers = offersData.filter((offer) => {
         if (!offer.is_active) return false
+        // Check if offer is expired
+        const isExpired = new Date() > new Date(offer.end_date)
+        if (isExpired) return false
+        // Check if offer hasn't started yet
+        const isNotStarted = new Date() < new Date(offer.start_date)
+        if (isNotStarted) return false
+        // Check limited quantity
         if (offer.limited_quantity) {
           const remainingQuantity = offer.limited_quantity - (offer.claimed_count || 0)
           return remainingQuantity > 0
@@ -459,6 +430,23 @@ export default function PointsScreen() {
     handleItemPress(offer, "offer")
   }
 
+  const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
+    if (!userId) {
+      Alert.alert("Login Required", "Please log in to redeem special offers.")
+      return
+    }
+
+    if (points < offer.points_required) {
+      Alert.alert("Insufficient Points", `You need ${offer.points_required - points} more points to redeem this offer.`)
+      return
+    }
+
+    // In a real app, you would call an API to redeem the special offer
+    showSuccess("Offer Redeemed!", `${offer.title} has been redeemed successfully!`)
+    // Refresh data to update claimed count
+    fetchData()
+  }
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString("en-US", {
@@ -480,7 +468,6 @@ export default function PointsScreen() {
               achievement.achievement_name.toLowerCase().includes("refer")
             ? "social"
             : "default"
-
     return achievementIconMap[category] || "award"
   }
 
@@ -495,7 +482,6 @@ export default function PointsScreen() {
               achievement.achievement_name.toLowerCase().includes("refer")
             ? "social"
             : "default"
-
     return achievementColorMap[category] || colors.primary
   }
 
@@ -530,6 +516,30 @@ export default function PointsScreen() {
             <Text style={styles.statLabel}>Purchases</Text>
           </View>
         </Animated.View>
+
+        {/* Special Offers */}
+        {specialOffers.length > 0 && (
+          <Animated.View entering={FadeInUp.duration(600).delay(300)} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Special Offers</Text>
+              <TouchableOpacity onPress={() => setActiveTab("offers")}>
+                <Text style={styles.seeAllText}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.featuredScrollView}
+              contentContainerStyle={styles.featuredContainer}
+            >
+              {specialOffers.map((offer, index) => (
+                <Animated.View key={offer.id} entering={FadeInUp.duration(600).delay(300 + index * 100)}>
+                  <SpecialOfferCard offer={offer} userPoints={points} onRedeem={handleSpecialOfferRedeem} />
+                </Animated.View>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
 
         {/* Featured Rewards */}
         <Animated.View entering={FadeInUp.duration(600).delay(400)} style={styles.section}>
@@ -632,13 +642,11 @@ export default function PointsScreen() {
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
-
           {userAchievements.length > 0 ? (
             <View style={styles.achievementsContainer}>
               {userAchievements.slice(0, 6).map((achievement) => {
                 const iconName = getAchievementIcon(achievement)
                 const iconColor = getAchievementColor(achievement)
-
                 return (
                   <Animated.View
                     key={achievement.id}
@@ -693,19 +701,18 @@ export default function PointsScreen() {
                   </View>
                   <View style={styles.rewardCardInfo}>
                     <Text style={[styles.rewardCardTitle, !canAfford && styles.disabledText]}>{reward.title}</Text>
-                    <Text style={styles.rewardCardCategory}>{(reward.category || "REWARD").toUpperCase()}</Text>
+                    {/* PRICE BELOW TITLE */}
+                    <View style={styles.rewardCardPoints}>
+                      <Feather name="star" size={16} color={canAfford ? "#FFD700" : "#999"} />
+                      <Text style={[styles.rewardCardPointsText, !canAfford && styles.disabledText]}>
+                        {reward.points_required} points
+                      </Text>
+                    </View>
+                    {/* LOW STOCK WARNING */}
                     {reward.stock_quantity && reward.stock_quantity <= 5 && (
                       <View style={styles.stockWarning}>
                         <Feather name="alert-triangle" size={12} color="#F59E0B" />
                         <Text style={styles.stockWarningText}>Only {reward.stock_quantity} left!</Text>
-                      </View>
-                    )}
-                    {!canAfford && (
-                      <View style={styles.insufficientBadge}>
-                        <Feather name="lock" size={12} color="#EF4444" />
-                        <Text style={styles.insufficientText}>
-                          Need {(reward.points_required - points).toLocaleString()} more
-                        </Text>
                       </View>
                     )}
                   </View>
@@ -713,15 +720,15 @@ export default function PointsScreen() {
                 <Text style={[styles.rewardCardDescription, !canAfford && styles.disabledText]}>
                   {reward.description}
                 </Text>
+                {/* BUTTON */}
                 <View style={styles.rewardCardFooter}>
-                  <View style={styles.rewardCardPoints}>
-                    <Feather name="star" size={16} color={canAfford ? "#FFD700" : "#999"} />
-                    <Text style={[styles.rewardCardPointsText, !canAfford && styles.disabledText]}>
-                      {reward.points_required} points
-                    </Text>
-                  </View>
+                  <View style={{ flex: 1 }} />
                   <TouchableOpacity
-                    style={[styles.rewardCardButton, !canAfford && styles.rewardCardButtonDisabled]}
+                    style={[
+                      styles.rewardCardButton,
+                      !canAfford && styles.rewardCardButtonInsufficientPoints, // New style for insufficient points
+                      { alignSelf: "center", width: "100%" },
+                    ]}
                     onPress={(e) => {
                       e.stopPropagation()
                       if (canAfford) {
@@ -730,9 +737,16 @@ export default function PointsScreen() {
                     }}
                     disabled={!canAfford}
                   >
-                    <Text style={[styles.rewardCardButtonText, !canAfford && styles.rewardCardButtonTextDisabled]}>
-                      {!canAfford ? "Insufficient Points" : "Add to Cart"}
-                    </Text>
+                    {canAfford ? (
+                      <Text style={styles.rewardCardButtonText}>Add to Cart</Text>
+                    ) : (
+                      <>
+                        <Feather name="lock" size={12} color="#EF4444" />
+                        <Text style={styles.rewardCardButtonInsufficientText}>
+                          Need {(reward.points_required - points).toLocaleString()} more points
+                        </Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -752,102 +766,17 @@ export default function PointsScreen() {
   const renderOffers = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
       {specialOffers.length > 0 ? (
-        specialOffers.map((offer) => {
-          const canAfford = points >= offer.points_required
-          const remainingQuantity = offer.limited_quantity ? offer.limited_quantity - (offer.claimed_count || 0) : null
-
-          return (
-            <Animated.View key={offer.id} entering={FadeInUp.duration(400)} style={styles.offerCard}>
-              <TouchableOpacity style={styles.offerCardTouchable} onPress={() => handleClaimOffer(offer)}>
-                <View style={styles.offerBadge}>
-                  <Feather name="zap" size={12} color="white" />
-                  <Text style={styles.offerBadgeText}>LIMITED TIME</Text>
-                </View>
-
-                <View style={styles.offerContent}>
-                  {/* Header with image */}
-                  <View style={styles.offerCardHeader}>
-                    <View style={styles.offerImageContainer}>
-                      <RewardImage imageUrl={offer.image_url ?? undefined} containerStyle={styles.offerImageWrapper} />
-                    </View>
-                    <View style={styles.offerCardInfo}>
-                      <Text style={[styles.offerTitle, !canAfford && styles.disabledText]}>{offer.title}</Text>
-                      {offer.category && <Text style={styles.offerCategory}>{offer.category.toUpperCase()}</Text>}
-
-                      {/* Stock warning for limited offers */}
-                      {remainingQuantity && remainingQuantity <= 5 && (
-                        <View style={styles.stockWarning}>
-                          <Feather name="alert-triangle" size={12} color="#F59E0B" />
-                          <Text style={styles.stockWarningText}>Only {remainingQuantity} left!</Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  <Text style={[styles.offerDescription, !canAfford && styles.disabledText]}>
-                    {offer.description || "Limited time special offer"}
-                  </Text>
-
-                  {/* Points and Discount Section */}
-                  <View style={styles.offerPricingSection}>
-                    <View style={styles.offerPricingRow}>
-                      {offer.original_points && (
-                        <View style={styles.originalPriceContainer}>
-                          <Text style={styles.originalPriceLabel}>Regular Price</Text>
-                          <Text style={[styles.originalPrice, !canAfford && styles.disabledText]}>
-                            {offer.original_points} pts
-                          </Text>
-                        </View>
-                      )}
-
-                      <View style={styles.currentPriceContainer}>
-                        <Text style={styles.offerPriceLabel}>Special Price</Text>
-                        <View style={styles.offerPriceRow}>
-                          <Feather name="star" size={16} color={canAfford ? "#FFD700" : "#999"} />
-                          <Text style={[styles.offerPrice, !canAfford && styles.disabledText]}>
-                            {offer.points_required} pts
-                          </Text>
-                        </View>
-                      </View>
-
-                      {offer.original_points && (
-                        <View style={styles.savingsBadge}>
-                          <Text style={styles.savingsText}>
-                            Save {offer.original_points - offer.points_required} PTS!
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  {!canAfford && (
-                    <View style={styles.offerInsufficientBadge}>
-                      <Feather name="lock" size={12} color="#EF4444" />
-                      <Text style={styles.offerInsufficientText}>
-                        Need {(offer.points_required - points).toLocaleString()} more points
-                      </Text>
-                    </View>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.offerButton, !canAfford && styles.offerButtonDisabled]}
-                    onPress={(e) => {
-                      e.stopPropagation()
-                      if (canAfford) {
-                        handleClaimItem(offer)
-                      }
-                    }}
-                    disabled={!canAfford}
-                  >
-                    <Text style={[styles.offerButtonText, !canAfford && styles.offerButtonTextDisabled]}>
-                      {!canAfford ? "Insufficient Points" : `Claim Offer for ${offer.points_required} PTS`}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
+        <View style={styles.offersContainer}>
+          {specialOffers.map((offer, index) => (
+            <Animated.View
+              key={offer.id}
+              entering={FadeInUp.duration(600).delay(index * 100)}
+              style={styles.offerCardWrapper}
+            >
+              <SpecialOfferCard offer={offer} userPoints={points} onRedeem={handleSpecialOfferRedeem} />
             </Animated.View>
-          )
-        })
+          ))}
+        </View>
       ) : (
         <View style={styles.emptyState}>
           <Feather name="zap" size={64} color={colors.textSecondary} />
@@ -927,7 +856,6 @@ export default function PointsScreen() {
             {userAchievements.map((achievement) => {
               const iconName = getAchievementIcon(achievement)
               const iconColor = getAchievementColor(achievement)
-
               return (
                 <Animated.View
                   key={achievement.id}
@@ -982,7 +910,6 @@ export default function PointsScreen() {
     <SafeAreaView style={styles.container}>
       <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <StatusBar style="dark" />
-
       {/* Header with centered title */}
       <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -1058,6 +985,19 @@ export default function PointsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  rewardCardButtonInsufficientPoints: {
+    backgroundColor: "#FEE2E2", // Red background
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 15,
+  },
+  rewardCardButtonInsufficientText: {
+    color: "#EF4444",
+    fontSize: 12,
+    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,
@@ -1231,6 +1171,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: colors.primary,
+  },
+  featuredScrollView: {
+    marginBottom: 8,
+  },
+  featuredContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  offersContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 10,
+  },
+  offerCardWrapper: {
+    marginBottom: 16,
+    width: "100%",
+    alignItems: "center",
   },
   activityCard: {
     flexDirection: "row",
@@ -1501,34 +1458,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stockWarning: {
+    position: "absolute",
+    top: -25,
+    right: -20,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    borderColor: "#D97706",
+    paddingHorizontal: 8,
+    borderWidth: 0.2,
+    paddingVertical: 4,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-    marginBottom: 4,
+    gap: 4,
+    zIndex: 10,
   },
   stockWarningText: {
     fontSize: 10,
     fontWeight: "600",
     color: "#D97706",
-    marginLeft: 4,
-  },
-  insufficientBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-  },
-  insufficientText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#EF4444",
     marginLeft: 4,
   },
   rewardCardDescription: {
@@ -1568,146 +1515,6 @@ const styles = StyleSheet.create({
   },
   rewardCardButtonTextDisabled: {
     color: colors.textSecondary,
-  },
-  // Special Offer Styles
-  offerCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    marginTop: 15,
-    marginBottom: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    marginHorizontal: 20,
-    position: "relative",
-  },
-  offerCardTouchable: {
-    borderRadius: 16,
-  },
-  offerBadge: {
-    position: "absolute",
-    top: -5,
-    right: 0,
-    backgroundColor: "#EF4444",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    zIndex: 1,
-  },
-  offerBadgeText: {
-    color: "white",
-    fontSize: 10,
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  offerContent: {
-    padding: 20,
-  },
-  offerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  offerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.text,
-    flex: 1,
-    marginRight: 12,
-  },
-  offerDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  // Points and Discount on Same Row
-  offerPricingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  originalPrice: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textDecorationLine: "line-through",
-  },
-  currentPriceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-  offerPrice: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#EF4444",
-    marginLeft: 4,
-  },
-  savingsBadge: {
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  savingsText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#D97706",
-  },
-  offerInsufficientBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    alignSelf: "flex-start",
-    marginBottom: 16,
-  },
-  offerInsufficientText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#EF4444",
-    marginLeft: 4,
-  },
-  offerButton: {
-    backgroundColor: "#EF4444",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    borderRadius: 38,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  offerButtonDisabled: {
-    backgroundColor: colors.border,
-  },
-  offerButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  offerButtonTextDisabled: {
-    color: colors.textSecondary,
-  },
-  offerOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(128, 128, 128, 0.5)",
-    borderRadius: 16,
-    zIndex: 1,
   },
   historyCard: {
     flexDirection: "row",
@@ -1979,57 +1786,5 @@ const styles = StyleSheet.create({
   },
   modalActionButtonTextDisabled: {
     color: colors.textSecondary,
-  },
-  offerCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  offerImageContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#EF444420",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    overflow: "hidden",
-  },
-  offerImageWrapper: {
-    width: "100%",
-    height: "100%",
-  },
-  offerCardInfo: {
-    flex: 1,
-  },
-  offerCategory: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#EF4444",
-    marginBottom: 4,
-  },
-  offerPricingSection: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  originalPriceContainer: {
-    alignItems: "flex-start",
-  },
-  originalPriceLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  offerPriceLabel: {
-    fontSize: 12,
-    color: "#EF4444",
-    marginBottom: 2,
-    fontWeight: "600",
-  },
-  offerPriceRow: {
-    flexDirection: "row",
-    alignItems: "center",
   },
 })

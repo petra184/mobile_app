@@ -1,18 +1,19 @@
 import { supabase } from "@/lib/supabase"
-import { getTeamById } from "@/app/actions/teams"
-import type { Game, GameStatus, GameScheduleRow, OpposingTeamRow } from "@/types/game"
+import type { Game, GameStatus } from "@/types/game"
 import type { Team } from "@/app/actions/teams"
 import { formatTimeString } from "@/utils/dateUtils"
 import type { Database } from "@/types/supabase"
 import { colors } from "@/constants/colors"
 
-// Define the database Team type to avoid confusion
-type DbTeam = Database["public"]["Tables"]["teams"]["Row"]
+// Database types from your schema
+type GameScheduleRow = Database["public"]["Tables"]["game_schedule"]["Row"]
+type OpposingTeamRow = Database["public"]["Tables"]["opposing_teams"]["Row"]
+type TeamsRow = Database["public"]["Tables"]["teams"]["Row"]
 
-// Extended GameScheduleRow to include photo_url explicitly
-type ExtendedGameScheduleRow = GameScheduleRow & {
-  photo_url?: string | null
-  special_events?: string | null
+// Query result type with relationships
+type GameScheduleWithRelations = GameScheduleRow & {
+  sport_id: TeamsRow | null
+  opponent_id: OpposingTeamRow | null
 }
 
 /**
@@ -23,7 +24,7 @@ type ExtendedGameScheduleRow = GameScheduleRow & {
  */
 export async function getUpcomingGames(limit = 1000, teamId?: string): Promise<Game[]> {
   try {
-    // Build query - explicitly select all fields including photo_url
+    // Build query with proper field selection
     let query = supabase
       .from("game_schedule")
       .select(`
@@ -42,8 +43,10 @@ export async function getUpcomingGames(limit = 1000, teamId?: string): Promise<G
         status,
         photo_url,
         game_type,
-        sport_id (*),
-        opponent_id (*)
+        game_notes,
+        last_updated,
+        sport_id:teams!game_schedule_sport_id_fkey(*),
+        opponent_id:opposing_teams!game_schedule_opponent_id_fkey(*)
       `)
       .gte("date", new Date().toISOString().split("T")[0])
       .order("date", { ascending: true })
@@ -79,7 +82,6 @@ export async function getUpcomingGames(limit = 1000, teamId?: string): Promise<G
  */
 export async function getPastGames(limit = 1000, teamId?: string): Promise<Game[]> {
   try {
-    // Build query - explicitly select all fields including photo_url
     let query = supabase
       .from("game_schedule")
       .select(`
@@ -98,19 +100,19 @@ export async function getPastGames(limit = 1000, teamId?: string): Promise<Game[
         status,
         photo_url,
         game_type,
-        sport_id (*),
-        opponent_id (*)
+        game_notes,
+        last_updated,
+        sport_id:teams!game_schedule_sport_id_fkey(*),
+        opponent_id:opposing_teams!game_schedule_opponent_id_fkey(*)
       `)
       .lt("date", new Date().toISOString().split("T")[0])
       .order("date", { ascending: false })
       .limit(limit)
 
-    // Add team filter if provided
     if (teamId) {
       query = query.eq("sport_id", teamId)
     }
 
-    // Execute query
     const { data: gameSchedules, error } = await query
 
     if (error) {
@@ -118,7 +120,6 @@ export async function getPastGames(limit = 1000, teamId?: string): Promise<Game[
       throw new Error(`Failed to fetch past games: ${error.message}`)
     }
 
-    // Transform data
     const games = await transformGameSchedules(gameSchedules || [], "completed")
     return games
   } catch (error) {
@@ -136,11 +137,9 @@ export async function getPastGames(limit = 1000, teamId?: string): Promise<Game[
  */
 export async function getGamesByMonth(year: number, month: number, teamId?: string): Promise<Game[]> {
   try {
-    // Create start and end dates for the month
     const startDate = new Date(year, month, 1).toISOString().split("T")[0]
     const endDate = new Date(year, month + 1, 0).toISOString().split("T")[0]
 
-    // Build query - explicitly select all fields including photo_url
     let query = supabase
       .from("game_schedule")
       .select(`
@@ -159,19 +158,19 @@ export async function getGamesByMonth(year: number, month: number, teamId?: stri
         status,
         photo_url,
         game_type,
-        sport_id (*),
-        opponent_id (*)
+        game_notes,
+        last_updated,
+        sport_id:teams!game_schedule_sport_id_fkey(*),
+        opponent_id:opposing_teams!game_schedule_opponent_id_fkey(*)
       `)
       .gte("date", startDate)
       .lte("date", endDate)
       .order("date", { ascending: true })
 
-    // Add team filter if provided
     if (teamId) {
       query = query.eq("sport_id", teamId)
     }
 
-    // Execute query
     const { data: gameSchedules, error } = await query
 
     if (error) {
@@ -179,7 +178,6 @@ export async function getGamesByMonth(year: number, month: number, teamId?: stri
       throw new Error(`Failed to fetch games by month: ${error.message}`)
     }
 
-    // Transform data
     const games = await transformGameSchedules(gameSchedules || [])
     return games
   } catch (error) {
@@ -213,8 +211,10 @@ export async function getGameById(gameId: string): Promise<Game | null> {
         status,
         photo_url,
         game_type,
-        sport_id (*),
-        opponent_id (*)
+        game_notes,
+        last_updated,
+        sport_id:teams!game_schedule_sport_id_fkey(*),
+        opponent_id:opposing_teams!game_schedule_opponent_id_fkey(*)
       `)
       .eq("game_id", gameId)
       .single()
@@ -228,7 +228,6 @@ export async function getGameById(gameId: string): Promise<Game | null> {
       return null
     }
 
-    // Transform data
     const games = await transformGameSchedules([gameSchedule])
     return games[0] || null
   } catch (error) {
@@ -244,10 +243,8 @@ export async function getGameById(gameId: string): Promise<Game | null> {
  */
 export async function getLiveGames(limit = 100): Promise<Game[]> {
   try {
-    // Get today's date
     const today = new Date().toISOString().split("T")[0]
 
-    // Get games scheduled for today - explicitly select all fields including photo_url
     const { data: gameSchedules, error } = await supabase
       .from("game_schedule")
       .select(`
@@ -266,8 +263,10 @@ export async function getLiveGames(limit = 100): Promise<Game[]> {
         status,
         photo_url,
         game_type,
-        sport_id (*),
-        opponent_id (*)
+        game_notes,
+        last_updated,
+        sport_id:teams!game_schedule_sport_id_fkey(*),
+        opponent_id:opposing_teams!game_schedule_opponent_id_fkey(*)
       `)
       .eq("date", today)
       .order("game_time", { ascending: true })
@@ -278,22 +277,17 @@ export async function getLiveGames(limit = 100): Promise<Game[]> {
       throw new Error(`Failed to fetch live games: ${error.message}`)
     }
 
-    // Filter for games that are likely live based on time
     const now = new Date()
     const currentHour = now.getHours()
 
     const potentiallyLiveGames =
       gameSchedules?.filter((game) => {
         if (!game.game_time) return false
-
         const [hourStr] = game.game_time.split(":")
         const gameHour = Number.parseInt(hourStr, 10)
-
-        // Consider games live if they started in the last 3 hours
         return gameHour <= currentHour && gameHour >= currentHour - 3
       }) || []
 
-    // Transform data
     const games = await transformGameSchedules(potentiallyLiveGames, "live")
     return games
   } catch (error) {
@@ -328,8 +322,10 @@ export async function getTeamGames(teamId: string, limit = 1000): Promise<Game[]
         status,
         photo_url,
         game_type,
-        sport_id (*),
-        opponent_id (*)
+        game_notes,
+        last_updated,
+        sport_id:teams!game_schedule_sport_id_fkey(*),
+        opponent_id:opposing_teams!game_schedule_opponent_id_fkey(*)
       `)
       .eq("sport_id", teamId)
       .order("date", { ascending: true })
@@ -340,7 +336,6 @@ export async function getTeamGames(teamId: string, limit = 1000): Promise<Game[]
       throw new Error(`Failed to fetch team games: ${error.message}`)
     }
 
-    // Transform data
     const games = await transformGameSchedules(gameSchedules || [])
     return games
   } catch (error) {
@@ -354,7 +349,7 @@ export async function getTeamGames(teamId: string, limit = 1000): Promise<Game[]
  * @param dbTeam Team from database
  * @returns Team object compatible with Game interface
  */
-function convertDbTeamToTeam(dbTeam: DbTeam): Team {
+function convertDbTeamToTeam(dbTeam: TeamsRow): Team {
   return {
     id: dbTeam.id,
     name: dbTeam.name,
@@ -365,7 +360,27 @@ function convertDbTeamToTeam(dbTeam: DbTeam): Team {
       "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Manhattan_Jaspers_logo.svg/1200px-Manhattan_Jaspers_logo.svg.png",
     sport: dbTeam.sport,
     gender: dbTeam.gender,
-    // Add any other fields required by the Team interface
+  }
+}
+
+export function convertUiTeamToDbTeam(uiTeam: Team): any {
+  return {
+    id: uiTeam.id,
+    name: uiTeam.name,
+    short_name: uiTeam.shortName,
+    color: uiTeam.primaryColor,
+    photo: uiTeam.logo,
+    sport: uiTeam.sport,
+    gender: uiTeam.gender,
+    about_team: null,
+    facebook: null,
+    instagram: null,
+    twitter: null,
+    website: null,
+    image_fit: null,
+    image_position: null,
+    image_scale: null,
+    last_updated: new Date().toISOString(), // Add the missing field
   }
 }
 
@@ -376,24 +391,18 @@ function convertDbTeamToTeam(dbTeam: DbTeam): Team {
  * @returns Array of transformed Game objects
  */
 async function transformGameSchedules(
-  gameSchedules: (ExtendedGameScheduleRow & {
-    sport_id: any
-    opponent_id: OpposingTeamRow | null
-  })[],
+  gameSchedules: GameScheduleWithRelations[],
   defaultStatus?: GameStatus,
 ): Promise<Game[]> {
-  // Process games in parallel
   const gamePromises = gameSchedules.map(async (schedule) => {
     try {
-      // Get home team (our team) from database
-      const homeTeamDb = await getTeamById(schedule.sport_id?.id || "")
-
-      if (!homeTeamDb) {
-        throw new Error(`Home team not found for game ${schedule.game_id}`)
+      // Handle home team (sport_id relationship)
+      if (!schedule.sport_id) {
+        console.warn(`No sport_id found for game ${schedule.game_id}`)
+        return null
       }
 
-      // Convert database team to Team type expected by Game interface
-      const homeTeam = convertDbTeamToTeam(homeTeamDb as unknown as DbTeam)
+      const homeTeam = convertDbTeamToTeam(schedule.sport_id)
 
       // Create away team from opponent data
       const awayTeam: Team = schedule.opponent_id
@@ -401,11 +410,10 @@ async function transformGameSchedules(
             id: schedule.opponent_id.id,
             name: schedule.opponent_id.name,
             shortName: schedule.opponent_id.name.split(" ").pop() || schedule.opponent_id.name,
-            primaryColor: "#666666", // Default color for opponents
+            primaryColor: "#666666",
             logo: schedule.opponent_id.logo || "",
-            sport: homeTeamDb.sport,
-            gender: homeTeamDb.gender,
-            // Add any other fields required by the Team interface
+            sport: homeTeam.sport,
+            gender: homeTeam.gender,
           }
         : {
             id: "unknown",
@@ -413,15 +421,13 @@ async function transformGameSchedules(
             shortName: "Unknown",
             primaryColor: "#666666",
             logo: "",
-            sport: homeTeamDb.sport,
-            gender: homeTeamDb.gender,
-            // Add any other fields required by the Team interface
+            sport: homeTeam.sport,
+            gender: homeTeam.gender,
           }
 
       // Determine game status
       let status: GameStatus = defaultStatus || "scheduled"
 
-      // If we have scores, it's completed
       if (schedule.final_home_score !== null && schedule.final_guest_score !== null) {
         status = "completed"
       }
@@ -433,24 +439,24 @@ async function transformGameSchedules(
         time: formatTimeString(schedule.game_time),
         status,
         location: schedule.location || "TBD",
-        location_type: schedule.location || "home", // Use actual location type from database
+        location_type: schedule.location || "home",
         homeTeam,
         awayTeam,
         sport: {
-          name: homeTeamDb.sport,
-          display_name: homeTeamDb.sport.charAt(0).toUpperCase() + homeTeamDb.sport.slice(1),
+          name: homeTeam.sport,
+          display_name: homeTeam.sport.charAt(0).toUpperCase() + homeTeam.sport.slice(1),
         },
         seasonType: schedule.season_type || "Regular",
         points: schedule.points || 0,
-        photo_url: schedule.photo_url || null, // Now this should work
-        special_events: schedule.special_events || null, // Now this should work
+        photo_url: schedule.photo_url,
+        special_events: schedule.special_events,
       }
 
-      // Add score if available
+      // Add score if available - note that final_guest_score is string | null in DB
       if (schedule.final_home_score !== null && schedule.final_guest_score !== null) {
         game.score = {
           home: schedule.final_home_score,
-          away: Number.parseInt(schedule.final_guest_score || "0", 10),
+          away: Number.parseInt(schedule.final_guest_score, 10),
         }
       }
 
@@ -461,7 +467,6 @@ async function transformGameSchedules(
     }
   })
 
-  // Wait for all promises to resolve and filter out nulls
   const games = (await Promise.all(gamePromises)).filter(Boolean) as Game[]
   return games
 }

@@ -267,6 +267,7 @@ export default function NewsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 10,
     backgroundColor: colors.background,
   },
   scrollC: {
@@ -278,7 +279,6 @@ const styles = StyleSheet.create({
         marginTop: 110,
       },
     }),
-    paddingTop: 10,
   },
 
   // Header Section - No background

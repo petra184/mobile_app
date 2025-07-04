@@ -4,8 +4,9 @@
     "slug": "JsUp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "jsup",
+    "icon": "./IMAGES/LOGO.png",
+    "scheme": "GDR",
+    "deepLinking": true,
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

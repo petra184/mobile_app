@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Image, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context"
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors } from '@/constants/colors';
 import { useUserStore } from '@/hooks/userStore';
@@ -99,7 +99,7 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['right']}>
       <Image
         source={require('../../IMAGES/crowd.jpg')}
         style={styles.backgroundImage}
@@ -315,10 +315,11 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   scrollContent: {
-    padding: 20,
+    padding: 25,
   },
   header: {
     alignItems: 'center',
+    marginTop: 32,
     marginBottom: 32,
   },
   title: {

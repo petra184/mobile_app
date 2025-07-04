@@ -422,3 +422,220 @@ export async function deleteBirthdayRequest(requestId: string) {
     }
   }
 }
+
+
+export interface FAQ {
+  id: string
+  faq_title: string
+  faq_response: string
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Get all FAQs for mobile app
+ */
+export async function getFAQsForMobile(): Promise<{ data: FAQ[]; error: string | null }> {
+  try {
+    console.log("📱 Fetching FAQs for mobile app...")
+
+    const { data, error } = await supabase
+      .from("birthday_faqs")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("❌ Error fetching FAQs:", error)
+      return {
+        data: [],
+        error: `Failed to fetch FAQs: ${error.message}`,
+      }
+    }
+
+    console.log(`✅ Fetched ${data?.length || 0} FAQs for mobile`)
+
+    // Log each FAQ for debugging
+    data?.forEach((faq, index) => {
+      console.log(`❓ FAQ ${index + 1}: ${faq.faq_title}`)
+    })
+
+    return {
+      data: data || [],
+      error: null,
+    }
+  } catch (error) {
+    console.error("❌ Error in getFAQsForMobile:", error)
+    return {
+      data: [],
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+/**
+ * Get a specific FAQ by ID
+ */
+export async function getFAQById(id: string): Promise<{ data: FAQ | null; error: string | null }> {
+  try {
+    console.log("🔍 Fetching FAQ by ID:", id)
+
+    const { data, error } = await supabase
+      .from("birthday_faqs")
+      .select("*")
+      .eq("id", id)
+      .single()
+
+    if (error) {
+      console.error("❌ Error fetching FAQ:", error)
+      return {
+        data: null,
+        error: `Failed to fetch FAQ: ${error.message}`,
+      }
+    }
+
+    console.log("✅ Fetched FAQ:", data?.faq_title)
+    return {
+      data: data,
+      error: null,
+    }
+  } catch (error) {
+    console.error("❌ Error in getFAQById:", error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+/**
+ * Search FAQs by title or content
+ */
+export async function searchFAQs(searchTerm: string): Promise<{ data: FAQ[]; error: string | null }> {
+  try {
+    console.log("🔍 Searching FAQs with term:", searchTerm)
+
+    if (!searchTerm.trim()) {
+      // If no search term, return all FAQs
+      return getFAQsForMobile()
+    }
+
+    const { data, error } = await supabase
+      .from("birthday_faqs")
+      .select("*")
+      .or(`faq_title.ilike.%${searchTerm}%,faq_response.ilike.%${searchTerm}%`)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("❌ Error searching FAQs:", error)
+      return {
+        data: [],
+        error: `Failed to search FAQs: ${error.message}`,
+      }
+    }
+
+    console.log(`✅ Found ${data?.length || 0} FAQs matching "${searchTerm}"`)
+    return {
+      data: data || [],
+      error: null,
+    }
+  } catch (error) {
+    console.error("❌ Error in searchFAQs:", error)
+    return {
+      data: [],
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+/**
+ * Get recently updated FAQs (within last 30 days)
+ */
+export async function getRecentFAQs(): Promise<{ data: FAQ[]; error: string | null }> {
+  try {
+    console.log("📅 Fetching recently updated FAQs...")
+
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const { data, error } = await supabase
+      .from("birthday_faqs")
+      .select("*")
+      .gte("updated_at", thirtyDaysAgo.toISOString())
+      .order("updated_at", { ascending: false })
+
+    if (error) {
+      console.error("❌ Error fetching recent FAQs:", error)
+      return {
+        data: [],
+        error: `Failed to fetch recent FAQs: ${error.message}`,
+      }
+    }
+
+    console.log(`✅ Fetched ${data?.length || 0} recently updated FAQs`)
+    return {
+      data: data || [],
+      error: null,
+    }
+  } catch (error) {
+    console.error("❌ Error in getRecentFAQs:", error)
+    return {
+      data: [],
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+/**
+ * Get FAQ statistics
+ */
+export async function getFAQStats(): Promise<{ 
+  data: { 
+    total: number; 
+    recent: number; 
+    lastUpdated: string | null 
+  } | null; 
+  error: string | null 
+}> {
+  try {
+
+    const { data, error } = await supabase
+      .from("birthday_faqs")
+      .select("created_at, updated_at")
+      .order("updated_at", { ascending: false })
+
+    if (error) {
+      console.error("❌ Error fetching FAQ stats:", error)
+      return {
+        data: null,
+        error: `Failed to fetch FAQ stats: ${error.message}`,
+      }
+    }
+
+    const total = data?.length || 0
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const recent = data?.filter(faq => 
+      new Date(faq.updated_at) >= thirtyDaysAgo
+    ).length || 0
+
+    const lastUpdated = data && data.length > 0 ? data[0].updated_at : null
+
+    const stats = {
+      total,
+      recent,
+      lastUpdated,
+    }
+
+    return {
+      data: stats,
+      error: null,
+    }
+  } catch (error) {
+    console.error("❌ Error in getFAQStats:", error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}

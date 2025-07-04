@@ -20,12 +20,16 @@ import { Image } from "expo-image"
 import { useNavigation } from "expo-router"
 import { Feather } from "@expo/vector-icons"
 import { getBirthdayPackages } from "@/app/actions/birthdays"
+import { getFAQsForMobile, type FAQ } from "@/app/actions/birthdays"
 import type { BirthdayPackage } from "@/app/actions/birthdays"
 import PackageCard from "@/components/rewards/PackageCard"
 import ReservationForm from "@/components/rewards/ReservationForm"
 import { colors } from "@/constants/colors"
 import { LinearGradient } from "expo-linear-gradient"
 import { useRouter } from "expo-router"
+import { useUserStore } from "@/hooks/userStore"
+import { getSchoolById } from "@/app/actions/school_info"
+import type { SchoolInfo } from "@/constants/all"
 
 const { width, height } = Dimensions.get("window")
 const HERO_HEIGHT = 260
@@ -34,17 +38,35 @@ const TABS = [
   { id: "packages", label: "Packages", iconName: "gift" },
   { id: "contact", label: "Contact", iconName: "mail" },
   { id: "testimonials", label: "Reviews", iconName: "star" },
-  { id: "faq", label: "FAQ", iconName: "calendar" },
+  { id: "faq", label: "FAQ", iconName: "help-circle" },
 ]
 
 export default function BirthdaysScreen() {
   const router = useRouter()
+  const { getUserName, userEmail, first_name, last_name } = useUserStore()
+  const [school, setSchool] = useState<SchoolInfo | null>(null)
+
+  useEffect(() => {
+    const fetchSchool = async () => {
+      const schoolId = "26c7ae3b-fc69-42ce-b4fe-0af35c02c413" // Replace with real value
+      const result = await getSchoolById(schoolId)
+      setSchool(result)
+    }
+
+    fetchSchool()
+  }, [])
 
   // Supabase data state
   const [packages, setPackages] = useState<BirthdayPackage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  // FAQ state
+  const [faqs, setFaqs] = useState<FAQ[]>([])
+  const [faqsLoading, setFaqsLoading] = useState(true)
+  const [faqsError, setFaqsError] = useState<string | null>(null)
+  const [expandedFaq, setExpandedFaq] = useState<string | null>(null)
 
   // Existing state
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null)
@@ -56,6 +78,7 @@ export default function BirthdaysScreen() {
     phone: "",
     message: "",
   })
+
   const navigation = useNavigation()
   const scrollViewRef = useRef<ScrollView>(null)
 
@@ -65,31 +88,52 @@ export default function BirthdaysScreen() {
 
   const selectedPackage = packages.find((pkg) => pkg.id === selectedPackageId)
 
-  // Data fetching - now fetches from ALL teams
+  // Data fetching - now fetches from ALL teams with active packages only
   useEffect(() => {
     fetchPackages()
+    fetchFAQs()
   }, [])
 
+  // Add useEffect to prefill contact form with user data
+  useEffect(() => {
+    const userName = getUserName()
+    const email = userEmail || ""
+
+    if (userName !== "User" || email) {
+      setContactForm((prev) => ({
+        ...prev,
+        name: userName !== "User" ? userName : prev.name,
+        email: email || prev.email,
+      }))
+    }
+  }, [getUserName, userEmail, first_name, last_name])
+
   const fetchPackages = async (isRefresh = false) => {
+    console.log("📱 Fetching packages for mobile app...")
+
     if (isRefresh) {
       setRefreshing(true)
     } else {
       setLoading(true)
     }
-
     setError(null)
 
     try {
       // Fetch all active birthday packages from ALL teams
       const result = await getBirthdayPackages({ is_active: true })
 
+      console.log("📦 Packages fetch result:", result)
+
       if (result.error) {
+        console.error("❌ Error from getBirthdayPackages:", result.error)
         setError(result.error)
       } else {
+        console.log(`✅ Successfully fetched ${result.data.length} packages`)
         setPackages(result.data)
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load packages"
+      console.error("❌ Exception in fetchPackages:", errorMessage)
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -97,8 +141,30 @@ export default function BirthdaysScreen() {
     }
   }
 
-  const onRefresh = () => {
-    fetchPackages(true)
+  const fetchFAQs = async () => {
+    console.log("❓ Fetching FAQs for mobile app...")
+    setFaqsLoading(true)
+    setFaqsError(null)
+
+    try {
+      const result = await getFAQsForMobile()
+
+      console.log("❓ FAQs fetch result:", result)
+
+      if (result.error) {
+        console.error("❌ Error from getFAQsForMobile:", result.error)
+        setFaqsError(result.error)
+      } else {
+        console.log(`✅ Successfully fetched ${result.data.length} FAQs`)
+        setFaqs(result.data)
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to load FAQs"
+      console.error("❌ Exception in fetchFAQs:", errorMessage)
+      setFaqsError(errorMessage)
+    } finally {
+      setFaqsLoading(false)
+    }
   }
 
   useLayoutEffect(() => {
@@ -108,6 +174,7 @@ export default function BirthdaysScreen() {
   }, [navigation])
 
   const handlePackageSelect = (packageId: string) => {
+    console.log("🎯 Package selected:", packageId)
     setSelectedPackageId(packageId)
     setModalVisible(true)
   }
@@ -123,7 +190,6 @@ export default function BirthdaysScreen() {
   const handleTabChange = (tab: string) => {
     // Find the index of the selected tab
     const tabIndex = TABS.findIndex((t) => t.id === tab)
-
     // Animate the indicator to the new position
     Animated.spring(tabIndicatorPosition, {
       toValue: tabIndex * tabIndicatorWidth,
@@ -143,15 +209,27 @@ export default function BirthdaysScreen() {
   const handleContactSubmit = () => {
     // In a real app, this would send the form data to a server
     console.log("Contact form submitted:", contactForm)
-    // Reset form
+    // Reset form but keep user info prefilled
+    const userName = getUserName()
+    const email = userEmail || ""
+
     setContactForm({
-      name: "",
-      email: "",
+      name: userName !== "User" ? userName : "",
+      email: email,
       phone: "",
       message: "",
     })
+
     // Show success message (in a real app)
     alert("Thank you! Your message has been sent. We will contact you shortly.")
+  }
+
+  const toggleFaqExpansion = (faqId: string) => {
+    setExpandedFaq(expandedFaq === faqId ? null : faqId)
+  }
+
+  const retryFetchFAQs = () => {
+    fetchFAQs()
   }
 
   return (
@@ -168,7 +246,6 @@ export default function BirthdaysScreen() {
             style={styles.heroImage}
             contentFit="cover"
           />
-
           {/* White gradient overlay at the top */}
           <LinearGradient
             colors={[colors.background, "rgba(249, 250, 251, 0.68)", "rgba(249, 250, 251, 0)"]}
@@ -176,10 +253,8 @@ export default function BirthdaysScreen() {
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
           />
-
           {/* Dark overlay at the bottom */}
           <View style={styles.heroOverlay} />
-
           {/* Back button */}
           <TouchableOpacity style={styles.backButton} onPress={navigateToStore} activeOpacity={0.7}>
             <Feather name="chevron-left" size={20} color={colors.primary} />
@@ -197,7 +272,6 @@ export default function BirthdaysScreen() {
         <View style={styles.newTabContainer}>
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id
-
             return (
               <TouchableOpacity
                 key={tab.id}
@@ -215,7 +289,6 @@ export default function BirthdaysScreen() {
               </TouchableOpacity>
             )
           })}
-
           {/* Animated indicator line */}
           <Animated.View
             style={[
@@ -274,7 +347,6 @@ export default function BirthdaysScreen() {
           {activeTab === "testimonials" && (
             <View style={styles.tabContentContainer}>
               <Text style={styles.sectionTitle}>What People Are Saying</Text>
-
               {[
                 {
                   initials: "JD",
@@ -321,7 +393,6 @@ export default function BirthdaysScreen() {
           {activeTab === "contact" && (
             <View style={styles.tabContentContainer}>
               <Text style={styles.sectionTitle}>Contact Us</Text>
-
               <View style={styles.contactCard}>
                 <Text style={styles.contactCardTitle}>Have questions or want to book a birthday package?</Text>
                 <Text style={styles.contactCardSubtitle}>
@@ -384,15 +455,13 @@ export default function BirthdaysScreen() {
 
                 <View style={styles.contactInfoContainer}>
                   <Text style={styles.contactInfoTitle}>Or reach us directly:</Text>
-
                   <View style={styles.contactInfoItem}>
                     <Feather name="phone" size={16} color={colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.contactInfoText}>(555) 123-4567</Text>
+                    <Text style={styles.contactInfoText}>{school?.contactPhone}</Text>
                   </View>
-
                   <View style={styles.contactInfoItem}>
                     <Feather name="mail" size={16} color={colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.contactInfoText}>birthdays@university.edu</Text>
+                    <Text style={styles.contactInfoText}>{school?.contactEmail}</Text>
                   </View>
                 </View>
               </View>
@@ -403,38 +472,66 @@ export default function BirthdaysScreen() {
             <View style={styles.tabContentContainer}>
               <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
 
-              {[
-                {
-                  question: "How far in advance should I book?",
-                  answer:
-                    "We recommend booking at least 3-4 weeks in advance, especially for weekend dates and game day packages which tend to fill up quickly.",
-                },
-                {
-                  question: "Can I bring my own cake or decorations?",
-                  answer:
-                    "Yes! While we provide a birthday cake with all packages, you're welcome to bring additional decorations or special treats. Please let us know in advance.",
-                },
-                {
-                  question: "What if we need to cancel or reschedule?",
-                  answer:
-                    "Cancellations made 7+ days before your event receive a full refund. Rescheduling is available at no charge with 48 hours notice, subject to availability.",
-                },
-                {
-                  question: "Are there any age restrictions?",
-                  answer:
-                    "Our packages are designed for children ages 5-16, but we can accommodate other age groups with customized experiences. Contact us for details.",
-                },
-                {
-                  question: "Do parents/guardians count toward the guest limit?",
-                  answer:
-                    "We require at least 2 adults to be present, and they don't count toward your guest limit. Additional adults beyond 2 will count toward your total.",
-                },
-              ].map((faq, index) => (
-                <View key={index} style={styles.faqItem}>
-                  <Text style={styles.faqQuestion}>{faq.question}</Text>
-                  <Text style={styles.faqAnswer}>{faq.answer}</Text>
+              {faqsLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading FAQs...</Text>
                 </View>
-              ))}
+              ) : faqsError ? (
+                <View style={styles.errorContainer}>
+                  <Feather
+                    name="alert-circle"
+                    size={48}
+                    color={colors.error || "#EF4444"}
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Text style={styles.errorTitle}>Failed to Load FAQs</Text>
+                  <Text style={styles.errorText}>{faqsError}</Text>
+                  <TouchableOpacity style={styles.retryButton} onPress={retryFetchFAQs}>
+                    <Text style={styles.retryButtonText}>Try Again</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : faqs.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Feather name="help-circle" size={48} color={colors.textSecondary} style={{ marginBottom: 16 }} />
+                  <Text style={styles.emptyTitle}>No FAQs Available</Text>
+                  <Text style={styles.emptyText}>
+                    We're working on adding frequently asked questions. Please check back later or contact us directly.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.faqContainer}>
+                  {faqs.map((faq) => {
+                    const isExpanded = expandedFaq === faq.id
+                    return (
+                      <TouchableOpacity
+                        key={faq.id}
+                        style={styles.faqItem}
+                        onPress={() => toggleFaqExpansion(faq.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.faqHeader}>
+                          <View style={styles.faqQuestionContainer}>
+                            <Feather name="help-circle" size={20} color={colors.primary} style={styles.faqIcon} />
+                            <Text style={styles.faqQuestion}>{faq.faq_title}</Text>
+                          </View>
+                          <Feather
+                            name={isExpanded ? "chevron-up" : "chevron-down"}
+                            size={20}
+                            color={colors.textSecondary}
+                          />
+                        </View>
+
+                        {isExpanded && (
+                          <View style={styles.faqAnswerContainer}>
+                            <Text style={styles.faqAnswer}>{faq.faq_response}</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              )}
             </View>
           )}
 
@@ -471,7 +568,7 @@ const styles = StyleSheet.create({
     opacity: 0.05,
     zIndex: -1,
   },
-  ee:{
+  ee: {
     padding: 16,
   },
   hero: {
@@ -524,7 +621,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
     marginBottom: 8,
@@ -535,7 +632,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     lineHeight: 20,
   },
-
   // New professional tab styles
   newTabContainer: {
     flexDirection: "row",
@@ -577,7 +673,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
   },
-
   // Tab content container
   tabContentContainer: {
     padding: 16,
@@ -585,7 +680,6 @@ const styles = StyleSheet.create({
   tabContentContainer2: {
     padding: 16,
   },
-
   // Section header
   sectionHeader: {
     marginBottom: 16,
@@ -601,7 +695,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
   },
-
   // Loading, error, and empty states
   loadingContainer: {
     flex: 1,
@@ -666,7 +759,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-
   // Rest of the styles
   packagesList: {
     marginTop: 8,
@@ -719,27 +811,59 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: "italic",
   },
+  // FAQ Styles
+  faqContainer: {
+    marginTop: 8,
+  },
   faqItem: {
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
+  faqHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  faqQuestionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 12,
+  },
+  faqIcon: {
+    marginRight: 12,
+  },
   faqQuestion: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
-    marginBottom: 8,
+    flex: 1,
+    lineHeight: 22,
+  },
+  faqAnswerContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
   },
   faqAnswer: {
     fontSize: 14,
     lineHeight: 22,
     color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  faqTimestamp: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    opacity: 0.7,
   },
   modalContainer: {
     flex: 1,
