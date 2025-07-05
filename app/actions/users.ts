@@ -4,18 +4,10 @@ import * as FileSystem from "expo-file-system"
 
 // Extract types from the generated Database type
 type Tables = Database["public"]["Tables"]
-type Views = Database["public"]["Views"]
 type Functions = Database["public"]["Functions"]
 
-// Database table types
-type ScanHistoryRow = Tables["scan_history"]["Row"]
 type ScanHistoryInsert = Tables["scan_history"]["Insert"]
-type UserPreferencesRow = Tables["user_preferences"]["Row"]
-type UserPreferencesUpdate = Tables["user_preferences"]["Update"]
 type UsersRow = Tables["users"]["Row"]
-
-// Database view types
-type UserProfilesWithStatsRow = Views["user_profiles_with_stats"]["Row"]
 
 // Database function types
 type GetUserScanHistoryReturn = Functions["get_user_scan_history"]["Returns"][0]
@@ -28,10 +20,16 @@ export interface QRCodeScan {
   scannedAt: string
 }
 
-export interface UserPreferences {
+type UserPreferences = {
   favoriteTeams: string[]
   notificationsEnabled: boolean
+  pushNotifications?: boolean
+  emailNotifications?: boolean
+  gameNotifications?: boolean
+  newsNotifications?: boolean
+  specialOffers?: boolean
 }
+
 
 export interface LeaderboardEntry {
   user_id: string
@@ -326,10 +324,16 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
       throw error
     }
 
-    return {
+    const preferences: UserPreferences = {
       favoriteTeams: data.favorite_teams || [],
       notificationsEnabled: data.notifications_enabled ?? true,
+      pushNotifications: data.push_notifications ?? true,
+      emailNotifications: data.email_notifications ?? true,
+      gameNotifications: data.game_notifications ?? true,
+      newsNotifications: data.news_notifications ?? true,
+      specialOffers: data.special_offers ?? false,
     }
+    return preferences
   } catch (error) {
     console.error("Error getting user preferences:", error)
     return null
@@ -338,20 +342,20 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
 
 // Update user preferences - now fully typed
 export async function updateUserPreferences(userId: string, preferences: UserPreferences): Promise<void> {
-  const updateData: UserPreferences = {
-    favoriteTeams: preferences.favoriteTeams,
-    notificationsEnabled: preferences.notificationsEnabled,
-  }
-
   const { error } = await supabase.from("user_preferences").upsert(
     {
       user_id: userId,
       favorite_teams: preferences.favoriteTeams,
       notifications_enabled: preferences.notificationsEnabled,
+      push_notifications: preferences.pushNotifications,
+      email_notifications: preferences.emailNotifications,
+      game_notifications: preferences.gameNotifications,
+      news_notifications: preferences.newsNotifications,
+      special_offers: preferences.specialOffers,
       updated_at: new Date().toISOString(),
     },
     {
-      onConflict: "user_id", // Add this line to specify which column to check for conflicts
+      onConflict: "user_id", // conflict key
     },
   )
 
@@ -360,6 +364,7 @@ export async function updateUserPreferences(userId: string, preferences: UserPre
     throw new Error(`Failed to update preferences: ${error.message}`)
   }
 }
+
 
 // Get leaderboard - now fully typed
 export async function getUserLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {

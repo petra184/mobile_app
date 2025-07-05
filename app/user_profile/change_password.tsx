@@ -105,7 +105,7 @@ export default function ChangePasswordScreen() {
         style={styles.backgroundImage}
       />
       
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <View style={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>Change Password</Text>
           <Text style={styles.subtitle}>
@@ -297,7 +297,7 @@ export default function ChangePasswordScreen() {
             </>
           )}
         </Pressable>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -430,8 +430,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 16,
+    borderRadius: 32,
+    marginTop: 56,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

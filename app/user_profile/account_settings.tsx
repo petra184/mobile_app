@@ -1,59 +1,135 @@
-import React from 'react';
-import { View, Text, StyleSheet, Switch, Pressable, Alert, ScrollView, Image, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@/constants/colors';
-import { useUserStore } from '@/hooks/userStore';
-import { useRouter } from 'expo-router';
-import Feather from '@expo/vector-icons/Feather'; 
-import SimpleLineIcons from '@expo/vector-icons/SimpleLineIcons';
+"use client"
+import { View, Text, StyleSheet, Switch, Pressable, Alert, ScrollView, Image, Platform } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
+import { useState } from "react"
+import { colors } from "@/constants/colors"
+import { useUserStore } from "@/hooks/userStore" // Corrected import path
+import { useRouter } from "expo-router"
+import Feather from "@expo/vector-icons/Feather"
+import SimpleLineIcons from "@expo/vector-icons/SimpleLineIcons"
 
 export default function AccountSettingsScreen() {
-  const router = useRouter();
-  const { 
-    preferences, 
+  const router = useRouter()
+  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
+
+  const {
+    preferences,
     setNotificationsEnabled,
+    setPushNotifications,
+    setEmailNotifications,
+    setGameNotifications,
+    setNewsNotifications,
+    setSpecialOffers,
     getUserName,
     userEmail,
-    isLoading 
-  } = useUserStore();
-  
+    isLoading,
+  } = useUserStore()
+
   // Get actual user data from store
-  const userName = getUserName();
-  const notificationsEnabled = preferences.notificationsEnabled;
-  
-  const handleTogglePushNotifications = async (value: boolean) => {
+  const userName = getUserName()
+
+  // Helper function to handle notification toggles with proper loading states
+  const handleNotificationToggle = async (
+    setter: (enabled: boolean) => Promise<void>,
+    currentValue: boolean | undefined,
+    notificationType: string,
+    loadingKey: string,
+  ) => {
+    // Prevent multiple rapid toggles
+    if (loadingStates[loadingKey]) return
+
+    setLoadingStates((prev) => ({ ...prev, [loadingKey]: true }))
+
     try {
-      await setNotificationsEnabled(value);
+      console.log(`Toggling ${notificationType} from ${currentValue} to ${!currentValue}`)
+      await setter(!currentValue)
+      console.log(`Successfully updated ${notificationType}`)
     } catch (error) {
-      Alert.alert('Error', 'Failed to update notification settings. Please try again.');
+      console.error(`Failed to update ${notificationType}:`, error)
+      Alert.alert("Error", `Failed to update ${notificationType}. Please try again.`)
+    } finally {
+      setLoadingStates((prev) => ({ ...prev, [loadingKey]: false }))
     }
-  };
-  
+  }
+
+  // Individual notification handlers with loading keys
+  const handleToggleAllNotifications = async () => {
+    await handleNotificationToggle(
+      setNotificationsEnabled,
+      preferences.notificationsEnabled,
+      "all notifications",
+      "allNotifications",
+    )
+  }
+
+  const handleTogglePushNotifications = async () => {
+    await handleNotificationToggle(
+      setPushNotifications,
+      preferences.pushNotifications,
+      "push notifications",
+      "pushNotifications",
+    )
+  }
+
+  const handleToggleEmailNotifications = async () => {
+    await handleNotificationToggle(
+      setEmailNotifications,
+      preferences.emailNotifications,
+      "email notifications",
+      "emailNotifications",
+    )
+  }
+
+  const handleToggleGameNotifications = async () => {
+    await handleNotificationToggle(
+      setGameNotifications,
+      preferences.gameNotifications,
+      "game notifications",
+      "gameNotifications",
+    )
+  }
+
+  const handleToggleNewsNotifications = async () => {
+    await handleNotificationToggle(
+      setNewsNotifications,
+      preferences.newsNotifications,
+      "news notifications",
+      "newsNotifications",
+    )
+  }
+
+  const handleToggleSpecialOffers = async () => {
+    await handleNotificationToggle(setSpecialOffers, preferences.specialOffers, "special offers", "specialOffers")
+  }
+
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
+      "Delete Account",
       `Are you sure you want to delete your account (${userEmail})? This action cannot be undone.`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
           onPress: () => {
-            Alert.alert('Account Deletion', 'This is a demo app. Account deletion is not implemented.');
-          }
-        }
-      ]
-    );
-  };
+            Alert.alert("Account Deletion", "This is a demo app. Account deletion is not implemented.")
+          },
+        },
+      ],
+    )
+  }
 
   const navigateToChangePass = () => {
-    router.push('/user_profile/change_password');
-  };
+    router.push("/user_profile/change_password")
+  }
 
-  const showComingSoon = (feature: string) => {
-    Alert.alert('Coming Soon', `${feature} will be available in a future update.`);
-  };
-  
+  const getDoc = (vrsta: string) => {
+    router.push({
+      pathname: "/user_profile/documents",
+      params: { type: vrsta },
+    })
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -61,139 +137,189 @@ export default function AccountSettingsScreen() {
           <Text style={styles.loadingText}>Loading settings...</Text>
         </View>
       </SafeAreaView>
-    );
+    )
   }
-  
+
   return (
-    <SafeAreaView style={styles.container} edges={['right']}>
-      <Image
-        source={require('../../IMAGES/crowd.jpg')}
-        style={styles.backgroundImage}
-      />
+    <SafeAreaView style={styles.container} edges={["left"]}>
+      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-  
+        
         {/* Notification Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notification Settings</Text>
-          
+
           <View style={styles.settingsContainer}>
+            {/* Master Notifications Toggle */}
             <View style={styles.settingWithButton}>
               <View style={styles.settingLeft}>
                 <Feather name="bell" size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingText}>Push Notifications</Text>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingText}>All Notifications</Text>
+                  <Text style={styles.settingSubtext}>Master toggle for all notifications</Text>
+                </View>
               </View>
-              <Switch
-                value={notificationsEnabled}
-                onValueChange={handleTogglePushNotifications}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
+              <View style={styles.switchContainer}>
+                {loadingStates.allNotifications && <Text style={styles.loadingIndicator}>...</Text>}
+                <Switch
+                  value={preferences.notificationsEnabled}
+                  onValueChange={handleToggleAllNotifications}
+                  disabled={loadingStates.allNotifications}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
             </View>
-            
-            <Pressable style={styles.settingWithButton} onPress={() => showComingSoon('Email Notifications')}>
-              <View style={styles.settingLeft}>
-                <Feather name="mail" size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingText}>Email Notifications</Text>
+
+            {/* Individual notification settings - only show if master toggle is on */}
+            {preferences.notificationsEnabled && (
+              <>
+                <View style={styles.settingWithButton}>
+                  <View style={styles.settingLeft}>
+                    <Feather name="smartphone" size={20} color={colors.text} style={styles.settingIcon} />
+                    <Text style={styles.settingText}>Push Notifications</Text>
+                  </View>
+                  <View style={styles.switchContainer}>
+                    {loadingStates.pushNotifications && <Text style={styles.loadingIndicator}>...</Text>}
+                    <Switch
+                      value={preferences.pushNotifications ?? true}
+                      onValueChange={handleTogglePushNotifications}
+                      disabled={loadingStates.pushNotifications}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.settingWithButton}>
+                  <View style={styles.settingLeft}>
+                    <Feather name="mail" size={20} color={colors.text} style={styles.settingIcon} />
+                    <Text style={styles.settingText}>Email Notifications</Text>
+                  </View>
+                  <View style={styles.switchContainer}>
+                    {loadingStates.emailNotifications && <Text style={styles.loadingIndicator}>...</Text>}
+                    <Switch
+                      value={preferences.emailNotifications ?? true}
+                      onValueChange={handleToggleEmailNotifications}
+                      disabled={loadingStates.emailNotifications}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.settingWithButton}>
+                  <View style={styles.settingLeft}>
+                    <SimpleLineIcons
+                      name="screen-smartphone"
+                      size={20}
+                      color={colors.text}
+                      style={styles.settingIcon}
+                    />
+                    <Text style={styles.settingText}>Game Notifications</Text>
+                  </View>
+                  <View style={styles.switchContainer}>
+                    {loadingStates.gameNotifications && <Text style={styles.loadingIndicator}>...</Text>}
+                    <Switch
+                      value={preferences.gameNotifications ?? true}
+                      onValueChange={handleToggleGameNotifications}
+                      disabled={loadingStates.gameNotifications}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.settingWithButton}>
+                  <View style={styles.settingLeft}>
+                    <Feather name="globe" size={20} color={colors.text} style={styles.settingIcon} />
+                    <Text style={styles.settingText}>News Updates</Text>
+                  </View>
+                  <View style={styles.switchContainer}>
+                    {loadingStates.newsNotifications && <Text style={styles.loadingIndicator}>...</Text>}
+                    <Switch
+                      value={preferences.newsNotifications ?? true}
+                      onValueChange={handleToggleNewsNotifications}
+                      disabled={loadingStates.newsNotifications}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.settingWithButton, styles.lastItem]}>
+                  <View style={styles.settingLeft}>
+                    <Feather name="tag" size={20} color={colors.text} style={styles.settingIcon} />
+                    <Text style={styles.settingText}>Special Offers</Text>
+                  </View>
+                  <View style={styles.switchContainer}>
+                    {loadingStates.specialOffers && <Text style={styles.loadingIndicator}>...</Text>}
+                    <Switch
+                      value={preferences.specialOffers ?? false}
+                      onValueChange={handleToggleSpecialOffers}
+                      disabled={loadingStates.specialOffers}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Show disabled state when master toggle is off */}
+            {!preferences.notificationsEnabled && (
+              <View style={[styles.settingWithButton, styles.lastItem, styles.disabledSetting]}>
+                <View style={styles.settingLeft}>
+                  <Feather
+                    name="bell-off"
+                    size={20}
+                    color={colors.text}
+                    style={[styles.settingIcon, styles.disabledIcon]}
+                  />
+                  <Text style={[styles.settingText, styles.disabledText]}>All notifications are disabled</Text>
+                </View>
               </View>
-              <Switch
-                value={true}
-                onValueChange={() => showComingSoon('Email Notifications')}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </Pressable>
-            
-            <Pressable style={styles.settingWithButton} onPress={() => showComingSoon('Game Reminders')}>
-              <View style={styles.settingLeft}>
-                <SimpleLineIcons name="screen-smartphone" size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingText}>Game Reminders</Text>
-              </View>
-              <Switch
-                value={true}
-                onValueChange={() => showComingSoon('Game Reminders')}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </Pressable>
-            
-            <Pressable style={styles.settingWithButton} onPress={() => showComingSoon('News Updates')}>
-              <View style={styles.settingLeft}>
-                <Feather name="globe" size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingText}>News Updates</Text>
-              </View>
-              <Switch
-                value={true}
-                onValueChange={() => showComingSoon('News Updates')}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </Pressable>
-            
-            <View style={[styles.settingWithButton, styles.lastItem]}>
-              <View style={styles.settingLeft}>
-                <Feather name="tag" size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingText}>Special Offers</Text>
-              </View>
-              <Switch
-                value={false}
-                onValueChange={() => showComingSoon('Special Offers')}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
+            )}
           </View>
         </View>
-        
+
         {/* Security Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
-          
+
           <View style={styles.settingsContainer}>
-            <Pressable style={styles.settingItem} onPress={navigateToChangePass}>
+            <Pressable style={[styles.settingItem, styles.lastItem]} onPress={navigateToChangePass}>
               <View style={styles.settingLeft}>
                 <Feather name="lock" size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={styles.settingText}>Change Password</Text>
               </View>
               <Feather name="chevron-right" size={20} color={colors.text} />
             </Pressable>
-            
-            <Pressable style={[styles.settingWithButton, styles.lastItem]} onPress={() => showComingSoon('Two-Factor Authentication')}>
-              <View style={styles.settingLeft}>
-                <Feather name="shield" size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingText}>Two-Factor Authentication</Text>
-              </View>
-              <Switch
-                value={false}
-                onValueChange={() => showComingSoon('Two-Factor Authentication')}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor="#FFFFFF"
-              />
-            </Pressable>
           </View>
         </View>
-        
+
         {/* Support & Legal */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support & Legal</Text>
-          
+
           <View style={styles.settingsContainer}>
-            <Pressable style={styles.settingItem} onPress={() => showComingSoon('Help & Support')}>
+            <Pressable style={styles.settingItem} onPress={() => getDoc("1")}>
               <View style={styles.settingLeft}>
                 <Feather name="help-circle" size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={styles.settingText}>Help & Support</Text>
               </View>
               <Feather name="chevron-right" size={20} color={colors.text} />
             </Pressable>
-            
-            <Pressable style={styles.settingItem} onPress={() => showComingSoon('Terms of Service')}>
+
+            <Pressable style={styles.settingItem} onPress={() => getDoc("2")}>
               <View style={styles.settingLeft}>
                 <Feather name="file-text" size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={styles.settingText}>Terms of Service</Text>
               </View>
               <Feather name="chevron-right" size={20} color={colors.text} />
             </Pressable>
-            
-            <Pressable style={[styles.settingItem, styles.lastItem]} onPress={() => showComingSoon('Privacy Policy')}>
+
+            <Pressable style={[styles.settingItem, styles.lastItem]} onPress={() => getDoc("3")}>
               <View style={styles.settingLeft}>
                 <Feather name="shield" size={20} color={colors.text} style={styles.settingIcon} />
                 <Text style={styles.settingText}>Privacy Policy</Text>
@@ -201,16 +327,17 @@ export default function AccountSettingsScreen() {
               <Feather name="chevron-right" size={20} color={colors.text} />
             </Pressable>
           </View>
+
           <Pressable style={styles.deleteButton} onPress={handleDeleteAccount}>
-          <Feather name="trash-2" size={20} color="white" style={styles.deleteIcon} />
-          <Text style={styles.deleteText}>Delete Account</Text>
-        </Pressable>
+            <Feather name="trash-2" size={20} color="white" style={styles.deleteIcon} />
+            <Text style={styles.deleteText}>Delete Account</Text>
+          </Pressable>
         </View>
-        
+
         <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
@@ -222,52 +349,63 @@ const styles = StyleSheet.create({
     height: 40,
   },
   backgroundImage: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
-    resizeMode: 'cover',
-    opacity: 0.1, 
-    zIndex: 0, 
+    resizeMode: "cover",
+    opacity: 0.1,
+    zIndex: 0,
   },
   scrollContent: {
     paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     fontSize: 16,
     color: colors.text,
   },
+  debugContainer: {
+    backgroundColor: "#f0f0f0",
+    padding: 10,
+    margin: 16,
+    borderRadius: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    color: "#666",
+    fontFamily: "monospace",
+  },
   section: {
-    marginTop: 24, // Consistent spacing between sections
+    marginTop: 24,
     marginHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     color: colors.text,
     marginBottom: 12,
   },
   settingsContainer: {
     backgroundColor: colors.card,
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: colors.border,
   },
   userInfoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 16,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
     paddingHorizontal: 16,
   },
   settingWithButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     ...Platform.select({
       ios: {
         paddingVertical: 14,
@@ -281,20 +419,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   lastItem: {
-    borderBottomWidth: 0, // Remove border from last item
+    borderBottomWidth: 0,
   },
   settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   settingIcon: {
@@ -303,7 +441,10 @@ const styles = StyleSheet.create({
   settingText: {
     fontSize: 16,
     color: colors.text,
-    fontWeight: '500',
+    fontWeight: "500",
+  },
+  settingTextContainer: {
+    flex: 1,
   },
   settingSubtext: {
     fontSize: 14,
@@ -311,19 +452,40 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginTop: 2,
   },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  loadingIndicator: {
+    fontSize: 16,
+    color: colors.primary,
+    marginRight: 8,
+    fontWeight: "bold",
+  },
+  // Disabled state styles
+  disabledSetting: {
+    opacity: 0.6,
+  },
+  disabledIcon: {
+    opacity: 0.5,
+  },
+  disabledText: {
+    opacity: 0.7,
+    fontStyle: "italic",
+  },
   bottomSection: {
     paddingHorizontal: 16,
     paddingVertical: 16,
     backgroundColor: colors.background,
   },
   deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239, 68, 68, 0.9)",
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -331,14 +493,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
-    marginTop:24,
+    marginTop: 24,
   },
   deleteIcon: {
     marginRight: 8,
   },
   deleteText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
+    fontWeight: "600",
+    color: "white",
   },
-});
+})

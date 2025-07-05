@@ -7,6 +7,7 @@ import Entypo from '@expo/vector-icons/Entypo';
 import { colors } from "@/constants/colors";
 import { Feather } from '@expo/vector-icons';
 import { CartProvider } from "@/context/cart-context"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 function RootLayoutNav() {
     const router = useRouter();
@@ -42,6 +43,20 @@ function RootLayoutNav() {
             name="user_profile/index" 
             options={{ 
             headerShown: false,
+            }} 
+        />
+         <Stack.Screen 
+            name="user_profile/documents" 
+            options={{ 
+            headerShown: true,
+            headerTitle:"",
+            headerLeft: () => (
+            <Pressable 
+              onPress={() => router.back()} 
+              style={{ marginRight: 16 }}>
+                <Entypo name="chevron-left" size={24} color={colors.primary} />
+                </Pressable>
+              ),
             }} 
         />
         <Stack.Screen 
@@ -310,7 +325,9 @@ export default function RootLayout() {
   return (
     <NotificationProvider>
       <CartProvider>
+        <GestureHandlerRootView>
         <RootLayoutNav />
+        </GestureHandlerRootView>
       </CartProvider>
     </NotificationProvider>
   );

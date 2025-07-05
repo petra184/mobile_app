@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import type { UserPreferences, QRCodeScan } from "@/types/index"
+import type { QRCodeScan } from "@/types/index"
 
 // Import your database actions
 import {
@@ -11,10 +11,20 @@ import {
   addUserScan,
   updateUserPreferences,
   getUserPreferences,
-  getUserById, // Add this import
+  getUserById,
 } from "@/app/actions/users"
-
 import { getCurrentUser } from "@/app/actions/main_actions"
+
+// Updated UserPreferences type
+type UserPreferences = {
+  favoriteTeams: string[]
+  notificationsEnabled: boolean
+  pushNotifications?: boolean
+  emailNotifications?: boolean
+  gameNotifications?: boolean
+  newsNotifications?: boolean
+  specialOffers?: boolean
+}
 
 interface UserState {
   // Data
@@ -22,8 +32,8 @@ interface UserState {
   userEmail: string | null
   first_name: string | null
   last_name: string | null
-  username: string | null // Add username to store
-  profile_image_url: string | null // Add profile image to store
+  username: string | null
+  profile_image_url: string | null
   points: number
   scanHistory: QRCodeScan[]
   preferences: UserPreferences
@@ -44,7 +54,16 @@ interface UserState {
   redeemPoints: (points: number) => Promise<boolean>
   addScan: (scan: Omit<QRCodeScan, "id" | "scannedAt">) => Promise<void>
   toggleFavoriteTeam: (teamId: string) => Promise<void>
+
+  // Updated notification methods
   setNotificationsEnabled: (enabled: boolean) => Promise<void>
+  setPushNotifications: (enabled: boolean) => Promise<void>
+  setEmailNotifications: (enabled: boolean) => Promise<void>
+  setGameNotifications: (enabled: boolean) => Promise<void>
+  setNewsNotifications: (enabled: boolean) => Promise<void>
+  setSpecialOffers: (enabled: boolean) => Promise<void>
+  updateNotificationPreference: (key: keyof UserPreferences, enabled: boolean) => Promise<void>
+
   clearUserData: () => void
   isUserLoggedIn: () => boolean
   getUserName: () => string
@@ -56,6 +75,17 @@ function capitalize(name: string) {
   return name.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+// Default preferences with all notification types
+const defaultPreferences: UserPreferences = {
+  favoriteTeams: [],
+  notificationsEnabled: true,
+  pushNotifications: true,
+  emailNotifications: true,
+  gameNotifications: true,
+  newsNotifications: true,
+  specialOffers: false,
+}
+
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
@@ -64,14 +94,11 @@ export const useUserStore = create<UserState>()(
       userEmail: null,
       first_name: null,
       last_name: null,
-      username: null, // Add username
-      profile_image_url: null, // Add profile image
+      username: null,
+      profile_image_url: null,
       points: 0,
       scanHistory: [],
-      preferences: {
-        favoriteTeams: [],
-        notificationsEnabled: true,
-      },
+      preferences: defaultPreferences,
       rememberMe: false,
       isLoading: false,
       isPointsLoading: false,
@@ -79,17 +106,14 @@ export const useUserStore = create<UserState>()(
 
       getUserFirstName: () => {
         const { first_name } = get()
-
         if (first_name) {
           return capitalize(first_name)
         }
-
         return "User"
       },
 
       getUserName: () => {
         const { first_name, last_name } = get()
-
         if (first_name && last_name) {
           return `${capitalize(first_name)} ${capitalize(last_name)}`
         } else if (first_name) {
@@ -97,7 +121,6 @@ export const useUserStore = create<UserState>()(
         } else if (last_name) {
           return capitalize(last_name)
         }
-
         return "User"
       },
 
@@ -110,41 +133,34 @@ export const useUserStore = create<UserState>()(
         await get().initializeUser(userId, email)
       },
 
-      // Enhanced initialize user data from database
       initializeUser: async (userId: string, email?: string) => {
         set({ isLoading: true, userId, userEmail: email })
-
         try {
           const [userProfile, scanHistory, userPreferences, authUserData, userData] = await Promise.all([
             getUserProfile(userId),
             getUserScanHistory(userId),
             getUserPreferences(userId),
             getCurrentUser(),
-            getUserById(userId), // Get full user data including profile image
+            getUserById(userId),
           ])
 
-          console.log("=== DEBUG USER DATA ===")
-          console.log("User profile from getUserProfile:", userProfile)
-          console.log("Auth user metadata from getCurrentUser:", authUserData)
-          console.log("User data from getUserById:", userData)
-          console.log("User preferences:", userPreferences)
-          console.log("========================")
+          console.log("=== STORE INITIALIZATION DEBUG ===")
+          console.log("Raw userPreferences from DB:", userPreferences)
+          console.log("Default preferences:", defaultPreferences)
 
           const firstName = userProfile?.first_name || userData?.first_name || authUserData?.first_name || null
           const lastName = userProfile?.last_name || userData?.last_name || authUserData?.last_name || null
           const username = userData?.username || authUserData?.username || null
           const profileImageUrl = userData?.profile_image_url || null
 
-          console.log(
-            "Final data - firstName:",
-            firstName,
-            "lastName:",
-            lastName,
-            "username:",
-            username,
-            "profileImage:",
-            profileImageUrl,
-          )
+          // Merge user preferences with defaults to ensure all notification types are present
+          const mergedPreferences: UserPreferences = {
+            ...defaultPreferences,
+            ...userPreferences,
+          }
+
+          console.log("Final merged preferences:", mergedPreferences)
+          console.log("===================================")
 
           set({
             first_name: firstName,
@@ -153,10 +169,7 @@ export const useUserStore = create<UserState>()(
             profile_image_url: profileImageUrl,
             points: userProfile?.points || 0,
             scanHistory: scanHistory || [],
-            preferences: userPreferences || {
-              favoriteTeams: [],
-              notificationsEnabled: true,
-            },
+            preferences: mergedPreferences,
             isLoading: false,
           })
         } catch (error) {
@@ -174,16 +187,16 @@ export const useUserStore = create<UserState>()(
         return get().shouldAutoLogin()
       },
 
-      // Enhanced refresh user data including profile image
       refreshUserData: async () => {
         const { userId } = get()
         if (!userId) return
 
         try {
-          const [userProfile, authUserData, userData] = await Promise.all([
+          const [userProfile, authUserData, userData, userPreferences] = await Promise.all([
             getUserProfile(userId),
             getCurrentUser(),
             getUserById(userId),
+            getUserPreferences(userId), // Also refresh preferences
           ])
 
           const firstName = userProfile?.first_name || userData?.first_name || authUserData?.first_name || null
@@ -191,12 +204,19 @@ export const useUserStore = create<UserState>()(
           const username = userData?.username || authUserData?.username || null
           const profileImageUrl = userData?.profile_image_url || null
 
+          // Merge refreshed preferences
+          const mergedPreferences: UserPreferences = {
+            ...defaultPreferences,
+            ...userPreferences,
+          }
+
           set({
             first_name: firstName,
             last_name: lastName,
             username: username,
             profile_image_url: profileImageUrl,
             points: userProfile?.points || 0,
+            preferences: mergedPreferences, // Update preferences too
           })
         } catch (error) {
           console.error("Failed to refresh user data:", error)
@@ -208,12 +228,10 @@ export const useUserStore = create<UserState>()(
         if (!userId) return
 
         set({ isPointsLoading: true })
-
         try {
           set((state) => ({
             points: state.points + points,
           }))
-
           await updateUserPoints(userId, points, "add")
           await get().addScan({ points, description })
         } catch (error) {
@@ -229,18 +247,15 @@ export const useUserStore = create<UserState>()(
       redeemPoints: async (points: number) => {
         const { userId, points: currentPoints } = get()
         if (!userId) return false
-
         if (currentPoints < points) {
           return false
         }
 
         set({ isPointsLoading: true })
-
         try {
           set((state) => ({
             points: state.points - points,
           }))
-
           await updateUserPoints(userId, points, "subtract")
           return true
         } catch (error) {
@@ -300,10 +315,7 @@ export const useUserStore = create<UserState>()(
           try {
             const userPreferences = await getUserPreferences(userId)
             set({
-              preferences: userPreferences || {
-                favoriteTeams: [],
-                notificationsEnabled: true,
-              },
+              preferences: { ...defaultPreferences, ...userPreferences },
             })
           } catch (refreshError) {
             console.error("Failed to refresh preferences after error:", refreshError)
@@ -312,28 +324,69 @@ export const useUserStore = create<UserState>()(
         }
       },
 
-      setNotificationsEnabled: async (enabled: boolean) => {
+      // Generic function to update any notification preference
+      updateNotificationPreference: async (key: keyof UserPreferences, enabled: boolean) => {
         const { userId, preferences } = get()
-        if (!userId) return
+        if (!userId) {
+          console.error("No userId found when trying to update notification preference")
+          return
+        }
+
+        console.log(`=== UPDATING ${key} ===`)
+        console.log("Current preferences:", preferences)
+        console.log("Setting", key, "to", enabled)
 
         try {
           const newPreferences = {
             ...preferences,
-            notificationsEnabled: enabled,
+            [key]: enabled,
           }
 
+          console.log("New preferences:", newPreferences)
+
+          // Update local state first
           set({ preferences: newPreferences })
+
+          // Then save to database
           await updateUserPreferences(userId, newPreferences)
+          console.log("Successfully saved to database")
         } catch (error) {
-          console.error("Failed to update notification settings:", error)
+          console.error(`Failed to update ${key}:`, error)
+          // Revert the change
           set((state) => ({
             preferences: {
               ...state.preferences,
-              notificationsEnabled: !enabled,
+              [key]: !enabled,
             },
           }))
           throw error
         }
+      },
+
+      // Master notifications toggle
+      setNotificationsEnabled: async (enabled: boolean) => {
+        await get().updateNotificationPreference("notificationsEnabled", enabled)
+      },
+
+      // Individual notification type setters
+      setPushNotifications: async (enabled: boolean) => {
+        await get().updateNotificationPreference("pushNotifications", enabled)
+      },
+
+      setEmailNotifications: async (enabled: boolean) => {
+        await get().updateNotificationPreference("emailNotifications", enabled)
+      },
+
+      setGameNotifications: async (enabled: boolean) => {
+        await get().updateNotificationPreference("gameNotifications", enabled)
+      },
+
+      setNewsNotifications: async (enabled: boolean) => {
+        await get().updateNotificationPreference("newsNotifications", enabled)
+      },
+
+      setSpecialOffers: async (enabled: boolean) => {
+        await get().updateNotificationPreference("specialOffers", enabled)
       },
 
       clearUserData: () => {
@@ -346,10 +399,7 @@ export const useUserStore = create<UserState>()(
           profile_image_url: null,
           points: 0,
           scanHistory: [],
-          preferences: {
-            favoriteTeams: [],
-            notificationsEnabled: true,
-          },
+          preferences: defaultPreferences,
           rememberMe: false,
           isLoading: false,
           isPointsLoading: false,
@@ -379,7 +429,6 @@ export const useUserStore = create<UserState>()(
             userId: state.userId,
           }
         }
-
         return baseData
       },
     },

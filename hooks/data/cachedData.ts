@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { DataService } from "../data-service"
-import type { Database } from "../types/database"
+import { DataService } from "./data-service"
+import type { Database } from "../../types/supabase"
 
 type Tables = Database["public"]["Tables"]
 type Team = Tables["teams"]["Row"]

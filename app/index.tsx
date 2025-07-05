@@ -102,7 +102,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     resizeMode: 'cover',
-    height:"60%",
     opacity: 0.6,
   },
   gradient: {

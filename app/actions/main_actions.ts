@@ -2,162 +2,116 @@ import { supabase } from '@/lib/supabase';
 import { checkBothAvailability } from './users';
 
 
+// New or modified function to handle Supabase interaction
 export async function signUpWithEmail(
-  email: string, 
-  password: string, 
-  first_name: string, 
-  last_name: string, 
-  username: string, 
-  phone_number: string
+  email: string,
+  password: string,
+  first_name: string,
+  last_name: string,
+  username: string,
+  phone_number: string,
+  birthday: string // This is the string from formData
 ) {
   try {
-    // First, check if email and username are available
+    // Check email + username availability
     const availabilityCheck = await checkBothAvailability(email, username);
-    
+
     if (!availabilityCheck.bothAvailable) {
       const errors = [];
-      if (!availabilityCheck.email.available) {
-        errors.push(availabilityCheck.email.message);
-      }
-      if (!availabilityCheck.username.available) {
-        errors.push(availabilityCheck.username.message);
-      }
-      
-      return {
-        success: false,
-        message: errors.join(' and '),
-      };
+      if (!availabilityCheck.email.available) errors.push(availabilityCheck.email.message);
+      if (!availabilityCheck.username.available) errors.push(availabilityCheck.username.message);
+      return { success: false, message: errors.join(" and ") };
     }
 
-    // Sign up the user with Supabase Auth
+    // --- Convert birthday string to Date object for Supabase ---
+    let birthdayForSupabase: Date | null = null;
+    if (birthday && birthday.trim() !== "") {
+      const parts = birthday.split("/");
+      if (parts.length === 3) {
+        const month = Number.parseInt(parts[0]) - 1; // Month is 0-indexed
+        const day = Number.parseInt(parts[1]);
+        const year = Number.parseInt(parts[2]);
+        if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
+          birthdayForSupabase = new Date(year, month, day);
+        }
+      }
+    }
+    // If birthday is empty or invalid, birthdayForSupabase remains null,
+    // which is appropriate for an optional Date column in Supabase.
+    // --- End of birthday conversion ---
+
+    // Create user in Supabase Auth
     const { data, error } = await supabase.auth.signUp({
-      email: email.toLowerCase(), // Normalize email
+      email: email.toLowerCase(),
       password,
       options: {
+       // emailRedirectTo: "https://yourapp.com/welcome", // Replace with your actual redirect URL
         data: {
           first_name,
           last_name,
-          username: username.toLowerCase(), // Normalize username
+          username: username.toLowerCase(),
           phone_number,
+          birthday: birthdayForSupabase ? birthdayForSupabase.toISOString() : null, // Send ISO string or null for Supabase Auth data
         },
       },
     });
 
     if (error) {
-      console.error('Error signing up:', error.message);
-      
-      // Handle specific Supabase Auth errors
-      if (error.message.includes('already registered')) {
-        return {
-          success: false,
-          message: 'This email is already registered.',
-        };
-      }
-      
-      return {
-        success: false,
-        message: error.message,
-      };
+      console.error("Error signing up:", error.message);
+      return { success: false, message: error.message };
     }
 
-    // Check if user was created successfully
-    if (data && data.user) {
-      // For email confirmation flow
-      if (data.user.identities && data.user.identities.length === 0) {
-        return {
-          success: false,
-          message: 'This email is already registered.',
-        };
-      }
-
-      // Insert user data into the "users" table with error handling
+    if (data?.user) {
+      // Insert user into 'users' table (NOT upsert)
       const { error: dbError } = await supabase.from("users").insert({
-        email: email.toLowerCase(),
         user_id: data.user.id,
+        email: email.toLowerCase(),
         username: username.toLowerCase(),
         first_name,
         last_name,
         phone_number,
-        points: 0, // Initialize with 0 points
+        birthday: birthdayForSupabase, // Send Date object or null for Supabase database table
+        points: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
 
       if (dbError) {
         console.error("Database Insert Error:", dbError.message);
-        
-        // If database insert fails, we should clean up the auth user
-        try {
-          await supabase.auth.admin.deleteUser(data.user.id);
-        } catch (cleanupError) {
-          console.error("Failed to cleanup auth user:", cleanupError);
-        }
-        
-        // Handle specific database errors
-        if (dbError.code === '23505') { // Unique constraint violation
-          if (dbError.message.includes('username')) {
-            return {
-              success: false,
-              message: "Username is already taken.",
-            };
-          }
-          if (dbError.message.includes('email')) {
-            return {
-              success: false,
-              message: "Email is already registered.",
-            };
-          }
-        }
-        
-        return {
-          success: false,
-          message: "Sign-up failed. Please try again.",
-        };
+        return { success: false, message: "Sign-up failed. Please try again." };
       }
 
-      // Create initial user preferences
+      // Insert initial preferences
       const { error: prefsError } = await supabase.from("user_preferences").insert({
         user_id: data.user.id,
         notifications_enabled: true,
         favorite_teams: [],
+        push_notifications: true,
+        email_notifications: true,
+        game_notifications: true,
+        news_notifications: true,
+        special_offers: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
 
       if (prefsError) {
         console.warn("Failed to create user preferences:", prefsError.message);
-        // Don't fail the signup for this, just log it
       }
 
-      // If email confirmation is enabled in Supabase
-      if (data.session === null) {
-        return {
-          success: true,
-          message: 'Check your email for the confirmation link.',
-        };
-      }
-
-      // If email confirmation is disabled, user is signed in immediately
       return {
         success: true,
-        message: 'Account created successfully!',
+        message: "Account created successfully!",
         user: data.user,
       };
     }
 
-    return {
-      success: false,
-      message: 'Something went wrong. Please try again.',
-    };
+    return { success: false, message: "Something went wrong. Please try again." };
   } catch (error) {
-    console.error('Unexpected error during signup:', error);
-    return {
-      success: false,
-      message: 'An unexpected error occurred.',
-    };
+    console.error("Unexpected error during signup:", error);
+    return { success: false, message: "An unexpected error occurred." };
   }
 }
-
 
 /**
  * Sign in a user with email and password

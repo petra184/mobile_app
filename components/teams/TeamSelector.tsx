@@ -32,7 +32,7 @@ interface TeamSelectorProps {
   showFavorites?: boolean
   horizontal?: boolean
   allowMultiSelect?: boolean
-  filterByGender?: "men" | "women"
+  filterByGender?: "men" | "women" | "all"
   filterBySport?: string
   showSearch?: boolean
   showFilters?: boolean
@@ -178,37 +178,35 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
   const [activeSportFilter, setActiveSportFilter] = useState<string>(filterBySport || "all")
   const [availableSports, setAvailableSports] = useState<string[]>([])
 
-  // Load teams
-  const loadTeams = useCallback(async () => {
-    try {
-      setLoading(true)
-      let fetchedTeams: Team[] = []
+ const loadTeams = useCallback(async () => {
+      try {
+        setLoading(true)
+        let fetchedTeams: Team[] = []
 
-      if (filterByGender) {
-        fetchedTeams = await getTeamsByGender(filterByGender)
-      } else if (filterBySport) {
-        fetchedTeams = await getTeamsBySport(filterBySport)
-      } else {
-        fetchedTeams = await getTeams()
+        if (filterByGender && filterByGender !== "all") {
+          fetchedTeams = await getTeamsByGender(filterByGender) // ✅ Now safe
+        } else if (filterBySport) {
+          fetchedTeams = await getTeamsBySport(filterBySport)
+        } else {
+          fetchedTeams = await getTeams()
+        }
+
+        setTeams(fetchedTeams)
+        setFilteredTeams(fetchedTeams)
+
+        const sports = [...new Set(fetchedTeams.map((team) => team.sport))]
+        setAvailableSports(sports)
+
+        if (fetchedTeams.length === 0) {
+          showWarning("No teams found", "No teams are available at the moment")
+        }
+      } catch (error) {
+        console.error("Error loading teams:", error)
+        showError("Failed to load teams", "Please check your connection and try again")
+      } finally {
+        setLoading(false)
       }
-
-      setTeams(fetchedTeams)
-      setFilteredTeams(fetchedTeams)
-
-      // Extract unique sports for filter
-      const sports = [...new Set(fetchedTeams.map((team) => team.sport))]
-      setAvailableSports(sports)
-
-      if (fetchedTeams.length === 0) {
-        showWarning("No teams found", "No teams are available at the moment")
-      }
-    } catch (error) {
-      console.error("Error loading teams:", error)
-      showError("Failed to load teams", "Please check your connection and try again")
-    } finally {
-      setLoading(false)
-    }
-  }, [filterByGender, filterBySport, showError, showWarning])
+    }, [filterByGender, filterBySport, showError, showWarning])
 
   // Refresh teams
   const onRefresh = useCallback(async () => {
