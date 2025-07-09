@@ -10,108 +10,55 @@ export async function signUpWithEmail(
   last_name: string,
   username: string,
   phone_number: string,
-  birthday: string // This is the string from formData
+  birthday: string,
 ) {
   try {
-    // Check email + username availability
-    const availabilityCheck = await checkBothAvailability(email, username);
-
-    if (!availabilityCheck.bothAvailable) {
-      const errors = [];
-      if (!availabilityCheck.email.available) errors.push(availabilityCheck.email.message);
-      if (!availabilityCheck.username.available) errors.push(availabilityCheck.username.message);
-      return { success: false, message: errors.join(" and ") };
-    }
-
-    // --- Convert birthday string to Date object for Supabase ---
-    let birthdayForSupabase: Date | null = null;
+    // Optional: Format birthday to ISO string (YYYY-MM-DD) if provided
+    let birthdayISO: string | null = null
     if (birthday && birthday.trim() !== "") {
-      const parts = birthday.split("/");
+      const parts = birthday.split("/")
       if (parts.length === 3) {
-        const month = Number.parseInt(parts[0]) - 1; // Month is 0-indexed
-        const day = Number.parseInt(parts[1]);
-        const year = Number.parseInt(parts[2]);
+        const month = Number(parts[0]) - 1
+        const day = Number(parts[1])
+        const year = Number(parts[2])
         if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
-          birthdayForSupabase = new Date(year, month, day);
+          birthdayISO = new Date(year, month, day).toISOString().split("T")[0]
         }
       }
     }
-    // If birthday is empty or invalid, birthdayForSupabase remains null,
-    // which is appropriate for an optional Date column in Supabase.
-    // --- End of birthday conversion ---
 
-    // Create user in Supabase Auth
+    // Sign up with Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email: email.toLowerCase(),
       password,
       options: {
-       // emailRedirectTo: "https://yourapp.com/welcome", // Replace with your actual redirect URL
         data: {
           first_name,
           last_name,
           username: username.toLowerCase(),
           phone_number,
-          birthday: birthdayForSupabase ? birthdayForSupabase.toISOString() : null, // Send ISO string or null for Supabase Auth data
+          birthday: birthdayISO,
         },
       },
-    });
+    })
 
     if (error) {
-      console.error("Error signing up:", error.message);
-      return { success: false, message: error.message };
+      return { success: false, message: error.message }
     }
 
-    if (data?.user) {
-      // Insert user into 'users' table (NOT upsert)
-      const { error: dbError } = await supabase.from("users").insert({
-        user_id: data.user.id,
-        email: email.toLowerCase(),
-        username: username.toLowerCase(),
-        first_name,
-        last_name,
-        phone_number,
-        birthday: birthdayForSupabase, // Send Date object or null for Supabase database table
-        points: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-      if (dbError) {
-        console.error("Database Insert Error:", dbError.message);
-        return { success: false, message: "Sign-up failed. Please try again." };
-      }
-
-      // Insert initial preferences
-      const { error: prefsError } = await supabase.from("user_preferences").insert({
-        user_id: data.user.id,
-        notifications_enabled: true,
-        favorite_teams: [],
-        push_notifications: true,
-        email_notifications: true,
-        game_notifications: true,
-        news_notifications: true,
-        special_offers: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-      if (prefsError) {
-        console.warn("Failed to create user preferences:", prefsError.message);
-      }
-
-      return {
-        success: true,
-        message: "Account created successfully!",
-        user: data.user,
-      };
+    if (!data?.user) {
+      return { success: false, message: "Signup failed. No user returned." }
     }
-
-    return { success: false, message: "Something went wrong. Please try again." };
-  } catch (error) {
-    console.error("Unexpected error during signup:", error);
-    return { success: false, message: "An unexpected error occurred." };
+    return {
+      success: true,
+      message: "Account created successfully!",
+      user: data.user,
+    }
+  } catch (err: any) {
+    return { success: false, message: "Unexpected error occurred." }
   }
 }
+
 
 /**
  * Sign in a user with email and password

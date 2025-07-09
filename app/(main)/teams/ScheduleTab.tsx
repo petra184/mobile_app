@@ -1,57 +1,95 @@
 "use client"
-
-import React, { useMemo } from "react"
+import type React from "react"
+import { useMemo } from "react"
 import { View, Text, StyleSheet, Image, ActivityIndicator, SectionList } from "react-native"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
 import type { Game } from "@/types/game"
-// Your powerful, multi-layout GameCard is imported here.
 import { GameCard } from "@/components/games/new_game_card"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { Feather } from "@expo/vector-icons"
-import { useNotifications } from "@/context/notification-context" // Assuming you have this for notifications
-import { sortGamesByPriority } from '@/utils/sortGame'
+import { useNotifications } from "@/context/notification-context"
+import { sortGamesByPriority } from "@/utils/sortGame"
 
 interface ScheduleTabProps {
   games: Game[]
   loading?: boolean
 }
 
+// Helper function to properly compare dates
+const compareDates = (gameDate: string, currentDate: Date) => {
+  // Parse the game date
+  const game = new Date(gameDate)
+  
+  // Create a copy of current date and reset time
+  const today = new Date(currentDate)
+  today.setHours(0, 0, 0, 0)
+  
+  // Reset game date time for comparison
+  game.setHours(0, 0, 0, 0)
+
+  if (game < today) return 'past'
+  if (game.getTime() === today.getTime()) return 'today'
+  return 'future'
+}
+
 export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false }) => {
   const router = useRouter()
   const { showSuccess } = useNotifications()
 
-  // Use useMemo to efficiently sort and group games only when the `games` prop changes.
+  // FIXED: Better date-based categorization with debugging
   const sections = useMemo(() => {
-    // 1. Sort all games by priority (Live > Upcoming > Past)
-    const sortedGames = sortGamesByPriority(games)
-
-    // 2. Group games into different sections in a single pass
+    // Get current date once
+    const currentDate = new Date()
+    
     const liveGames: Game[] = []
     const upcomingGames: Game[] = []
     const pastGames: Game[] = []
 
-    for (const game of sortedGames) {
-      if (game.status === 'live') {
+    // Process each game
+    games.forEach((game, index) => {
+    
+      // Live games always go to live section regardless of date
+      if (game.status === "live") {
         liveGames.push(game)
-      } else if (game.status === 'scheduled') {
-        upcomingGames.push(game)
-      } else { // Catches 'completed', 'postponed', etc.
-        pastGames.push(game)
+        return
       }
-    }
 
-    // 3. Create the data structure for the SectionList component
+      // For all other games, use date comparison
+      const dateCategory = compareDates(game.date, currentDate)
+      
+      if (dateCategory === 'past') {
+        pastGames.push(game)
+      } else {
+        upcomingGames.push(game)
+      }
+    })
+
+
+    // Create sections
     const sectionData = []
+
     if (liveGames.length > 0) {
       sectionData.push({ title: "Live Games", data: liveGames })
     }
+
     if (upcomingGames.length > 0) {
+      // Sort upcoming games by date (earliest first)
+      upcomingGames.sort((a, b) => {
+        const dateA = new Date(a.date)
+        const dateB = new Date(b.date)
+        return dateA.getTime() - dateB.getTime()
+      })
       sectionData.push({ title: "Upcoming Games", data: upcomingGames })
     }
+
     if (pastGames.length > 0) {
-      // For past games, it's nice to show the most recent first
-      pastGames.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      // Sort past games by date (most recent first)
+      pastGames.sort((a, b) => {
+        const dateA = new Date(a.date)
+        const dateB = new Date(b.date)
+        return dateB.getTime() - dateA.getTime()
+      })
       sectionData.push({ title: "Past Games", data: pastGames })
     }
 
@@ -59,7 +97,6 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
   }, [games])
 
   const handleGamePress = (game: Game) => {
-    // This is the default action when any card is pressed
     router.push({
       pathname: "../all_cards/game_details",
       params: { id: game.id },
@@ -67,14 +104,11 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
   }
 
   const handleNotifyPress = (game: Game) => {
-    // This will only be called from cards that show the "Notify Me" button (i.e., upcoming games)
     showSuccess("Notification Set", `You'll be notified about the game on ${new Date(game.date).toLocaleDateString()}`)
   }
 
   const handleQRScanPress = (game: Game) => {
-    // This will only be called from cards that show the "Scan QR" button (i.e., live or soon-to-start games)
     console.log("Navigating to QR Scan for game:", game.id)
-    // Example: router.push({ pathname: '/qr-scanner', params: { gameId: game.id } });
   }
 
   if (loading) {
@@ -84,19 +118,20 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
         <Text style={styles.loadingText}>Loading schedule...</Text>
       </View>
     )
-  } 
+  }
+
   const renderGameItem = ({ item }: { item: Game }) => (
     <GameCard
-      game={item} // We pass the game object to the card
-      onPress={handleGamePress} // The card will call this when pressed
-      onNotifyPress={handleNotifyPress} // The card will call this if the "Notify" button is pressed
-      onQRScanPress={handleQRScanPress} // The card will call this if the "QR Scan" button is pressed
+      game={item}
+      onPress={handleGamePress}
+      onNotifyPress={handleNotifyPress}
+      onQRScanPress={handleQRScanPress}
     />
   )
 
   return (
     <View style={styles.container}>
-      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+      <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.content}>
         {sections.length > 0 ? (
           <SectionList
@@ -115,7 +150,7 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
         ) : (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconContainer}>
-              <Feather name="calendar" size={60} color={colors.primary + '40'} />
+              <Feather name="calendar" size={60} color={colors.primary + "40"} />
             </View>
             <Text style={styles.emptyTitle}>No Games Scheduled</Text>
             <Text style={styles.emptyText}>This team doesn't have any games scheduled yet.</Text>
@@ -126,7 +161,6 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
   )
 }
 
-// --- Styles are unchanged ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -134,7 +168,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal:5
+    paddingHorizontal: 5,
   },
   backgroundImage: {
     position: "absolute",
@@ -152,7 +186,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: colors.text + '80',
+    color: colors.text + "80",
   },
   listContent: {
     paddingBottom: 20,
@@ -185,7 +219,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: colors.text + '80',
+    color: colors.text + "80",
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 8,

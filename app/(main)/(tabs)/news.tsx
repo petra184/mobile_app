@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
@@ -10,6 +10,7 @@ import { getTeams, type Team } from "@/app/actions/teams"
 import { EnhancedDropdown } from "@/components/ui/new_dropdown"
 import { NewsCard } from "@/components/news/NewsCard"
 import { Feather } from "@expo/vector-icons"
+import { useGameRealtime } from "@/hooks/realtime/index"
 
 export default function NewsScreen() {
   const router = useRouter()
@@ -22,17 +23,111 @@ export default function NewsScreen() {
   const [teamsLoading, setTeamsLoading] = useState(true)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
 
+  // Memoized loadTeams function
+  const loadTeams = useCallback(async () => {
+    try {
+      setTeamsLoading(true)
+      const teamsData = await getTeams()
+      setTeams(teamsData)
+    } catch (error) {
+      console.error("Error loading teams:", error)
+      setTeams([])
+    } finally {
+      setTeamsLoading(false)
+    }
+  }, [])
+
+  // Memoized loadNews function
+  const loadNews = useCallback(async () => {
+    try {
+      setLoading(true)
+      let articles: NewsArticle[]
+      if (selectedTeam) {
+        articles = await getNewsByTeam(selectedTeam.id, 50)
+      } else {
+        articles = await getAllNews(50)
+      }
+      setNewsArticles(articles)
+    } catch (error) {
+      console.error("Error loading news:", error)
+      setNewsArticles([])
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedTeam])
+
+  // Memoized handleSearch function
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim()) {
+      loadNews()
+      return
+    }
+    try {
+      setSearchLoading(true)
+      const articles = await searchNews(searchQuery.trim(), 50)
+      setNewsArticles(articles)
+    } catch (error) {
+      console.error("Error searching news:", error)
+      setNewsArticles([])
+    } finally {
+      setSearchLoading(false)
+    }
+  }, [searchQuery, loadNews])
+
+  // Realtime news/story update callback
+  const handleNewsUpdate = useCallback(
+    (event: "INSERT" | "UPDATE" | "DELETE", payload: any) => {
+      console.log(`News ${event.toLowerCase()}:`, payload)
+
+      // Show notification for news updates (you can add notification context if available)
+      if (event === "INSERT") {
+        console.log("New story published:", payload)
+      } else if (event === "UPDATE") {
+        console.log("Story updated:", payload)
+      }
+
+      // Refetch news to get the latest data
+      loadNews()
+    },
+    [loadNews],
+  )
+
+  // Initialize realtime subscriptions
+  const { setupRealtimeSubscriptions, cleanupSubscriptions, isConnected } = useGameRealtime(
+    undefined, // No game update callback needed
+    handleNewsUpdate, // Pass news/story update callback
+  )
+
+  // Setup realtime subscriptions on mount
+  useEffect(() => {
+    let mounted = true
+
+    const setupRealtime = async () => {
+      if (mounted) {
+        await setupRealtimeSubscriptions()
+      }
+    }
+
+    setupRealtime()
+
+    // Cleanup on unmount
+    return () => {
+      mounted = false
+      cleanupSubscriptions()
+    }
+  }, []) // Empty dependency array - only run once on mount
+
   // Load teams on component mount
   useEffect(() => {
     loadTeams()
-  }, [])
+  }, [loadTeams])
 
   // Load initial news articles
   useEffect(() => {
     if (!teamsLoading) {
       loadNews()
     }
-  }, [selectedTeam, teamsLoading])
+  }, [selectedTeam, teamsLoading, loadNews])
 
   // Handle search with debouncing
   useEffect(() => {
@@ -45,58 +140,7 @@ export default function NewsScreen() {
     } else {
       loadNews()
     }
-  }, [searchQuery])
-
-  const loadTeams = async () => {
-    try {
-      setTeamsLoading(true)
-      const teamsData = await getTeams()
-      setTeams(teamsData)
-    } catch (error) {
-      console.error("Error loading teams:", error)
-      setTeams([])
-    } finally {
-      setTeamsLoading(false)
-    }
-  }
-
-  const loadNews = async () => {
-    try {
-      setLoading(true)
-      let articles: NewsArticle[]
-
-      if (selectedTeam) {
-        articles = await getNewsByTeam(selectedTeam.id, 50)
-      } else {
-        articles = await getAllNews(50)
-      }
-
-      setNewsArticles(articles)
-    } catch (error) {
-      console.error("Error loading news:", error)
-      setNewsArticles([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      loadNews()
-      return
-    }
-
-    try {
-      setSearchLoading(true)
-      const articles = await searchNews(searchQuery.trim(), 50)
-      setNewsArticles(articles)
-    } catch (error) {
-      console.error("Error searching news:", error)
-      setNewsArticles([])
-    } finally {
-      setSearchLoading(false)
-    }
-  }
+  }, [searchQuery, handleSearch, loadNews])
 
   const handleTeamSelect = (teamId: string | null) => {
     const team = teams.find((t) => t.id === teamId) || null
@@ -153,79 +197,81 @@ export default function NewsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-
-        {/* Search and Team Selector Row */}
-        <View style={styles.searchAndFilterRow}>
-          {isSearchExpanded ? (
-            // Expanded Search Bar
-            <View style={styles.expandedSearchContainer}>
-              <View style={styles.expandedSearchBar}>
-                <Feather name="search" size={20} color={colors.textSecondary} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search news"
-                  placeholderTextColor={colors.textSecondary}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  numberOfLines={1}
-                  autoFocus={true}
-                />
-                {searchLoading && <ActivityIndicator size="small" color={colors.primary} style={styles.searchLoader} />}
-                <Pressable onPress={handleSearchClose} style={styles.closeSearchButton}>
-                  <Feather name="x" size={20} color={colors.textSecondary} />
-                </Pressable>
-              </View>
+      {/* Search and Team Selector Row */}
+      <View style={styles.searchAndFilterRow}>
+        {isSearchExpanded ? (
+          // Expanded Search Bar
+          <View style={styles.expandedSearchContainer}>
+            <View style={styles.expandedSearchBar}>
+              <Feather name="search" size={20} color={colors.textSecondary} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search news"
+                placeholderTextColor={colors.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                numberOfLines={1}
+                autoFocus={true}
+              />
+              {searchLoading && <ActivityIndicator size="small" color={colors.primary} style={styles.searchLoader} />}
+              <Pressable onPress={handleSearchClose} style={styles.closeSearchButton}>
+                <Feather name="x" size={20} color={colors.textSecondary} />
+              </Pressable>
             </View>
-          ) : (
-            // Normal Row Layout
-            <>
-              {/* Search Bar */}
-              <View style={styles.searchContainer}>
-                <Pressable style={styles.searchBar} onPress={handleSearchFocus}>
-                  <Feather name="search" size={20} color={colors.textSecondary} />
-                  <Text style={[styles.searchPlaceholder, searchQuery && styles.searchText]}
+          </View>
+        ) : (
+          // Normal Row Layout
+          <>
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <Pressable style={styles.searchBar} onPress={handleSearchFocus}>
+                <Feather name="search" size={20} color={colors.textSecondary} />
+                <Text
+                  style={[styles.searchPlaceholder, searchQuery && styles.searchText]}
                   numberOfLines={1}
                   ellipsizeMode="tail"
-                  >
-                    {searchQuery || "Search news"}
-                  </Text>
-                  {searchQuery.length > 0 && (
-                    <Pressable onPress={clearSearch} style={styles.clearSearchButton}>
-                      <Feather name="x" size={18} color={colors.textSecondary} />
-                    </Pressable>
-                  )}
-                </Pressable>
-              </View>
-
-              <View style={styles.dropdownContainer}>
-                <EnhancedDropdown
-                  options={teamOptions}
-                  selectedValue={selectedTeam?.id || null}
-                  onSelect={handleTeamSelect}
-                  placeholder="Select a team"
-                />
-              </View>
-            </>
-          )}
-        </View>
-
-      
-
-        {/* Loading State */}
-        {(loading || teamsLoading) && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>{teamsLoading ? "Loading teams..." : "Loading news..."}</Text>
-          </View>
+                >
+                  {searchQuery || "Search news"}
+                </Text>
+                {searchQuery.length > 0 && (
+                  <Pressable onPress={clearSearch} style={styles.clearSearchButton}>
+                    <Feather name="x" size={18} color={colors.textSecondary} />
+                  </Pressable>
+                )}
+              </Pressable>
+            </View>
+            <View style={styles.dropdownContainer}>
+              <EnhancedDropdown
+                options={teamOptions}
+                selectedValue={selectedTeam?.id || null}
+                onSelect={handleTeamSelect}
+                placeholder="Select a team"
+              />
+            </View>
+          </>
         )}
+      </View>
 
-        <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
+      {/* Loading State */}
+      {(loading || teamsLoading) && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>{teamsLoading ? "Loading teams..." : "Loading news..."}</Text>
+        </View>
+      )}
 
+      <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
         {/* News Articles */}
         {!loading && !teamsLoading && (
           <>
             {filteredArticles.length > 0 ? (
               <View style={styles.newsContainer}>
+                <View style={styles.newsHeader}>
+                  <Text style={styles.newsCount}>
+                    {filteredArticles.length} article{filteredArticles.length !== 1 ? "s" : ""}
+                    {isConnected && " • Live"}
+                  </Text>
+                </View>
                 {filteredArticles.map((article) => (
                   <NewsCard key={article.id} article={article} onPress={handleNewsPress} />
                 ))}
@@ -280,7 +326,6 @@ const styles = StyleSheet.create({
       },
     }),
   },
-
   // Header Section - No background
   headerSection: {
     paddingHorizontal: 20,
@@ -297,13 +342,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-
   // Search and Filter Row - Same row layout
   searchAndFilterRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    marginTop:40,
+    marginTop: 40,
     paddingVertical: 12,
     gap: 12,
   },
@@ -348,9 +392,7 @@ const styles = StyleSheet.create({
   searchLoader: {
     marginRight: 8,
   },
-  clearSearchButton: {
-  },
-
+  clearSearchButton: {},
   // Expanded Search Styles
   expandedSearchContainer: {
     flex: 1,
@@ -369,15 +411,30 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  closeSearchButton: {
-  },
-
+  closeSearchButton: {},
   // Dropdown Container
   dropdownContainer: {
     flex: 1, // Takes up less space than search
     minWidth: 120, // Ensure minimum width for dropdown
   },
-
+  // Connection Status
+  connectionStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  connectionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  connectionText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
   // Content Sections
   loadingContainer: {
     alignItems: "center",
@@ -392,6 +449,15 @@ const styles = StyleSheet.create({
   newsContainer: {
     paddingHorizontal: 16,
     paddingTop: 16,
+  },
+  newsHeader: {
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  newsCount: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: "500",
   },
   emptyStateContainer: {
     alignItems: "center",

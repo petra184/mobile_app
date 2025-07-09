@@ -1,4 +1,5 @@
 "use client"
+
 import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator } from "react-native"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
@@ -16,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient"
 import Ionicons from "@expo/vector-icons/Ionicons"
 import { StatusBar } from "expo-status-bar"
 import { supabase } from "@/lib/supabase"
+import { MaterialCommunityIcons } from "@expo/vector-icons"
 
 // Type for news story
 type NewsStory = {
@@ -49,14 +51,11 @@ export default function GameDetailsScreen() {
     try {
       setLoading(true)
       setError(null)
-
       const gameData = await getGameById(gameId)
-
       if (!gameData) {
         setError("Game not found")
         return
       }
-
       setGame(gameData)
 
       // Load team data
@@ -102,7 +101,6 @@ export default function GameDetailsScreen() {
 
   // Get game photo from database or fallback (same logic as GameCard)
   const getGamePhoto = () => {
-    console.log("Photo URL:", game?.photo_url)
     return game?.photo_url || game?.homeTeam?.logo || "/placeholder.svg?height=200&width=400"
   }
 
@@ -129,23 +127,39 @@ export default function GameDetailsScreen() {
     )
   }
 
-  // Simplified game status logic (same as GameCard)
+  // Enhanced game status logic with proper date comparison
+  const now = new Date()
+  const gameDate = new Date(game.date)
+
+  // If game has time, set it properly for comparison
+  if (game.time) {
+    const [hours, minutes] = game.time.split(":")
+    gameDate.setHours(Number.parseInt(hours), Number.parseInt(minutes))
+  }
+
   const isCompleted = game.status === "completed"
   const isLive = game.status === "live"
-  const isUpcoming = game.status === "scheduled" || (!isCompleted && !isLive)
   const isPostponed = game.status === "postponed"
   const isCanceled = game.status === "canceled"
 
+  // Check if game is actually in the past (but not completed)
+  const isGameInPast = gameDate.getTime() < now.getTime()
+
+  // If game was postponed but is in the past, treat it as finished
+  const isPostponedInPast = isPostponed && isGameInPast
+
+  // Determine if it's truly upcoming (scheduled AND in the future)
+  const isUpcoming =
+    (game.status === "scheduled" || (!isCompleted && !isLive && !isPostponed && !isCanceled)) && !isGameInPast
+
   // Check if game is today
-  const gameDate = new Date(game.date)
-  const isToday = new Date().toDateString() === gameDate.toDateString()
+  const isToday = now.toDateString() === gameDate.toDateString()
 
   // Check if game is within an hour from now (for QR code button)
-  const now = new Date()
   const gameDateTime = new Date(game.date)
   if (game.time) {
     const [hours, minutes] = game.time.split(":")
-    gameDateTime.setHours(parseInt(hours), parseInt(minutes))
+    gameDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes))
   }
   const timeDiff = gameDateTime.getTime() - now.getTime()
   const hoursUntilGame = timeDiff / (1000 * 60 * 60)
@@ -153,7 +167,7 @@ export default function GameDetailsScreen() {
 
   const teamColor = team?.primaryColor || game.homeTeam.primaryColor || colors.primary
 
-  // Get status display info (same logic as GameCard)
+  // Get status display info with proper date logic
   const getStatusInfo = () => {
     if (isLive)
       return {
@@ -169,6 +183,14 @@ export default function GameDetailsScreen() {
         bgColor: "#3B82F6",
         gradient: ["#3B82F6", "#2563EB"] as const,
       }
+    // If postponed game is in the past, show as FINISHED instead of POSTPONED
+    if (isPostponedInPast)
+      return {
+        text: "FINISHED",
+        color: "#FFFFFF",
+        bgColor: "#6B7280",
+        gradient: ["#6B7280", "#4B5563"] as const,
+      }
     if (isPostponed)
       return {
         text: "POSTPONED",
@@ -183,6 +205,13 @@ export default function GameDetailsScreen() {
         bgColor: "#EF4444",
         gradient: ["#EF4444", "#DC2626"] as const,
       }
+    if (isGameInPast && !isCompleted)
+      return {
+        text: "FINISHED",
+        color: "#FFFFFF",
+        bgColor: "#6B7280",
+        gradient: ["#6B7280", "#4B5563"] as const,
+      }
     if (isToday)
       return {
         text: "TODAY",
@@ -190,11 +219,20 @@ export default function GameDetailsScreen() {
         bgColor: "#3B82F6",
         gradient: ["#3B82F6", "#2563EB"] as const,
       }
+    if (isUpcoming)
+      return {
+        text: "UPCOMING",
+        color: "#FFFFFF",
+        bgColor: "#10B981",
+        gradient: ["#10B981", "#059669"] as const,
+      }
+
+    // Fallback for edge cases
     return {
-      text: "UPCOMING",
+      text: "TBD",
       color: "#FFFFFF",
-      bgColor: "#10B981",
-      gradient: ["#10B981", "#059669"] as const,
+      bgColor: "#6B7280",
+      gradient: ["#6B7280", "#4B5563"] as const,
     }
   }
 
@@ -248,15 +286,16 @@ export default function GameDetailsScreen() {
     }
   }
 
-  // Determine location status
-  const getLocationStatus = () => {
-    if (!game.location) return "TBD"
-
-    const location = game.location.toLowerCase()
-    if (location.includes("neutral")) return "NEUTRAL"
-    if (location.includes("away") || location.includes("@")) return "AWAY"
-    return "HOME"
-  }
+  const getColor = () => {
+      if (game.score) {
+        if (game.score?.away < game.score?.home) {
+          return "#10B981"
+        } else {
+          return "rgba(129, 25, 25, 0.84)"
+        }
+      }
+      return "#10B981"
+    }
 
   return (
     <View style={styles.container}>
@@ -273,13 +312,8 @@ export default function GameDetailsScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Hero Image Section with Overlay - Now using game photo */}
         <View style={styles.heroSection}>
-          <Image
-            source={{ uri: getGamePhoto() }}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
-          <LinearGradient colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]} style={styles.heroOverlay}>
-          </LinearGradient>
+          <Image source={{ uri: getGamePhoto() }} style={styles.heroImage} resizeMode="cover" />
+          <LinearGradient colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]} style={styles.heroOverlay}></LinearGradient>
         </View>
 
         <View style={styles.contentContainer}>
@@ -297,7 +331,7 @@ export default function GameDetailsScreen() {
                   {isLive && <View style={styles.liveDot} />}
                   <Text style={styles.statusText}>
                     {statusInfo.text}
-                    {!isCompleted && ` • EARN ${game.points} POINTS`}
+                    {!isCompleted && !isCanceled && !isGameInPast && ` • EARN ${game.points} POINTS`}
                   </Text>
                 </LinearGradient>
               </View>
@@ -308,15 +342,11 @@ export default function GameDetailsScreen() {
               {/* Home Team */}
               <View style={styles.teamSection}>
                 <View style={styles.teamLogoContainer}>
-                  <Image
-                    source={{ uri: game.homeTeam.logo }}
-                    style={styles.teamLogo}
-                    defaultSource={require("@/IMAGES/MAIN_LOGO.png")}
-                  />
+                  <Image source={require("@/IMAGES/MAIN_LOGO.png")} style={styles.teamLogo} />
                 </View>
                 <Text style={styles.teamName}>{game.homeTeam.name}</Text>
-                {isCompleted && game.score && (
-                  <Text style={[styles.teamScore, { color: teamColor }]}>{game.score.home}</Text>
+                {game.score && (
+                  <Text style={[styles.teamScore, { color: getColor() }]}>{game.score.home}</Text>
                 )}
               </View>
 
@@ -337,117 +367,164 @@ export default function GameDetailsScreen() {
                   />
                 </View>
                 <Text style={styles.teamName}>{game.awayTeam.name}</Text>
-                {isCompleted && game.score && <Text style={styles.teamScore}>{game.score.away}</Text>}
+                {game.score && <Text style = {[styles.teamScore, { color: getColor() }]} >{game.score.away}</Text>}
               </View>
             </View>
 
             {/* Date, Time and Location */}
             <View style={styles.infoSection}>
-              <View style={styles.infoRow}>
-                <View style={styles.infoIconContainer}>
-                  <Feather name="calendar" size={20} color={teamColor} />
-                </View>
-                <View style={styles.infoTextContainer}>
-                  <Text style={styles.infoLabel}>Date & Time</Text>
-                  <Text style={styles.infoValue}>
-                    {formatGameDate(game.date)} • {game.time}
-                  </Text>
-                </View>
-              </View>
+              {!isCanceled && (
+                <View>
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIconContainer}>
+                      <Feather name="calendar" size={20} color={teamColor} />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Date & Time</Text>
+                      <Text style={styles.infoValue}>
+                        {formatGameDate(game.date)} • {game.time}
+                      </Text>
+                    </View>
+                  </View>
 
-              <View style={styles.infoRow}>
-                <View style={styles.infoIconContainer}>
-                  <Feather name="map-pin" size={20} color={teamColor} />
+                  <View style={styles.infoRow}>
+                    <View style={styles.infoIconContainer}>
+                      <Feather name="map-pin" size={20} color={teamColor} />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Location</Text>
+                      <Text style={styles.infoValue}>
+                        <Text style={styles.locationTag}>{game.game_type.toUpperCase()}</Text> •{" "}
+                        {game.location || "TBD"}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.infoTextContainer}>
-                  <Text style={styles.infoLabel}>Location</Text>
-                  <Text style={styles.infoValue}>
-                    <Text style={styles.locationTag}>{getLocationStatus()}</Text> • {game.location || "TBD"}
+              )}
+
+              {game.special_events && (
+                <View style={styles.infoRow}>
+                  <View style={[styles.infoIconContainer, { backgroundColor: teamColor }]}>
+                    <Feather name="star" size={20} color="white" />
+                  </View>
+                  <View style={styles.infoTextContainer}>
+                    <Text style={styles.infoLabel}>Special Events</Text>
+                    <Text style={styles.infoValue}>
+                      <Text style={styles.locationTag}>{game.special_events}</Text>
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Postponed/Canceled Status Card - Only show if NOT in the past */}
+              {((isPostponed && !isPostponedInPast) || isCanceled) && (
+                <View
+                  style={[
+                    styles.statusCard,
+                    {
+                      backgroundColor: isPostponed ? "#FEF3C7" : "#FEE2E2",
+                      borderLeftColor: isPostponed ? "#D97706" : "#DC2626",
+                    },
+                  ]}
+                >
+                  <View style={styles.statusHeader}>
+                    <View style={styles.statusBadgeAlert}>
+                      <MaterialCommunityIcons
+                        name={isPostponed ? "clock-alert" : "cancel"}
+                        size={18}
+                        color={isPostponed ? "#D97706" : "#DC2626"}
+                      />
+                      <Text
+                        style={[
+                          styles.statusTitle,
+                          {
+                            color: isPostponed ? "#D97706" : "#DC2626",
+                          },
+                        ]}
+                      >
+                        {game.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text
+                    style={[
+                      styles.statusAlertText,
+                      {
+                        color: isPostponed ? "#92400E" : "#991B1B",
+                      },
+                    ]}
+                  >
+                    {isPostponed
+                      ? "This game has been postponed. New date and time will be announced soon."
+                      : "This game has been canceled and will not be rescheduled."}
                   </Text>
                 </View>
-              </View>
-              
-              { game.special_events && (
-              <View style={styles.infoRow}>
-                <View style={[styles.infoIconContainer, {backgroundColor: teamColor}]}>
-                  <Feather name="star" size={20} color="white" />
-                </View>
-                <View style={styles.infoTextContainer}>
-                  <Text style={styles.infoLabel}>Special Events</Text>
-                  <Text style={styles.infoValue}>
-                    <Text style={styles.locationTag}>{game.special_events}</Text>
-                  </Text>
-                </View>
-              </View>
               )}
 
               {/* News Story Link */}
-            {isCompleted && gameNewsStory && (
-              <Pressable style={styles.newsButton} onPress={handleNewsPress}>
-                <Feather name="book-open" size={20} />
-                <Text style={styles.newsButtonText}>Read Game Story</Text>
-                <Feather name="chevron-right" size={20} />
-              </Pressable>
-            )}
-
-            </View>
-          </Animated.View>
-
-          {/* Action Buttons - Both in same row */}
-          <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.actionsContainer}>
-            <View style={styles.buttonRow}>
-              {/* Notify Me Button */}
-              {!isCompleted && (
-                <Pressable style={[styles.actionButton, { backgroundColor: "white" }]} onPress={handleNotifyPress}>
-                  <View style={[styles.actionButtonIcon, { backgroundColor: teamColor + "15" }]}>
-                    <Feather name="bell" size={20} color={teamColor} />
-                  </View>
-                  <Text style={[styles.actionButtonText, { color: colors.text }]}>Notify Me</Text>
-                </Pressable>
-              )}
-
-              {/* QR Code Button - Show if live or within an hour */}
-              {(isLive || isWithinAnHour || isToday) && (
-                <Pressable style={[styles.actionButton]} onPress={handleQRScanPress}>
-                  <LinearGradient
-                    colors={[teamColor, teamColor + "CC"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View style={styles.actionButtonIcon}>
-                    <Ionicons name="qr-code" size={20} color="white" />
-                  </View>
-                  <Text style={[styles.actionButtonText, { color: "white" }]}>Scan QR Code</Text>
+              {isCompleted && gameNewsStory && (
+                <Pressable style={styles.newsButton} onPress={handleNewsPress}>
+                  <Feather name="book-open" size={20} />
+                  <Text style={styles.newsButtonText}>Read Game Story</Text>
+                  <Feather name="chevron-right" size={20} />
                 </Pressable>
               )}
             </View>
           </Animated.View>
+
+          {/* Action Buttons - Both in same row - Hide for postponed/canceled games AND past games */}
+          {!isPostponed && !isCanceled && !isGameInPast && (
+            <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.actionsContainer}>
+              <View style={styles.buttonRow}>
+                {/* Notify Me Button - Only show if game is NOT in the past and NOT completed */}
+                {!isCompleted && !isGameInPast && (
+                  <Pressable style={[styles.actionButton, { backgroundColor: "white" }]} onPress={handleNotifyPress}>
+                    <View style={[styles.actionButtonIcon, { backgroundColor: teamColor + "15" }]}>
+                      <Feather name="bell" size={20} color={teamColor} />
+                    </View>
+                    <Text style={[styles.actionButtonText, { color: colors.text }]}>Notify Me</Text>
+                  </Pressable>
+                )}
+
+                {/* QR Code Button - Show if live or within an hour */}
+                {(isLive || isWithinAnHour || isToday) && (
+                  <Pressable style={[styles.actionButton]} onPress={handleQRScanPress}>
+                    <LinearGradient
+                      colors={[teamColor, teamColor + "CC"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.actionButtonIcon}>
+                      <Ionicons name="qr-code" size={20} color="white" />
+                    </View>
+                    <Text style={[styles.actionButtonText, { color: "white" }]}>Scan QR Code</Text>
+                  </Pressable>
+                )}
+              </View>
+            </Animated.View>
+          )}
 
           {/* Additional Information */}
           <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.additionalInfoCard}>
             <Text style={styles.sectionTitle}>Additional Information</Text>
-
             <Pressable style={styles.infoLink} onPress={handleGameNotesPress}>
               <Feather name="file-text" size={20} color={teamColor} />
               <Text style={styles.infoLinkText}>Game Notes</Text>
               <Feather name="chevron-right" size={20} color={colors.textSecondary} />
             </Pressable>
-
             <Pressable style={styles.infoLink} onPress={handleMatchupHistoryPress}>
               <Feather name="bar-chart-2" size={20} color={teamColor} />
               <Text style={styles.infoLinkText}>Matchup History</Text>
               <Feather name="chevron-right" size={20} color={colors.textSecondary} />
             </Pressable>
-
-            {!isCompleted && (
+            {!isCompleted && !isPostponed && !isCanceled && !isGameInPast && (
               <Pressable style={styles.infoLink} onPress={handleTicketPress}>
                 <Ionicons name="ticket-outline" size={20} color={teamColor} />
                 <Text style={styles.infoLinkText}>Tickets available online or at the entrance</Text>
                 <Feather name="chevron-right" size={20} color={colors.textSecondary} />
               </Pressable>
             )}
-
           </Animated.View>
         </View>
       </ScrollView>
@@ -486,7 +563,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: 24,
   },
-  
   errorText: {
     fontSize: 18,
     fontWeight: "500",
@@ -522,7 +598,6 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-
   // Hero Section
   heroSection: {
     height: 280,
@@ -568,14 +643,12 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     marginRight: 6,
   },
-
   // Content Container
   contentContainer: {
     padding: 20,
     paddingTop: 0,
     marginTop: -30,
   },
-
   // Details Card
   detailsCard: {
     backgroundColor: "white",
@@ -613,7 +686,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.text,
     textAlign: "center",
-    marginBottom: 8,
     height: 45,
   },
   teamScore: {
@@ -641,7 +713,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: colors.textSecondary,
   },
-
   // Info Section
   infoSection: {
     borderTopWidth: 1,
@@ -679,7 +750,36 @@ const styles = StyleSheet.create({
   locationTag: {
     fontWeight: "700",
   },
-
+  // Status Card for Postponed/Canceled - Detailed version
+  statusCard: {
+    borderLeftWidth: 4,
+    padding: 16,
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    marginBottom: 16,
+  },
+  statusHeader: {
+    marginBottom: 8,
+  },
+  statusBadgeAlert: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statusTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginLeft: 6,
+    letterSpacing: 0.5,
+  },
+  statusAlertText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
+  },
   // Actions Container - Updated for same row layout
   actionsContainer: {
     marginBottom: 20,
@@ -715,7 +815,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-
   // Additional Info Card
   additionalInfoCard: {
     backgroundColor: "white",
@@ -748,7 +847,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
-
   // Points Badge - Same as GameCard
   pointsBadgeContainer: {
     marginTop: 16,
@@ -768,7 +866,6 @@ const styles = StyleSheet.create({
     color: "white",
     letterSpacing: 0.3,
   },
-
   // Special Events - Same as GameCard
   specialEventContainer: {
     marginTop: 12,
@@ -788,7 +885,6 @@ const styles = StyleSheet.create({
     color: "white",
     flex: 1,
   },
-
   // News Button
   newsButton: {
     flexDirection: "row",

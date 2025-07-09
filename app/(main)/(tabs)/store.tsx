@@ -520,29 +520,6 @@ const RewardsStoreScreen: React.FC = () => {
     )
   }
 
-  const handleRedeemReward = async (reward: Reward) => {
-    if (!userId) {
-      Alert.alert("Login Required", "Please log in to redeem rewards.")
-      return
-    }
-
-    if (points < reward.points_required) {
-      Alert.alert(
-        "Insufficient Points",
-        `You need ${reward.points_required - points} more points to redeem this reward.`,
-      )
-      return
-    }
-
-    Alert.alert("Add to Cart", `Add "${reward.title}" to your cart for ${reward.points_required} points?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Add to Cart",
-        onPress: () => handleAddToCart(reward),
-      },
-    ])
-  }
-
   // In the RewardsStoreScreen component, filter expired offers:
   const activeSpecialOffers = specialOffers.filter((offer) => {
     const isExpired = new Date() > new Date(offer.end_date)
@@ -604,10 +581,12 @@ const RewardsStoreScreen: React.FC = () => {
             >
               {activeSpecialOffers.map((offer) => (
                 <SpecialOfferCard
+                  cardWidth="45%"
                   key={offer.id}
                   offer={offer}
                   userPoints={points}
                   onRedeem={handleSpecialOfferRedeem}
+
                 />
               ))}
             </ScrollView>

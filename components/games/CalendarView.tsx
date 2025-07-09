@@ -93,11 +93,11 @@ export function CalendarView({ selectedTeam, locationType, onDateSelect }: Calen
       if (!locationType) return true
 
       if (locationType === "home") {
-        return selectedTeam ? game.homeTeam.id === selectedTeam.id : game.location_type === "home"
+        return selectedTeam ? game.homeTeam.id === selectedTeam.id : game.game_type === "home"
       } else if (locationType === "away") {
-        return selectedTeam ? game.awayTeam.id === selectedTeam.id : game.location_type === "away"
+        return selectedTeam ? game.awayTeam.id === selectedTeam.id : game.game_type === "away"
       } else {
-        return game.location_type === locationType
+        return game.game_type === locationType
       }
     })
   }, [allGames, selectedTeam, locationType])

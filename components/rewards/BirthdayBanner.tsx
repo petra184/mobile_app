@@ -10,7 +10,7 @@ export default function BirthdayBanner() {
   const router = useRouter();
 
   const navigateToBirthdays = () => {
-    router.navigate("/store/CelebrateBirthday");
+    router.navigate("/(main)/store/CelebrateBirthday");
   };
 
   return (

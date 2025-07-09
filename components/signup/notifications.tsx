@@ -1,4 +1,5 @@
 "use client"
+
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { colors } from "@/constants/colors"
@@ -89,27 +90,27 @@ export default function NotificationSettingsStep({
     },
   ]
 
-  const renderCategoryHeader = (title: string) => (
-    <Text style={styles.categoryHeader}>{title}</Text>
-  )
+  const renderCategoryHeader = (title: string) => <Text style={styles.categoryHeader}>{title}</Text>
 
   const renderNotificationOption = (option: any) => (
     <View key={option.id} style={[styles.optionCard, option.disabled && styles.optionCardDisabled]}>
-      <View style={styles.optionContent}>
+      <TouchableOpacity
+        style={styles.optionContent}
+        onPress={() => option.onChange(!option.value)}
+        disabled={option.disabled}
+        activeOpacity={0.7}
+      >
         <View style={[styles.optionIcon, option.disabled && styles.optionIconDisabled]}>
-          <Ionicons 
-            name={option.icon as any} 
-            size={24} 
-            color={option.disabled ? "#A0A0A0" : colors.primary} 
-          />
+          <Ionicons name={option.icon as any} size={24} color={option.disabled ? "#A0A0A0" : colors.primary} />
         </View>
         <View style={styles.optionText}>
-          <Text style={[styles.optionTitle, option.disabled && styles.optionTitleDisabled]}>
-            {option.title}
-          </Text>
+          <Text style={[styles.optionTitle, option.disabled && styles.optionTitleDisabled]}>{option.title}</Text>
           <Text style={[styles.optionDescription, option.disabled && styles.optionDescriptionDisabled]}>
             {option.description}
-            {option.id === "teams" && option.disabled && formData.favoriteTeams.length === 0 && " (Select favorite teams first)"}
+            {option.id === "teams" &&
+              option.disabled &&
+              formData.favoriteTeams.length === 0 &&
+              " (Select favorite teams first)"}
           </Text>
         </View>
         <Switch
@@ -119,13 +120,13 @@ export default function NotificationSettingsStep({
           thumbColor={option.value ? "white" : "#f4f3f4"}
           disabled={option.disabled}
         />
-      </View>
+      </TouchableOpacity>
     </View>
   )
 
-  const mainOptions = notificationOptions.filter(opt => opt.category === "main")
-  const deliveryOptions = notificationOptions.filter(opt => opt.category === "delivery")
-  const contentOptions = notificationOptions.filter(opt => opt.category === "content")
+  const mainOptions = notificationOptions.filter((opt) => opt.category === "main")
+  const deliveryOptions = notificationOptions.filter((opt) => opt.category === "delivery")
+  const contentOptions = notificationOptions.filter((opt) => opt.category === "content")
 
   return (
     <View style={styles.container}>
@@ -133,6 +134,10 @@ export default function NotificationSettingsStep({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
+        // Add these props to improve scrolling
+        bounces={true}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.headerSection}>
           <View style={styles.iconContainer}>
@@ -230,8 +235,6 @@ const styles = StyleSheet.create({
   optionCard: {
     backgroundColor: "white",
     borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E5E5E5",
@@ -240,6 +243,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    overflow: "hidden", // Add this to prevent touch issues
   },
   optionCardDisabled: {
     opacity: 0.6,
@@ -247,6 +251,9 @@ const styles = StyleSheet.create({
   optionContent: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 16, // Increased padding for better touch target
+    minHeight: 72, // Ensure consistent height
   },
   optionIcon: {
     width: 48,

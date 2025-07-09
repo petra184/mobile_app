@@ -135,7 +135,7 @@ export const RosterTab: React.FC<RosterTabProps> = ({ players, coaches, teamId, 
   return (
     <View style={styles.container}>
       <Image
-        source={require("../../IMAGES/crowd.jpg")}
+        source={require("../../../IMAGES/crowd.jpg")}
         style={styles.backgroundImage}
       />
 

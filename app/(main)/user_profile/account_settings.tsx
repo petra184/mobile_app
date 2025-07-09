@@ -142,9 +142,9 @@ export default function AccountSettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
-      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+      <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
+
         {/* Notification Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notification Settings</Text>
@@ -329,7 +329,7 @@ export default function AccountSettingsScreen() {
           </View>
 
           <Pressable style={styles.deleteButton} onPress={handleDeleteAccount}>
-            <Feather name="trash-2" size={20} color="white" style={styles.deleteIcon} />
+            <Feather name="trash-2" size={20} color={colors.error} style={styles.deleteIcon} />
             <Text style={styles.deleteText}>Delete Account</Text>
           </Pressable>
         </View>
@@ -357,6 +357,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+    padding: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -366,17 +367,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: colors.text,
-  },
-  debugContainer: {
-    backgroundColor: "#f0f0f0",
-    padding: 10,
-    margin: 16,
-    borderRadius: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: "#666",
-    fontFamily: "monospace",
   },
   section: {
     marginTop: 24,
@@ -482,18 +472,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(239, 68, 68, 0.9)",
-    paddingVertical: 16,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-    marginTop: 24,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    marginVertical: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    height: 48,
   },
   deleteIcon: {
     marginRight: 8,
@@ -501,6 +484,6 @@ const styles = StyleSheet.create({
   deleteText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "white",
+    color: colors.error,
   },
 })

@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking, Dimensions, FlatList } from "react-native"
 import { colors } from "@/constants/colors"
@@ -25,31 +24,16 @@ interface TeamInfoTabProps {
   }
 }
 
-export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStats }) => {
-  const [teamPhotos, setTeamPhotos] = useState<any[]>([])
-  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
-  const flatListRef = useRef<FlatList>(null)
-
-  useEffect(() => {
-    const fetchPhotos = async () => {
-      try {
-        const photos = await getTeamPhotos(teamId)
-        setTeamPhotos(photos)
-      } catch (error) {
-        console.error("Error fetching team photos:", error)
-        setTeamPhotos([])
-      }
-    }
-
-    fetchPhotos()
-  }, [teamId])
-
-  const handleSocialPress = (url: string | null) => {
-    if (url) {
-      Linking.openURL(url)
-    }
-  }
-
+// Separate component for each social media button with individual animation
+const AnimatedSocialButton = ({
+  icon,
+  style,
+  onPress,
+}: {
+  icon: React.ReactNode
+  style: any
+  onPress: () => void
+}) => {
   const scale = useSharedValue(1)
   const opacity = useSharedValue(1)
 
@@ -66,6 +50,44 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
   const handlePressOut = () => {
     scale.value = withSpring(1, { damping: 15 })
     opacity.value = withTiming(1, { duration: 150 })
+  }
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable
+        style={[styles.circularButton, style]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        {icon}
+      </Pressable>
+    </Animated.View>
+  )
+}
+
+export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStats }) => {
+  const [teamPhotos, setTeamPhotos] = useState<any[]>([])
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
+  const flatListRef = useRef<FlatList>(null)
+
+  useEffect(() => {
+    const fetchPhotos = async () => {
+      try {
+        const photos = await getTeamPhotos(teamId)
+        setTeamPhotos(photos)
+      } catch (error) {
+        console.error("Error fetching team photos:", error)
+        setTeamPhotos([])
+      }
+    }
+    fetchPhotos()
+  }, [teamId])
+
+  const handleSocialPress = (url: string | null) => {
+    if (url) {
+      Linking.openURL(url)
+    }
   }
 
   const winPercentage =
@@ -102,8 +124,7 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
 
   return (
     <View style={styles.container}>
-      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
-
+      <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* Team Photos Carousel */}
         {teamPhotos.length > 0 && (
@@ -119,7 +140,6 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
               onScroll={onPhotoScroll}
               scrollEventThrottle={16}
             />
-
             {/* Pagination Dots */}
             {teamPhotos.length > 1 && (
               <View style={styles.paginationContainer}>{teamPhotos.map((_, index) => renderPaginationDot(index))}</View>
@@ -133,58 +153,34 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           team.socialMedia?.twitter ||
           team.socialMedia?.website) && (
           <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.detailsSection2}>
-
             <View style={styles.circularButtonsContainer}>
               {team.socialMedia?.facebook && (
-                <Animated.View style={animatedStyle}>
-                  <Pressable
-                    style={[styles.circularButton, styles.facebookButton]}
-                    onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
-                    onPressIn={handlePressIn}
-                    onPressOut={handlePressOut}
-                  >
-                    <Feather name="facebook" size={22} color="#FFFFFF" />
-                  </Pressable>
-                </Animated.View>
+                <AnimatedSocialButton
+                  icon={<Feather name="facebook" size={22} color="#FFFFFF" />}
+                  style={styles.facebookButton}
+                  onPress={() => handleSocialPress(team.socialMedia?.facebook || null)}
+                />
               )}
-
               {team.socialMedia?.instagram && (
-                <Animated.View style={animatedStyle}>
-                  <Pressable
-                    style={[styles.circularButton, styles.instagramButton]}
-                    onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
-                    onPressIn={handlePressIn}
-                    onPressOut={handlePressOut}
-                  >
-                    <Feather name="instagram" size={22} color="#FFFFFF" />
-                  </Pressable>
-                </Animated.View>
+                <AnimatedSocialButton
+                  icon={<Feather name="instagram" size={22} color="#FFFFFF" />}
+                  style={styles.instagramButton}
+                  onPress={() => handleSocialPress(team.socialMedia?.instagram || null)}
+                />
               )}
-
               {team.socialMedia?.twitter && (
-                <Animated.View style={animatedStyle}>
-                  <Pressable
-                    style={[styles.circularButton, styles.twitterButton]}
-                    onPressIn={handlePressIn}
-                    onPressOut={handlePressOut}
-                    onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
-                  >
-                    <FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />
-                  </Pressable>
-                </Animated.View>
+                <AnimatedSocialButton
+                  icon={<FontAwesome6 name="x-twitter" size={22} color="#FFFFFF" />}
+                  style={styles.twitterButton}
+                  onPress={() => handleSocialPress(team.socialMedia?.twitter || null)}
+                />
               )}
-
               {team.socialMedia?.website && (
-                <Animated.View style={animatedStyle}>
-                  <Pressable
-                    style={[styles.circularButton, styles.websiteButton]}
-                    onPress={() => handleSocialPress(team.socialMedia?.website || null)}
-                    onPressIn={handlePressIn}
-                    onPressOut={handlePressOut}
-                  >
-                    <Feather name="globe" size={22} color="#FFFFFF" />
-                  </Pressable>
-                </Animated.View>
+                <AnimatedSocialButton
+                  icon={<Feather name="globe" size={22} color="#FFFFFF" />}
+                  style={styles.websiteButton}
+                  onPress={() => handleSocialPress(team.socialMedia?.website || null)}
+                />
               )}
             </View>
           </Animated.View>
@@ -201,7 +197,6 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
                 {teamStats.wins}-{teamStats.losses}
               </Text>
             </View>
-
             <View style={styles.statCard}>
               <MaterialCommunityIcons
                 name="crown-outline"
@@ -212,7 +207,6 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
               <Text style={styles.statCardLabel}>Win %</Text>
               <Text style={styles.statCardValue}>{winPercentage}%</Text>
             </View>
-
             {teamStats.totalPlayers !== undefined && (
               <View style={styles.statCard}>
                 <Feather name="users" size={24} color={team.primaryColor} style={styles.statCardIcon} />
@@ -220,7 +214,6 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
                 <Text style={styles.statCardValue}>{teamStats.totalPlayers}</Text>
               </View>
             )}
-
             {teamStats.totalCoaches !== undefined && (
               <View style={styles.statCard}>
                 <Feather name="user-check" size={24} color={team.primaryColor} style={styles.statCardIcon} />
@@ -231,9 +224,8 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
           </View>
         </Animated.View>
 
-
         {(() => {
-          const aboutArray = JSON.parse(team.about_team || "[]");
+          const aboutArray = JSON.parse(team.about_team || "[]")
           return Array.isArray(aboutArray) && aboutArray.length > 0 ? (
             <Animated.View entering={FadeInDown.duration(400).delay(250)} style={styles.detailsSection}>
               <Text style={styles.sectionTitle}>About the Team</Text>
@@ -244,11 +236,8 @@ export const TeamInfoTab: React.FC<TeamInfoTabProps> = ({ teamId, team, teamStat
                 </View>
               ))}
             </Animated.View>
-          ) : null;
+          ) : null
         })()}
-
-
-        
       </ScrollView>
     </View>
   )

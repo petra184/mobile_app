@@ -73,7 +73,7 @@ export default function IndexScreen() {
             </TouchableOpacity>
           </View>
 
-          <Link href="/(tabs)" style={styles.skipLink}>
+          <Link href="/main/(tabs)" style={styles.skipLink}>
             <Text style={styles.skipLinkText}>Skip to explore</Text>
           </Link>
         </View>

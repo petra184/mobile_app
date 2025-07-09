@@ -137,7 +137,6 @@ const DetailModal: React.FC<{
           {/* Content */}
           <View style={styles.modalDetailsContainer}>
             <Text style={[styles.modalTitle, !canAfford && styles.disabledText]}>{item.title}</Text>
-            {item.category && <Text style={styles.modalCategory}>{item.category.toUpperCase()}</Text>}
             <Text style={[styles.modalDescription, !canAfford && styles.disabledText]}>{item.description}</Text>
 
             {/* Points Section */}
@@ -176,15 +175,6 @@ const DetailModal: React.FC<{
                   </Text>
                 </View>
               )}
-            </View>
-
-            {/* Your Points */}
-            <View style={styles.modalUserPointsSection}>
-              <Text style={styles.modalUserPointsLabel}>Your Points</Text>
-              <View style={styles.modalUserPointsContainer}>
-                <Feather name="star" size={18} color="#FFD700" />
-                <Text style={styles.modalUserPointsText}>{userPoints.toLocaleString()} points</Text>
-              </View>
             </View>
           </View>
         </ScrollView>
@@ -424,10 +414,6 @@ export default function PointsScreen() {
 
   const handleRedeemReward = async (reward: Reward) => {
     handleItemPress(reward, "reward")
-  }
-
-  const handleClaimOffer = (offer: SpecialOffer) => {
-    handleItemPress(offer, "offer")
   }
 
   const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
@@ -720,6 +706,7 @@ export default function PointsScreen() {
                 <Text style={[styles.rewardCardDescription, !canAfford && styles.disabledText]}>
                   {reward.description}
                 </Text>
+
                 {/* BUTTON */}
                 <View style={styles.rewardCardFooter}>
                   <View style={{ flex: 1 }} />
@@ -727,7 +714,6 @@ export default function PointsScreen() {
                     style={[
                       styles.rewardCardButton,
                       !canAfford && styles.rewardCardButtonInsufficientPoints, // New style for insufficient points
-                      { alignSelf: "center", width: "100%" },
                     ]}
                     onPress={(e) => {
                       e.stopPropagation()
@@ -738,7 +724,10 @@ export default function PointsScreen() {
                     disabled={!canAfford}
                   >
                     {canAfford ? (
+                      <View style={{flex:1, flexDirection:"row"}}>
+                      <Feather name="shopping-cart" color="white" size={18}/>
                       <Text style={styles.rewardCardButtonText}>Add to Cart</Text>
+                      </View>
                     ) : (
                       <>
                         <Feather name="lock" size={12} color="#EF4444" />
@@ -773,7 +762,9 @@ export default function PointsScreen() {
               entering={FadeInUp.duration(600).delay(index * 100)}
               style={styles.offerCardWrapper}
             >
-              <SpecialOfferCard offer={offer} userPoints={points} onRedeem={handleSpecialOfferRedeem} />
+              <SpecialOfferCard 
+                  cardWidth="85%" 
+                  offer={offer} userPoints={points} onRedeem={handleSpecialOfferRedeem} />
             </Animated.View>
           ))}
         </View>
@@ -1277,7 +1268,6 @@ const styles = StyleSheet.create({
   fullImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 30,
   },
   fallbackIconContainer: {
     width: "100%",
@@ -1285,7 +1275,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.05)",
-    borderRadius: 30,
   },
   imageLoadingOverlay: {
     position: "absolute",
@@ -1485,9 +1474,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rewardCardFooter: {
+    flex:1,
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    justifyContent: "center",
+    alignContent:"center",
+    alignItems:"center"
   },
   rewardCardPoints: {
     flexDirection: "row",
@@ -1504,6 +1495,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 22,
+    alignContent:"center",
   },
   rewardCardButtonDisabled: {
     backgroundColor: colors.border,
@@ -1511,6 +1503,7 @@ const styles = StyleSheet.create({
   rewardCardButtonText: {
     color: "white",
     fontSize: 14,
+    marginLeft:10,
     fontWeight: "600",
   },
   rewardCardButtonTextDisabled: {
@@ -1630,9 +1623,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   modalImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: "100%",
+    height: "100%",
   },
   modalOfferBadge: {
     position: "absolute",
@@ -1764,7 +1756,7 @@ const styles = StyleSheet.create({
   },
   modalActionButton: {
     backgroundColor: colors.primary,
-    borderRadius: 16,
+    borderRadius: 36,
     paddingVertical: 18,
     paddingHorizontal: 24,
     alignItems: "center",

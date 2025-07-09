@@ -5,16 +5,53 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Image, Platform,
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore"
+import { useUserStore } from "@/hooks/userStore" // Updated import path
 import { getTeams, type Team } from "@/app/actions/teams"
 import { signOut } from "@/app/actions/main_actions"
 import { getProfileImageDataUrl } from "@/app/actions/users"
 import Feather from "@expo/vector-icons/Feather"
 import ProfileImageWithFallback from "@/components/ui/profile_fallback"
+import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
+
+// Separate component for each team item with individual animation
+const AnimatedTeamItem = ({ team, onPress }: { team: Team; onPress: (team: Team) => void }) => {
+  const scale = useSharedValue(1)
+  const opacity = useSharedValue(1)
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }))
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.96, { damping: 15 })
+    opacity.value = withTiming(0.8, { duration: 100 })
+  }
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15 })
+    opacity.value = withTiming(1, { duration: 150 })
+  }
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Pressable onPress={() => onPress(team)} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        <View style={styles.teamItem}>
+          <Image source={{ uri: team.logo }} style={styles.teamLogo} />
+          <View style={styles.teamInfo}>
+            <Text style={styles.teamName}>{team.shortName}</Text>
+            <Text style={styles.teamSport}>
+              {team.gender} {team.sport}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  )
+}
 
 export default function ProfileScreen() {
   const router = useRouter()
-
   const {
     userId,
     userEmail,
@@ -28,7 +65,6 @@ export default function ProfileScreen() {
     profile_image_url,
   } = useUserStore()
 
-  const [isEditing, setIsEditing] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [loadingTeams, setLoadingTeams] = useState(true)
   const [updatingPreferences, setUpdatingPreferences] = useState(false)
@@ -52,16 +88,13 @@ export default function ProfileScreen() {
       setProfileImageDataUrl(null)
       return
     }
-
     try {
       setLoadingProfileImage(true)
-
       // If it's already a data URL or http URL, use it directly
       if (profile_image_url.startsWith("data:") || profile_image_url.startsWith("http")) {
         setProfileImageDataUrl(profile_image_url)
         return
       }
-
       // If it's a Supabase storage path, download and convert
       if (profile_image_url.includes("profile-images/")) {
         const fileName = profile_image_url.split("/").pop()
@@ -121,17 +154,23 @@ export default function ProfileScreen() {
     router.push("/user_profile/account_settings")
   }
 
+  const handleTeamPress = (team: Team) => {
+    router.push({
+      pathname: "../teams",
+      params: { id: team.id },
+    })
+  }
+
   return (
     <>
       <SafeAreaView style={styles.container} edges={["left"]}>
-        <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+        <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <Pressable onPress={() => router.back()} style={{ marginRight: 16 }}>
             <Feather name="chevron-left" size={24} color={colors.primary} style={styles.arrow} />
           </Pressable>
-
           <View style={styles.profileImageContainer}>
             <ProfileImageWithFallback
               imageUrl={profileImageDataUrl}
@@ -144,7 +183,6 @@ export default function ProfileScreen() {
               onLoad={() => console.log("Profile image displayed successfully")}
             />
           </View>
-
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{getUserName()}</Text>
             <Text style={styles.profileEmail}>{userEmail || "No email"}</Text>
@@ -157,7 +195,6 @@ export default function ProfileScreen() {
               )}
             </View>
           </View>
-
           <View style={styles.editProfileButtonBck}>
             <Pressable style={styles.editProfileButton} onPress={navigateToEditProfile}>
               <Feather name="edit-2" size={20} color={colors.primary} />
@@ -180,20 +217,7 @@ export default function ProfileScreen() {
               ) : favoriteTeams.length > 0 ? (
                 <View style={styles.favoriteTeamsContainer}>
                   {favoriteTeams.map((team) => (
-                    <View key={team.id} style={styles.teamItem}>
-                      <Image source={require("@/IMAGES/MAIN_LOGO.png")} style={styles.teamLogo} />
-                      <View style={styles.teamInfo}>
-                        <Text style={styles.teamName}>{team.shortName}</Text>
-                        <Text style={styles.teamSport}>
-                          {team.gender} {team.sport}
-                        </Text>
-                      </View>
-                      {isEditing && (
-                        <Pressable style={styles.removeButton}>
-                          <Text style={styles.removeButtonText}>Remove</Text>
-                        </Pressable>
-                      )}
-                    </View>
+                    <AnimatedTeamItem key={team.id} team={team} onPress={handleTeamPress} />
                   ))}
                 </View>
               ) : (
@@ -268,7 +292,6 @@ export default function ProfileScreen() {
   )
 }
 
-// Keep all your existing styles - they remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -406,17 +429,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.background,
     borderRadius: 8,
-    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   teamLogo: {
-    width: 40,
-    height: 32,
+    width: "25%",
+    height: "100%",
     marginRight: 12,
+    borderRadius: 4,
   },
   teamInfo: {
     flex: 1,
+    paddingVertical: 12,
   },
   teamName: {
     fontSize: 16,
@@ -457,8 +481,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    height: 56,
+    minHeight: 56,
     paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },

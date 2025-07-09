@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { View, Text, StyleSheet, Pressable, ImageBackground } from "react-native"
 import { colors } from "@/constants/colors"
@@ -34,10 +33,28 @@ export const GameCard: React.FC<GameCardProps> = ({
   const scale = useSharedValue(1)
   const opacity = useSharedValue(1)
 
+  // SIMPLE DATE COMPARISON - ONLY BASED ON DATE
+  const gameDate = new Date(game.date)
+  const today = new Date()
+  // Reset time to 00:00:00 for both dates to compare only the date part
+  gameDate.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)
+
+  // Simple comparison: is game date before today?
+  const isPastGame = gameDate < today
+  const isToday = gameDate.getTime() === today.getTime()
+  const isFutureGame = gameDate > today
+
+  // Status checks (only for display purposes, not for filtering)
+  const isCompleted = game.status === "completed" || game.status === "final"
+  const isLive = game.status === "live"
+  const isPostponed = game.status === "postponed"
+  const isCanceled = game.status === "canceled"
+
   // Check for story when component mounts or game changes
   useEffect(() => {
     const checkForStory = async () => {
-      if (game.id && isCompleted) {
+      if (game.id && isPastGame) {
         setIsLoadingStory(true)
         try {
           const story = await getStoryByGameId(game.id)
@@ -52,7 +69,7 @@ export const GameCard: React.FC<GameCardProps> = ({
     }
 
     checkForStory()
-  }, [game.id, game.status])
+  }, [game.id, isPastGame])
 
   // Format date properly - different for completed vs upcoming
   const formatGameDate = (dateString: string, isCompleted = false) => {
@@ -75,16 +92,6 @@ export const GameCard: React.FC<GameCardProps> = ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }))
-
-  const isCompleted = game.status === "completed"
-  const isLive = game.status === "live"
-  const isUpcoming = game.status === "scheduled" || (!isCompleted && !isLive)
-  const isPostponed = game.status === "postponed"
-  const isCanceled = game.status === "canceled"
-
-  // Check if game is today
-  const gameDate = new Date(game.date)
-  const isToday = new Date().toDateString() === gameDate.toDateString()
 
   // Check if game is within an hour from now
   const isWithinOneHour = () => {
@@ -109,19 +116,10 @@ export const GameCard: React.FC<GameCardProps> = ({
     return game.photo_url || game.homeTeam?.logo || "/placeholder.svg?height=200&width=400"
   }
 
-  // Determine location status
-  const getLocationStatus = () => {
-    if (!game.location) return "TBD"
-    const location = game.location.toLowerCase()
-    if (location.includes("neutral")) return "NEUTRAL"
-    if (location.includes("away") || location.includes("@")) return "AWAY"
-    return "HOME"
-  }
-
   // Get status display info
   const getStatusInfo = () => {
     if (isLive) return { text: "LIVE NOW", gradient: ["#EF4444", "#DC2626"] as const }
-    if (isCompleted) return { text: "FINAL", gradient: ["#3B82F6", "#2563EB"] as const }
+    if (isPastGame || isCompleted) return { text: "FINAL", gradient: ["#3B82F6", "#2563EB"] as const }
     if (isPostponed) return { text: "POSTPONED", gradient: ["#F59E0B", "#D97706"] as const }
     if (isCanceled) return { text: "CANCELED", gradient: ["#EF4444", "#DC2626"] as const }
     if (isToday) return { text: "TODAY", gradient: ["#3B82F6", "#2563EB"] as const }
@@ -129,16 +127,17 @@ export const GameCard: React.FC<GameCardProps> = ({
   }
 
   const statusInfo = getStatusInfo()
-  const shouldShowStatus = isToday || isLive
-
   const handlePress = () => onPress?.(game)
+
   const handleNotifyPress = (e: any) => {
     e.stopPropagation()
     onNotifyPress?.(game)
   }
+
   const handleQRScanPress = (e: any) => {
     router.push({ pathname: "../(tabs)/qr_code", params: { id: game.id } })
   }
+
   const handleNewsPress = (e: any) => {
     e.stopPropagation()
     if (gameStory) {
@@ -158,16 +157,19 @@ export const GameCard: React.FC<GameCardProps> = ({
     opacity.value = withTiming(1, { duration: 150 })
   }
 
-  // Render completed game layout
-  if (isCompleted) {
+  // RENDER PAST GAME LAYOUT - ONLY IF DATE IS IN THE PAST
+  if (isPastGame) {
     const getColor = () => {
-      if (game.score)
-        if (game.score?.away < game.score?.home )
+      if (game.score) {
+        if (game.score?.away < game.score?.home) {
           return ["#F0FDF4", "#10B981"]
-        else 
-        return ["rgba(204, 93, 81, 0.12)","rgba(129, 25, 25, 0.84)"]
-      return "#F0FDF4"
+        } else {
+          return ["rgba(204, 93, 81, 0.12)", "rgba(129, 25, 25, 0.84)"]
+        }
+      }
+      return ["#F0FDF4", "#10B981"]
     }
+
     return (
       <Animated.View style={animatedStyle}>
         <View style={styles.shadowWrapper}>
@@ -179,7 +181,7 @@ export const GameCard: React.FC<GameCardProps> = ({
             android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
           >
             <View style={styles.heroSection}>
-            <ImageBackground
+              <ImageBackground
                 source={{ uri: getGamePhoto() }}
                 style={styles.heroImage}
                 imageStyle={styles.heroImageStyle}
@@ -187,7 +189,7 @@ export const GameCard: React.FC<GameCardProps> = ({
               >
                 <LinearGradient
                   colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]}
-                  style={[styles.heroOverlay, styles.completedHeroOverlayContent]} // <-- THE FIX
+                  style={[styles.heroOverlay, styles.completedHeroOverlayContent]}
                 >
                   <View style={styles.topRow2}>
                     <LinearGradient colors={statusInfo.gradient} style={styles.statusBadge}>
@@ -202,13 +204,13 @@ export const GameCard: React.FC<GameCardProps> = ({
             </View>
             <View style={styles.contentSection}>
               <View style={styles.completedGameContainer}>
-              {game.score && (
-                <View style={[styles.scoreContainer, { backgroundColor: getColor()[0] }]}>
-                  <Text style={[styles.scoreText, { color: getColor()[1] }]}>{game.score.home}</Text>
-                  <Text style={[styles.scoreDivider, { color: getColor()[1] }]}>-</Text>
-                  <Text style={[styles.scoreText, { color: getColor()[1] }]}>{game.score.away}</Text>
-                </View>
-              )}
+                {game.score && (
+                  <View style={[styles.scoreContainer, { backgroundColor: getColor()[0] }]}>
+                    <Text style={[styles.scoreText, { color: getColor()[1] }]}>{game.score.home}</Text>
+                    <Text style={[styles.scoreDivider, { color: getColor()[1] }]}>-</Text>
+                    <Text style={[styles.scoreText, { color: getColor()[1] }]}>{game.score.away}</Text>
+                  </View>
+                )}
               </View>
               <View style={styles.completedGameInfo}>
                 <View style={styles.completedDateContainer}>
@@ -218,7 +220,7 @@ export const GameCard: React.FC<GameCardProps> = ({
                   </Text>
                 </View>
                 <Text style={styles.completedLocationText}>
-                  {getLocationStatus()} • {game.location || "TBD"}
+                  {game.game_type?.toUpperCase() || "GAME"} • {game.location || "TBD"}
                 </Text>
               </View>
               {gameStory && !isLoadingStory && (
@@ -235,13 +237,13 @@ export const GameCard: React.FC<GameCardProps> = ({
     )
   }
 
-  // Render upcoming/live game layout
+  // RENDER UPCOMING/TODAY GAME LAYOUT - FOR TODAY AND FUTURE DATES
   return (
     <Animated.View style={animatedStyle}>
       <View style={styles.shadowWrapper}>
         <Pressable
           onPress={handlePress}
-          style={styles.container}
+          style={[styles.container, isCanceled && styles.canceledContainer]}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
@@ -254,21 +256,10 @@ export const GameCard: React.FC<GameCardProps> = ({
               imageStyle={styles.heroImageStyle}
               resizeMode="cover"
             >
-              <LinearGradient colors={["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]} style={styles.heroOverlay}>
-                {/* Status Badge - Top Left */}
-                {shouldShowStatus && (
-                  <View style={styles.topRow}>
-                    <LinearGradient
-                      colors={statusInfo.gradient}
-                      style={styles.statusBadge}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                    >
-                      <Text style={styles.statusText}>{statusInfo.text}</Text>
-                    </LinearGradient>
-                  </View>
-                )}
-
+              <LinearGradient
+                colors={isCanceled ? ["rgba(0,0,0,0.5)", "rgba(0,0,0,0.8)"] : ["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]}
+                style={styles.heroOverlay}
+              >
                 {/* Points Banner - Top Right */}
                 {game.points && game.points > 0 && (
                   <View style={styles.pointsBadgeContainer}>
@@ -300,7 +291,6 @@ export const GameCard: React.FC<GameCardProps> = ({
                     </View>
                   </View>
                 )}
-
                 {/* Game Title - Bottom Left */}
                 <View style={styles.bottomRow}>
                   <Text style={styles.sportText}>
@@ -310,52 +300,89 @@ export const GameCard: React.FC<GameCardProps> = ({
               </LinearGradient>
             </ImageBackground>
           </View>
-
           {/* Content Section */}
           <View style={styles.contentSection}>
-            {/* Date and Time */}
-            <View style={styles.dateTimeContainer}>
-              <Feather name="calendar" size={16} color="#6B7280" />
-              <Text style={styles.dateTimeText}>
-                {formatGameDate(game.date)} • {game.time}
-              </Text>
-            </View>
-
-            {/* Location */}
-            <View style={styles.locationContainer}>
-              <Feather name="map-pin" size={16} color="#6B7280" />
-              <Text style={styles.locationText}>
-                {getLocationStatus()} • {game.location}
-              </Text>
-            </View>
-
-            {/* Special Events */}
-            {game.special_events && (
-              <View style={styles.specialEventContainer}>
-                <View style={styles.specialEventBadge}>
-                  <Feather name="star" size={16} color="#8B5CF6" />
-                  <Text style={styles.specialEventTitle}>Fan Appreciation Night</Text>
+            {isCanceled && (
+              <View style={styles.canceledBanner}>
+                <LinearGradient colors={["#EF4444", "#DC2626"]} style={styles.canceledBannerGradient}>
+                  <MaterialCommunityIcons name="cancel" size={18} color="white" />
+                  <Text style={styles.canceledBannerText}>GAME CANCELED</Text>
+                </LinearGradient>
+              </View>
+            )}
+            {!isCanceled &&
+              (isPostponed ? (
+                <View style={styles.postponedInfoRow}>
+                  <View style={styles.dateLocationContainer}>
+                    <View style={styles.dateTimeRow}>
+                      <Feather name="calendar" size={20} color={colors.primary} />
+                      <Text style={styles.dateTimeText}>
+                        {formatGameDate(game.date)} • {game.time}
+                      </Text>
+                    </View>
+                    <View style={styles.locationRow}>
+                      <Feather name="map-pin" size={20} color={colors.primary} />
+                      <Text style={styles.locationText}>
+                        {game.game_type?.toUpperCase() || "GAME"} • {game.location}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.postponedWarning}>
+                    <View style={[styles.statusNotification, { backgroundColor: "#FEF3C7" }]}>
+                      <MaterialCommunityIcons name="clock-alert" size={18} color="#D97706" />
+                      <Text style={[styles.statusNotificationText, { color: "#D97706" }]}>POSTPONED</Text>
+                    </View>
+                  </View>
                 </View>
-                <Text style={styles.specialEventText}>{game.special_events}</Text>
+              ) : (
+                <>
+                  <View style={styles.dateTimeContainer}>
+                    <Feather name="calendar" size={20} color={colors.primary} />
+                    <View style={styles.dateTimeTextContainer}>
+                      <Text style={styles.dateTimeText}>
+                        {formatGameDate(game.date)} • {game.time}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.locationContainer}>
+                    <Feather name="map-pin" size={20} color={colors.primary} />
+                    <Text style={styles.locationText}>
+                     {game.game_type?.toUpperCase() || "GAME"} • {game.location}
+                    </Text>
+                  </View>
+                </>
+              ))}
+
+            {game.special_events && !isCanceled && (
+              <View style={styles.alertsSection}>
+                <View style={styles.specialEventCard}>
+                  <View style={styles.specialEventHeader}>
+                    <View style={styles.specialEventBadge}>
+                      <MaterialCommunityIcons name="star-circle" size={18} color="#8B5CF6" />
+                      <Text style={styles.specialEventTitle}>SPECIAL EVENT</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.specialEventText}>{game.special_events}</Text>
+                </View>
               </View>
             )}
 
-            {/* Action Buttons Container */}
-            <View style={styles.actionsContainer}>
-              {onNotifyPress && (
-                <Pressable style={styles.notifyButton} onPress={handleNotifyPress}>
-                  <Feather name="bell" size={16} color="#6366F1" />
-                  <Text style={styles.notifyButtonText}>Notify Me</Text>
-                </Pressable>
-              )}
-
-              {(isWithinOneHour() || isLive) && (
-                <Pressable style={styles.qrScanButton} onPress={handleQRScanPress}>
-                  <MaterialCommunityIcons name="qrcode" size={20} color="white" />
-                  <Text style={styles.qrScanButtonText}>Scan QR Code</Text>
-                </Pressable>
-              )}
-            </View>
+            {!isCanceled && (
+              <View style={styles.actionsContainer}>
+                {onNotifyPress && !isPostponed && !isCompleted && !isLive && (
+                  <Pressable style={styles.notifyButton} onPress={handleNotifyPress}>
+                    <Feather name="bell" size={16} color="#6366F1" />
+                    <Text style={styles.notifyButtonText}>Notify Me</Text>
+                  </Pressable>
+                )}
+                {(isWithinOneHour() || isLive) && (
+                  <Pressable style={styles.qrScanButton} onPress={handleQRScanPress}>
+                    <MaterialCommunityIcons name="qrcode" size={20} color="white" />
+                    <Text style={styles.qrScanButtonText}>Scan QR Code</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
           </View>
         </Pressable>
       </View>
@@ -368,6 +395,10 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 16,
     overflow: "hidden",
+  },
+  canceledContainer: {
+    opacity: 0.7,
+    backgroundColor: "#F8F9FA",
   },
   shadowWrapper: {
     marginHorizontal: 16,
@@ -417,13 +448,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sportText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "white",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  sportText2: {
     fontSize: 14,
     fontWeight: "600",
     color: "white",
@@ -586,14 +610,32 @@ const styles = StyleSheet.create({
   },
   dateTimeContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 8,
+  },
+  dateTimeTextContainer: {
+    flex: 1,
+    marginLeft: 8,
   },
   dateTimeText: {
     fontSize: 14,
     fontWeight: "500",
     color: "#374151",
-    marginLeft: 8,
+  },
+  statusNotification: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+    alignSelf: "flex-start",
+  },
+  statusNotificationText: {
+    fontSize: 10,
+    fontWeight: "600",
+    marginLeft: 4,
+    letterSpacing: 0.3,
   },
   locationContainer: {
     flexDirection: "row",
@@ -606,34 +648,50 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginLeft: 8,
   },
-  specialEventContainer: {
-    backgroundColor: "#F3F4F6",
-    padding: 12,
+  alertsSection: {
+    marginBottom: 16,
+    gap: 12,
+  },
+  specialEventCard: {
+    backgroundColor: "#F8FAFC",
+    borderLeftWidth: 4,
+    borderLeftColor: "#8B5CF6",
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     borderRadius: 8,
+    shadowColor: "#8B5CF6",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  specialEventHeader: {
+    marginBottom: 2,
   },
   specialEventBadge: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
   },
   specialEventTitle: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#8B5CF6",
     marginLeft: 6,
+    letterSpacing: 0.5,
   },
   specialEventText: {
-    fontSize: 14,
-    color: "#4B5563",
-    lineHeight: 18,
-    paddingLeft:22
+    fontSize: 13,
+    color: "#475569",
+    lineHeight: 20,
+    fontWeight: "500",
+    marginLeft:2,
   },
   actionsContainer: {
     flexDirection: "row",
-    justifyContent: "center", // Aligns buttons to the right
+    justifyContent: "center",
     alignItems: "center",
     marginTop: 8,
-    gap: 12, // Creates space between buttons
+    gap: 12,
   },
   notifyButton: {
     flexDirection: "row",
@@ -683,6 +741,49 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: 6,
     marginRight: 6,
+  },
+  canceledBanner: {
+    marginBottom: 12,
+  },
+  canceledBannerGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    gap: 6,
+  },
+  canceledBannerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "white",
+    letterSpacing: 0.5,
+  },
+  postponedInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    gap: 12,
+  },
+  dateLocationContainer: {
+    flex: 1,
+    gap: 8,
+  },
+  dateTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  postponedWarning: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    padding: 10,
   },
 })
 

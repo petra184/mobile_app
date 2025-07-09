@@ -1,6 +1,5 @@
 "use client"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { View, StyleSheet, ScrollView, Pressable, Platform, Text } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
@@ -10,15 +9,16 @@ import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import TeamSelector from "@/components/teams/SwipingCard"
 import { GameCard } from "@/components/games/new_game_card"
-import { type GameFilterOptions } from "@/components/games/GameFilter"
+import type { GameFilterOptions } from "@/components/games/GameFilter"
 import Feather from "@expo/vector-icons/Feather"
 import type { Team } from "@/app/actions/teams"
 import { getUpcomingGames, getPastGames, getLiveGames } from "@/app/actions/games"
 import { fetchUserStatus, type UserStatusWithLevel } from "@/app/actions/points"
 import type { Game } from "@/types/game"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
-import { sortGamesByPriority } from '@/utils/sortGame'
+import { sortGamesByPriority } from "@/utils/sortGame"
 import { StatusBar } from "expo-status-bar"
+import { useGameRealtime } from "@/hooks/realtime/index"
 
 export default function HomeScreen() {
   const router = useRouter()
@@ -30,36 +30,15 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true)
   const [gameFilters, setGameFilters] = useState<GameFilterOptions>({
     status: "all",
-    // Make sure all possible filter properties are defined, even if undefined initially
     sport: undefined,
     location: undefined,
-    teamId: undefined
+    teamId: undefined,
   })
 
-  // Fetch all games and user status on component mount
-  useEffect(() => {
-    fetchAllGames()
-    if (userId) {
-      fetchUserData()
-    }
-  }, [userId])
-
-  // Fetch user status for the points card
-  const fetchUserData = async () => {
-    if (!userId) return
-    try {
-      const statusData = await fetchUserStatus(userId)
-      setUserStatus(statusData)
-    } catch (error) {
-      console.error("Error fetching user status:", error)
-    }
-  }
-
   // Updated fetchAllGames function using the sorting utility
-  const fetchAllGames = async () => {
+  const fetchAllGames = useCallback(async () => {
     try {
       setLoading(true)
-
       // Fetch all types of games in parallel
       const [upcoming, past, live] = await Promise.all([
         getUpcomingGames(20), // Get more upcoming games
@@ -79,6 +58,64 @@ export default function HomeScreen() {
       showInfo("Error", "Failed to load games. Please try again.")
     } finally {
       setLoading(false)
+    }
+  }, [showInfo]) // Only depend on showInfo
+
+  // Realtime game update callback
+  const handleGameUpdate = useCallback(
+    (event: "INSERT" | "UPDATE" | "DELETE", payload: any) => {
+      console.log(`Game ${event.toLowerCase()}:`, payload)
+      // Show notification for live updates
+      if (event === "UPDATE") {
+        showInfo("Game Update", "A game has been updated with new information")
+      } else if (event === "INSERT") {
+        showInfo("New Game", "A new game has been scheduled")
+      }
+      // Refetch games to get the latest data
+      fetchAllGames()
+    },
+    [showInfo, fetchAllGames], // Include fetchAllGames in dependencies
+  )
+
+  // Initialize realtime subscriptions
+  const { setupRealtimeSubscriptions, cleanupSubscriptions, isConnected } = useGameRealtime(
+    handleGameUpdate, // Only pass game update callback
+    undefined, // No story update callback needed
+  )
+
+  // Setup realtime subscriptions on mount
+  useEffect(() => {
+    let mounted = true
+    const setupRealtime = async () => {
+      if (mounted) {
+        await setupRealtimeSubscriptions()
+      }
+    }
+    setupRealtime()
+
+    // Cleanup on unmount
+    return () => {
+      mounted = false
+      cleanupSubscriptions()
+    }
+  }, []) // Empty dependency array - only run once on mount
+
+  // Fetch all games and user status on component mount
+  useEffect(() => {
+    fetchAllGames()
+    if (userId) {
+      fetchUserData()
+    }
+  }, [userId, fetchAllGames]) // Include fetchAllGames in dependencies
+
+  // Fetch user status for the points card
+  const fetchUserData = async () => {
+    if (!userId) return
+    try {
+      const statusData = await fetchUserStatus(userId)
+      setUserStatus(statusData)
+    } catch (error) {
+      console.error("Error fetching user status:", error)
     }
   }
 
@@ -115,7 +152,6 @@ export default function HomeScreen() {
 
   const getTimeBasedGreeting = () => {
     const currentHour = new Date().getHours()
-
     if (currentHour >= 5 && currentHour < 12) {
       return "Good Morning"
     } else if (currentHour >= 12 && currentHour < 17) {
@@ -129,7 +165,6 @@ export default function HomeScreen() {
 
   const getPersonalizedMessage = () => {
     const currentHour = new Date().getHours()
-
     if (currentHour >= 5 && currentHour < 12) {
       return "Ready to start your day with some exciting games?"
     } else if (currentHour >= 12 && currentHour < 17) {
@@ -143,7 +178,6 @@ export default function HomeScreen() {
 
   const getTimeIcon = () => {
     const currentHour = new Date().getHours()
-
     if (currentHour >= 5 && currentHour < 12) {
       return "sunrise"
     } else if (currentHour >= 12 && currentHour < 17) {
@@ -161,12 +195,10 @@ export default function HomeScreen() {
     if (gameFilters.teamId && game.homeTeam.id !== gameFilters.teamId) {
       return false
     }
-
     // Sport filter
     if (gameFilters.sport && game.sport?.name.toLowerCase() !== gameFilters.sport.toLowerCase()) {
       return false
     }
-
     // Location filter
     if (gameFilters.location) {
       const location = game.location.toLowerCase()
@@ -174,22 +206,46 @@ export default function HomeScreen() {
       if (gameFilters.location === "away" && !(location.includes("away") || location.includes("@"))) return false
       if (gameFilters.location === "neutral" && !location.includes("neutral")) return false
     }
-
     // Status filter
     if (gameFilters.status && gameFilters.status !== "all") {
       if (gameFilters.status === "upcoming" && game.status !== "scheduled") return false
       if (gameFilters.status === "past" && game.status !== "completed") return false
       if (gameFilters.status === "live" && game.status !== "live") return false
     }
-
     return true
   })
 
-  // Group filtered games by status for better organization
-  const liveGames = filteredGames.filter((game) => game.status === "live")
-  const upcomingGames = filteredGames.filter((game) => game.status === "scheduled")
-  const completedGames = filteredGames.filter((game) => game.status === "completed")
-  const otherGames = filteredGames.filter((game) => !["live", "scheduled", "completed"].includes(game.status))
+  // FIXED: Group games by DATE, not status
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const categorizeGamesByDate = (games: Game[]) => {
+    const live: Game[] = []
+    const upcoming: Game[] = []
+    const past: Game[] = []
+
+    games.forEach((game) => {
+      const gameDate = new Date(game.date)
+      gameDate.setHours(0, 0, 0, 0)
+
+      // Live games (status-based)
+      if (game.status === "live") {
+        live.push(game)
+      }
+      // Past games (date-based)
+      else if (gameDate < today) {
+        past.push(game)
+      }
+      // Upcoming games (date-based) - includes today and future
+      else {
+        upcoming.push(game)
+      }
+    })
+
+    return { live, upcoming, past }
+  }
+
+  const { live: liveGames, upcoming: upcomingGames, past: pastGames } = categorizeGamesByDate(filteredGames)
 
   const scale = useSharedValue(1)
   const opacity = useSharedValue(1)
@@ -211,7 +267,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
-    <StatusBar style='dark' />
+      <StatusBar style="dark" />
       <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
         {/* Enhanced Welcome Card */}
         <View style={styles.welcomeCard}>
@@ -224,6 +280,11 @@ export default function HomeScreen() {
             <View style={styles.timeIcon}>
               <Feather name={getTimeIcon()} size={24} color={colors.primary} />
             </View>
+          </View>
+          {/* Realtime Connection Status */}
+          <View style={styles.connectionStatus}>
+            <View style={[styles.connectionDot, { backgroundColor: isConnected ? "#10B981" : "#EF4444" }]} />
+            <Text style={styles.connectionText}>{isConnected ? "Live updates active" : "Connecting..."}</Text>
           </View>
         </View>
 
@@ -259,12 +320,7 @@ export default function HomeScreen() {
               <Text style={styles.viewAllText}>View All</Text>
             </Pressable>
           </View>
-
-          <TeamSelector
-            onSelectTeam={handleTeamSelect}
-            onTeamPress={handleTeamPress}
-            showFavorites={true}
-          />
+          <TeamSelector onSelectTeam={handleTeamSelect} onTeamPress={handleTeamPress} showFavorites={true} />
         </View>
 
         {/* All Games Section */}
@@ -274,7 +330,10 @@ export default function HomeScreen() {
               <View style={[styles.sectionTitleAccent, { backgroundColor: colors.primary }]} />
               <View>
                 <Text style={styles.sectionTitle}>Games</Text>
-                <Text style={styles.sectionSubtitle}>{loading ? "Loading..." : `${filteredGames.length} games`}</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {loading ? "Loading..." : `${filteredGames.length} games`}
+                  {isConnected && !loading && " • Live"}
+                </Text>
               </View>
             </View>
             <View style={styles.headerActions}>
@@ -291,6 +350,7 @@ export default function HomeScreen() {
             </View>
           ) : filteredGames.length > 0 ? (
             <View>
+              {/* Live Games - Status Based */}
               {liveGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -305,6 +365,7 @@ export default function HomeScreen() {
                 </View>
               )}
 
+              {/* Upcoming Games - Date Based (Today + Future) */}
               {upcomingGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -317,25 +378,14 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {completedGames.length > 0 && (
+              {/* Past Games - Date Based */}
+              {pastGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
                     <Feather name="check-circle" size={18} color={colors.primary} />
-                    <Text style={styles.gameGroupTitle}>Recent ({completedGames.length})</Text>
+                    <Text style={styles.gameGroupTitle}>Recent ({pastGames.length})</Text>
                   </View>
-                  {completedGames.map((game) => (
-                    <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
-                  ))}
-                </View>
-              )}
-
-              {otherGames.length > 0 && (
-                <View style={styles.gameGroup}>
-                  <View style={styles.gameGroupHeader}>
-                    <Feather name="alert-circle" size={16} color="#F59E0B" />
-                    <Text style={styles.gameGroupTitle}>Other ({otherGames.length})</Text>
-                  </View>
-                  {otherGames.map((game) => (
+                  {pastGames.map((game) => (
                     <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
                   ))}
                 </View>
@@ -352,7 +402,6 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
-
         <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
@@ -434,7 +483,7 @@ const styles = StyleSheet.create({
   },
   gameGroup: {
     marginBottom: 20,
-    paddingHorizontal:5
+    paddingHorizontal: 5,
   },
   gameGroupHeader: {
     flexDirection: "row",
@@ -529,5 +578,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(59, 130, 246, 0.1)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  connectionStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  connectionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  connectionText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "500",
   },
 })

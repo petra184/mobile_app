@@ -435,7 +435,7 @@ const RewardsCheckoutScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+      <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
       {hasItems ? (
         <>

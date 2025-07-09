@@ -199,7 +199,7 @@ export default function EditProfileScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={["bottom"]}>
-        <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+        <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
@@ -216,9 +216,9 @@ export default function EditProfileScreen() {
           <Feather name="chevron-left" size={24} color={colors.primary} />
         </Pressable>
 
-        <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+        <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
-        <ScrollView showsVerticalScrollIndicator={false}>
+       
           {/* Profile Image Section */}
           <View style={styles.profileImageSection}>
             <View style={styles.profileImageContainer}>
@@ -248,7 +248,7 @@ export default function EditProfileScreen() {
               </Text>
             )}
           </View>
-
+        <ScrollView showsVerticalScrollIndicator={false}>
           {/* Form */}
           <View style={styles.formContainer}>
             {/* First & Last Name in One Row */}

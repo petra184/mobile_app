@@ -50,11 +50,11 @@ export default function LoginScreen() {
   
         if (success && user) {
           showSuccess("Welcome back!", "You have successfully logged in")
-          
+          console.log("user is ", user)
           // Pass the rememberMe preference to setUser
           await setUser(user.id, user.email, rememberMe)
           
-          router.push("/(tabs)")
+          router.push("../(main)/(tabs)")
         } else {
           clearUserData()
           showError("Login Failed", message || "Invalid credentials. Please check your email/username and password.")

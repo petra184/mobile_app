@@ -18,7 +18,11 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import type { SpecialOffer } from "@/app/actions/points"
 
-const { width } = Dimensions.get("window")
+const { width: screenWidth } = Dimensions.get("window")
+
+const DEFAULT_CARD_WIDTH_PERCENTAGE = 0.45
+const CARD_HEIGHT = 280
+const CARD_IMAGE_HEIGHT = 100
 
 type OfferImageProps = {
   imageUrl?: string
@@ -32,7 +36,7 @@ const OfferImage: React.FC<OfferImageProps> = ({ imageUrl, containerStyle }) => 
   if (!imageUrl || imageError) {
     return (
       <View style={[styles.fallbackIconContainer, containerStyle]}>
-        <Feather name="zap" size={28} color="#EF4444" />
+        <Feather name="image" size={28} color={colors.textSecondary} />
       </View>
     )
   }
@@ -41,7 +45,7 @@ const OfferImage: React.FC<OfferImageProps> = ({ imageUrl, containerStyle }) => 
     <View style={[styles.fullImageContainer, containerStyle]}>
       {imageLoading && (
         <View style={styles.imageLoadingOverlay}>
-          <ActivityIndicator size="small" color="#EF4444" />
+          <ActivityIndicator size="small" color={colors.primary} />
         </View>
       )}
       <Image
@@ -59,7 +63,6 @@ const OfferImage: React.FC<OfferImageProps> = ({ imageUrl, containerStyle }) => 
   )
 }
 
-// Special Offer Detail Modal Component
 const SpecialOfferDetailModal: React.FC<{
   offer: SpecialOffer | null
   visible: boolean
@@ -80,66 +83,59 @@ const SpecialOfferDetailModal: React.FC<{
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
-      weekday: "long",
       year: "numeric",
-      month: "long",
+      month: "short",
       day: "numeric",
     })
   }
 
-  const getStatusText = () => {
-    if (isSoldOut) return "Sold Out"
-    if (isExpired) return "Expired"
-    if (isNotStarted) return "Coming Soon"
-    if (!offer.is_active) return "Inactive"
-    return "Available"
-  }
-
-  const getStatusColor = () => {
-    if (isSoldOut || isExpired || !offer.is_active) return "#EF4444"
-    if (isNotStarted) return "#F59E0B"
-    return "#10B981"
+  const handleModalRedeem = () => {
+    if (canRedeem) {
+      onRedeem(offer)
+      onClose()
+    } else {
+      if (!canAfford) {
+        Alert.alert(
+          "Insufficient Points",
+          `You need ${offer.points_required - userPoints} more points to redeem this offer.`,
+        )
+      } else if (isSoldOut) {
+        Alert.alert("Sold Out", "This offer is no longer available.")
+      } else if (isExpired) {
+        Alert.alert("Expired", "This offer has expired.")
+      } else if (isNotStarted) {
+        Alert.alert("Not Available", "This offer hasn't started yet.")
+      }
+    }
   }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <SafeAreaView style={styles.modalContainer} edges={["left"]}>
+      <SafeAreaView style={styles.modalContainer} edges={["left", "right", "top"]}>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Feather name="x" size={24} color="#666" />
+            <Feather name="x" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
-          <Text style={styles.modalTitle}>Special Offer</Text>
+          <Text style={styles.modalTitle}>Offer Details</Text>
           <View style={{ width: 24 }} />
         </View>
-
-        <ScrollView style={styles.modalContent}>
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
           <View style={styles.modalImageContainer}>
             <OfferImage imageUrl={offer.image_url ?? undefined} containerStyle={styles.modalImage} />
-            {/* Status Badge */}
-            <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor() }]}>
-              <Text style={styles.modalStatusText}>{getStatusText()}</Text>
-            </View>
-            {/* Limited Time Badge */}
-            <View style={styles.modalLimitedBadge}>
-              <Feather name="zap" size={12} color="white" />
-              <Text style={styles.modalLimitedText}>LIMITED OFFER</Text>
-            </View>
-            {/* Quantity Badge */}
+
             {isLimitedQuantity && remainingQuantity !== null && remainingQuantity > 0 && (
               <View style={styles.modalQuantityBadge}>
                 <Text style={styles.modalQuantityText}>Only {remainingQuantity} left!</Text>
               </View>
             )}
           </View>
-
           <View style={styles.modalInfo}>
             <Text style={styles.modalOfferTitle}>{offer.title}</Text>
             <Text style={styles.modalOfferDescription}>{offer.description}</Text>
 
-            {/* Price Section */}
             <View style={styles.modalPriceContainer}>
               <View style={styles.modalPriceRow}>
-                <Feather name="star" size={20} color="#FFD700" />
+                <Feather name="star" size={24} color={colors.accent} />
                 <View style={styles.modalPriceTextContainer}>
                   {offer.original_points && <Text style={styles.modalOriginalPrice}>{offer.original_points} pts</Text>}
                   <Text style={styles.modalOfferPrice}>{offer.points_required} points</Text>
@@ -147,16 +143,20 @@ const SpecialOfferDetailModal: React.FC<{
               </View>
               {offer.original_points && (
                 <View style={styles.modalSavingsBadge}>
-                  <Text style={styles.modalSavingsText}>Save {offer.original_points - offer.points_required} pts!</Text>
+                  <Text style={styles.modalSavingsText}>Save {offer.original_points - offer.points_required} pts</Text>
+                </View>
+              )}
+              {offer.is_active && !isExpired && (
+                <View style={styles.modalLimitedBadge}>
+                  <Feather name="zap" size={12} color="white" />
+                  <Text style={styles.modalLimitedText}>LIMITED OFFER</Text>
                 </View>
               )}
             </View>
-
-            {/* Offer Details */}
             <View style={styles.modalDetailsContainer}>
               <Text style={styles.modalDetailsTitle}>Offer Details</Text>
               <View style={styles.modalDetailRow}>
-                <Feather name="calendar" size={16} color={colors.primary} />
+                <Feather name="calendar" size={18} color={colors.primary} />
                 <View style={styles.modalDetailTextContainer}>
                   <Text style={styles.modalDetailLabel}>Valid Period</Text>
                   <Text style={styles.modalDetailValue}>
@@ -166,7 +166,7 @@ const SpecialOfferDetailModal: React.FC<{
               </View>
               {isLimitedQuantity && (
                 <View style={styles.modalDetailRow}>
-                  <Feather name="package" size={16} color={colors.primary} />
+                  <Feather name="package" size={18} color={colors.primary} />
                   <View style={styles.modalDetailTextContainer}>
                     <Text style={styles.modalDetailLabel}>Availability</Text>
                     <Text style={styles.modalDetailValue}>
@@ -176,48 +176,45 @@ const SpecialOfferDetailModal: React.FC<{
                 </View>
               )}
               <View style={styles.modalDetailRow}>
-                <Feather name="users" size={16} color={colors.primary} />
+                <Feather name="users" size={18} color={colors.primary} />
                 <View style={styles.modalDetailTextContainer}>
                   <Text style={styles.modalDetailLabel}>Already Claimed</Text>
                   <Text style={styles.modalDetailValue}>{offer.claimed_count || 0} times</Text>
                 </View>
               </View>
             </View>
-
-            {/* Warning Messages */}
             {!canAfford && isAvailable && !isSoldOut && (
-              <View style={styles.modalWarningContainer}>
-                <Feather name="alert-triangle" size={20} color="#F59E0B" />
-                <Text style={styles.modalWarningText}>
-                  You need {offer.points_required - userPoints} more points to redeem this offer
+              <View style={[styles.modalWarningContainer, { backgroundColor: colors.warningBackground }]}>
+                <Feather name="alert-triangle" size={20} color={colors.warning} />
+                <Text style={[styles.modalWarningText, { color: colors.warningText }]}>
+                  You need {offer.points_required - userPoints} more points to redeem this offer.
                 </Text>
               </View>
             )}
             {(isSoldOut || isExpired || isNotStarted || !offer.is_active) && (
-              <View style={[styles.modalWarningContainer, { backgroundColor: "#FEE2E2" }]}>
-                <Feather name="x-circle" size={20} color="#EF4444" />
-                <Text style={[styles.modalWarningText, { color: "#DC2626" }]}>
+              <View style={[styles.modalWarningContainer, { backgroundColor: colors.errorBackground }]}>
+                <Feather name="x-circle" size={20} color={colors.error} />
+                <Text style={[styles.modalWarningText, { color: colors.errorText }]}>
                   {isSoldOut
-                    ? "This offer is sold out"
+                    ? "This offer is sold out."
                     : isExpired
-                      ? "This offer has expired"
-                      : isNotStarted
-                        ? "This offer hasn't started yet"
-                        : "This offer is currently inactive"}
+                    ? "This offer has expired."
+                    : isNotStarted
+                    ? "This offer hasn't started yet."
+                    : "This offer is currently inactive."}
                 </Text>
               </View>
             )}
           </View>
         </ScrollView>
-
         <View style={styles.modalActions}>
           <TouchableOpacity
             style={[styles.modalRedeemButton, !canRedeem && styles.modalButtonDisabled]}
-            onPress={() => onRedeem(offer)}
+            onPress={handleModalRedeem}
             disabled={!canRedeem}
           >
-            {!canRedeem && <Feather name="lock" size={20} color="#999" style={{ marginRight: 8 }} />}
-            <Feather name="gift" size={20} color={canRedeem ? "#FFFFFF" : "#999"} style={{ marginRight: 8 }} />
+            {!canRedeem && <Feather name="lock" size={20} color={colors.buttonDisabledText} style={{ marginRight: 8 }} />}
+            <Feather name="gift" size={20} color={canRedeem ? "#FFFFFF" : colors.buttonDisabledText} style={{ marginRight: 8 }} />
             <Text style={[styles.modalRedeemButtonText, !canRedeem && styles.modalButtonTextDisabled]}>
               {canRedeem ? "Redeem Offer" : "Cannot Redeem"}
             </Text>
@@ -232,10 +229,18 @@ interface SpecialOfferCardProps {
   offer: SpecialOffer
   userPoints: number
   onRedeem: (offer: SpecialOffer) => void
+  cardWidth?: number | `${number}%` // Explicitly type percentage strings
 }
 
-const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, onRedeem }) => {
+const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, onRedeem, cardWidth }) => {
   const [modalVisible, setModalVisible] = useState(false)
+
+  // Calculate the actual card width based on the prop
+  // This logic now directly produces a number or a percentage string accepted by DimensionValue
+  const calculatedCardWidth = typeof cardWidth === 'string' && cardWidth.endsWith('%')
+    ? cardWidth // Already a percentage string, use directly
+    : cardWidth // If it's a number, use directly
+    || screenWidth * DEFAULT_CARD_WIDTH_PERCENTAGE; // Default to a number
 
   const canAfford = userPoints >= offer.points_required
   const isExpired = new Date() > new Date(offer.end_date)
@@ -245,7 +250,6 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
   const remainingQuantity = isLimitedQuantity ? (offer.limited_quantity || 0) - (offer.claimed_count || 0) : null
   const isSoldOut = isLimitedQuantity && remainingQuantity !== null && remainingQuantity <= 0
 
-  // Don't render expired offers at all
   if (isExpired) {
     return null
   }
@@ -256,7 +260,7 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
     setModalVisible(true)
   }
 
-  const handleRedeem = (offerToRedeem: SpecialOffer) => {
+  const handleCardRedeem = (offerToRedeem: SpecialOffer) => {
     if (!canRedeem) {
       if (!canAfford) {
         Alert.alert(
@@ -272,37 +276,27 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
       }
       return
     }
-
-    Alert.alert("Redeem Offer", `Redeem "${offerToRedeem.title}" for ${offerToRedeem.points_required} points?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Redeem",
-        onPress: () => {
-          onRedeem(offerToRedeem)
-          setModalVisible(false)
-        },
-      },
-    ])
+    onRedeem(offerToRedeem)
   }
 
   return (
     <>
       <TouchableOpacity
-        style={[styles.offerCard, !isAvailable && styles.offerCardDisabled]}
+        style={[styles.offerCard, { width: calculatedCardWidth }, !isAvailable && styles.offerCardDisabled]}
         onPress={handleCardPress}
         activeOpacity={0.7}
       >
-        {/* Limited Badge */}
-        <View style={styles.offerBadge}>
-          <Feather name="zap" size={12} color="white" />
-          <Text style={styles.offerBadgeText}>LIMITED</Text>
-        </View>
+        {offer.is_active && !isExpired && (
+          <View style={styles.offerBadge}>
+            <Feather name="zap" size={12} color="white" />
+            <Text style={styles.offerBadgeText}>LIMITED</Text>
+          </View>
+        )}
 
-        {/* Status Badge */}
         {(!isAvailable || isSoldOut) && (
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>
-              {isSoldOut ? "SOLD OUT" : isExpired ? "EXPIRED" : isNotStarted ? "SOON" : "INACTIVE"}
+          <View style={styles.statusOverlay}>
+            <Text style={styles.statusOverlayText}>
+              {isSoldOut ? "SOLD OUT" : isNotStarted ? "COMING SOON" : "INACTIVE"}
             </Text>
           </View>
         )}
@@ -312,20 +306,16 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
         </View>
 
         <View style={styles.offerInfo}>
-          <Text style={styles.offerCategory}>SPECIAL OFFER</Text>
           <Text style={styles.offerName} numberOfLines={2}>
             {offer.title}
           </Text>
           <Text style={styles.offerDescription} numberOfLines={2}>
             {offer.description}
           </Text>
-
           <View style={styles.priceContainer}>
             {offer.original_points && <Text style={styles.originalPrice}>{offer.original_points} pts</Text>}
             <Text style={styles.offerPrice}>{offer.points_required} pts</Text>
           </View>
-
-          {/* Quantity Info */}
           {isLimitedQuantity && remainingQuantity !== null && remainingQuantity > 0 && (
             <Text style={styles.quantityText}>Only {remainingQuantity} left!</Text>
           )}
@@ -336,13 +326,13 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
             style={[styles.redeemButton, !canRedeem && styles.redeemButtonDisabled]}
             onPress={(e) => {
               e.stopPropagation()
-              handleRedeem(offer)
+              handleCardRedeem(offer)
             }}
             disabled={!canRedeem}
           >
-            {!canRedeem && <Feather name="lock" size={16} color="#999" style={{ marginRight: 4 }} />}
+            {!canRedeem && <Feather name="lock" size={16} color={colors.buttonDisabledText} style={{ marginRight: 4 }} />}
             <Text style={[styles.redeemButtonText, !canRedeem && styles.redeemButtonTextDisabled]}>
-              {canRedeem ? "Redeem" : "Locked"}
+              {canRedeem ? "Add to Cart" : "Locked"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -352,7 +342,7 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
         offer={offer}
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
-        onRedeem={handleRedeem}
+        onRedeem={onRedeem}
         canAfford={canAfford}
         userPoints={userPoints}
       />
@@ -363,57 +353,64 @@ const SpecialOfferCard: React.FC<SpecialOfferCardProps> = ({ offer, userPoints, 
 const styles = StyleSheet.create({
   offerCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: 12,
     marginRight: 16,
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 5,
     position: "relative",
+    height: CARD_HEIGHT,
   },
   offerCardDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   offerBadge: {
     position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "#EF4444",
+    top: 10,
+    right: 10,
+    backgroundColor: colors.accent,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 16,
     zIndex: 2,
   },
   offerBadgeText: {
     color: "white",
     fontSize: 10,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginLeft: 4,
+    textTransform: "uppercase",
   },
-  statusBadge: {
+  statusOverlay: {
     position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: "#6B7280",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
     borderRadius: 12,
-    zIndex: 2,
   },
-  statusBadgeText: {
+  statusOverlayText: {
     color: "white",
-    fontSize: 10,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
   imageContainer: {
     width: "100%",
-    height: 120,
-    backgroundColor: "#F8F9FA",
-    position: "relative",
+    height: CARD_IMAGE_HEIGHT,
+    backgroundColor: colors.backgroundLight,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: "hidden",
   },
   imageWrapper: {
     width: "100%",
@@ -433,7 +430,7 @@ const styles = StyleSheet.create({
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: colors.backgroundLight,
   },
   imageLoadingOverlay: {
     position: "absolute",
@@ -443,117 +440,109 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
     zIndex: 1,
   },
   offerInfo: {
-    padding: 16,
+    padding: 12,
     flex: 1,
-  },
-  offerCategory: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#EF4444",
-    marginBottom: 4,
+    justifyContent: "space-between",
   },
   offerName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#222",
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 4,
+    lineHeight: 20,
   },
   offerDescription: {
-    fontSize: 13,
-    color: "#666",
+    fontSize: 12,
+    color: colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: 6,
+    flex: 1,
   },
   priceContainer: {
     flexDirection: "row",
     alignItems: "baseline",
-    marginBottom: 12,
-    paddingHorizontal: 2,
+    marginBottom: 6,
   },
   originalPrice: {
-    fontSize: 13,
-    color: "#9CA3AF",
+    fontSize: 12,
+    color: colors.textPlaceholder,
     textDecorationLine: "line-through",
-    marginRight: 8,
+    marginRight: 6,
     fontWeight: "500",
   },
   offerPrice: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1F2937",
-    letterSpacing: -0.3,
-  },
-  pointsLabel: {
-    fontSize: 11,
-    color: "#6B7280",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 17,
+    fontWeight: "800",
+    color: colors.textDark,
+    letterSpacing: -0.2,
   },
   quantityText: {
-    fontSize: 11,
-    color: "#F59E0B",
+    fontSize: 10,
+    color: colors.warning,
     fontWeight: "600",
-    marginBottom: 8,
+    marginTop: 2,
   },
   redeemButtonContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 8,
   },
   redeemButton: {
     backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 9,
+    borderRadius: 23,
+    minHeight: 38,
   },
   redeemButtonDisabled: {
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.buttonDisabledBackground,
   },
   redeemButtonText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
   },
   redeemButtonTextDisabled: {
-    color: "#9CA3AF",
+    color: colors.buttonDisabledText,
   },
-  // Modal styles
+
   modalContainer: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: colors.backgroundLight,
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 18,
     backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
   },
   closeButton: {
     padding: 4,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: "700",
-    color: "#111827",
+    color: colors.textPrimary,
   },
   modalContent: {
     flex: 1,
   },
   modalImageContainer: {
     width: "100%",
-    height: 250,
-    backgroundColor: "#FFFFFF",
+    height: 220,
     position: "relative",
+    backgroundColor: colors.backgroundLight,
+    overflow: "hidden",
   },
   modalImage: {
     width: "100%",
@@ -561,200 +550,187 @@ const styles = StyleSheet.create({
   },
   modalStatusBadge: {
     position: "absolute",
-    top: 16,
-    left: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    top: 14,
+    left: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   modalStatusText: {
     color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
   },
   modalLimitedBadge: {
     position: "absolute",
-    top: 16,
-    right: 16,
-    backgroundColor: "#EF4444",
+    right: 0,
+    backgroundColor: colors.accent,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   modalLimitedText: {
     color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "600",
     marginLeft: 4,
+    textTransform: "uppercase",
   },
   modalQuantityBadge: {
     position: "absolute",
-    bottom: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: "#F59E0B",
+    bottom: 14,
+    left: 14,
+    right: 14,
+    backgroundColor: colors.warning,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   modalQuantityText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "600",
     textAlign: "center",
   },
   modalInfo: {
     backgroundColor: "#FFFFFF",
     padding: 20,
-    marginTop: 1,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    marginBottom: 20,
+    marginHorizontal: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
   },
   modalOfferTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 22,
+    fontWeight: "800",
+    color: colors.textDark,
     marginBottom: 8,
   },
   modalOfferDescription: {
-    fontSize: 16,
-    color: "#6B7280",
-    lineHeight: 24,
-    marginBottom: 20,
+    fontSize: 15,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: 18,
   },
   modalPriceContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 18,
   },
   modalPriceRow: {
     flexDirection: "row",
     alignItems: "center",
   },
   modalPriceTextContainer: {
-    marginLeft: 12,
+    marginLeft: 10,
     alignItems: "flex-start",
   },
   modalOriginalPrice: {
-    fontSize: 16,
-    color: "#9CA3AF",
+    fontSize: 15,
+    color: colors.textPlaceholder,
     textDecorationLine: "line-through",
     fontWeight: "500",
     marginBottom: 2,
   },
   modalOfferPrice: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: "800",
-    color: "#1F2937",
-    letterSpacing: -0.8,
-  },
-  modalPointsLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: 2,
+    color: colors.textDark,
+    letterSpacing: -0.6,
   },
   modalSavingsBadge: {
-    backgroundColor: "#DCFCE7",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: colors.successBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   modalSavingsText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    color: "#16A34A",
-  },
-  modalCategoryContainer: {
-    marginBottom: 20,
-  },
-  modalCategoryBadge: {
-    backgroundColor: colors.primary + "20",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: "flex-start",
-  },
-  modalCategoryText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.primary,
+    color: colors.successText,
+    textTransform: "uppercase",
   },
   modalDetailsContainer: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
+    backgroundColor: colors.backgroundMuted,
+    borderRadius: 10,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   modalDetailsTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 16,
+    color: colors.textPrimary,
+    marginBottom: 14,
   },
   modalDetailRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   modalDetailTextContainer: {
-    marginLeft: 12,
+    marginLeft: 10,
     flex: 1,
   },
   modalDetailLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    color: "#6B7280",
+    color: colors.textPlaceholder,
     marginBottom: 2,
+    textTransform: "uppercase",
   },
   modalDetailValue: {
     fontSize: 14,
-    color: "#111827",
+    color: colors.textPrimary,
   },
   modalWarningContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEF3C7",
     borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    padding: 14,
+    marginBottom: 12,
   },
   modalWarningText: {
-    fontSize: 14,
-    color: "#92400E",
-    marginLeft: 12,
+    fontSize: 13,
+    marginLeft: 10,
     flex: 1,
+    fontWeight: "500",
   },
   modalActions: {
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+    paddingVertical: 16,
+    borderTopWidth: 0.5,
+    borderTopColor: colors.border,
   },
   modalRedeemButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    marginBottom: 10,
-    borderRadius: 32,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 28,
+    marginBottom:20,
     justifyContent: "center",
   },
   modalRedeemButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
   },
   modalButtonDisabled: {
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.buttonDisabledBackground,
   },
   modalButtonTextDisabled: {
-    color: "#9CA3AF",
+    color: colors.buttonDisabledText,
   },
 })
 

@@ -7,7 +7,6 @@ import { useRouter } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { colors } from "@/constants/colors"
 import type { Team } from "@/app/actions/teams"
-import type { Team as DbTeam } from "@/types"
 import type { Game } from "@/types/game"
 import { CalendarView } from "@/components/games/CalendarView"
 import { GameCard } from "@/components/games/new_game_card"
@@ -16,6 +15,7 @@ import { Feather } from "@expo/vector-icons"
 import { getTeams } from "@/app/actions/teams"
 import { useNotifications } from "@/context/notification-context"
 import { convertUiTeamToDbTeam } from "@/app/actions/games"
+import { useGameRealtime } from "@/hooks/realtime/index"
 
 // Enable LayoutAnimation for smooth transitions on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -57,6 +57,7 @@ const SelectableGameItem = ({ game }: { game: Game }) => {
 
 export default function EnhancedCalendarScreen() {
   const router = useRouter()
+  const { showInfo } = useNotifications()
   const [teams, setTeams] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [locationType, setLocationType] = useState<string | null>(null)
@@ -64,16 +65,66 @@ export default function EnhancedCalendarScreen() {
   const [gamesOnSelectedDate, setGamesOnSelectedDate] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
   const [filtersExpanded, setFiltersExpanded] = useState(false)
+  const [calendarKey, setCalendarKey] = useState(0) // Key to force calendar re-render
 
+  // Memoized loadTeams function
   const loadTeams = useCallback(async () => {
     try {
       const teamsData = await getTeams()
       setTeams(teamsData)
     } catch (error) {
+      console.error("Error loading teams:", error)
     } finally {
       setLoading(false)
     }
   }, [])
+
+  // Realtime game update callback
+  const handleGameUpdate = useCallback(
+    (event: "INSERT" | "UPDATE" | "DELETE", payload: any) => {
+      console.log(`Calendar - Game ${event.toLowerCase()}:`, payload)
+
+      // Show notification for game updates
+      if (event === "UPDATE") {
+        showInfo("Schedule Update", "Game schedule has been updated")
+      } else if (event === "INSERT") {
+        showInfo("New Game", "A new game has been added to the schedule")
+      } else if (event === "DELETE") {
+        showInfo("Game Cancelled", "A game has been removed from the schedule")
+      }
+
+      // Force calendar to re-render by updating the key
+      setCalendarKey((prev) => prev + 1)
+
+      // If there's a selected date, we might need to refresh the games for that date
+      // The CalendarView component should handle this internally when it re-renders
+    },
+    [showInfo],
+  )
+
+  // Initialize realtime subscriptions
+  const { setupRealtimeSubscriptions, cleanupSubscriptions, isConnected } = useGameRealtime(
+    handleGameUpdate, // Pass game update callback
+  )
+
+  // Setup realtime subscriptions on mount
+  useEffect(() => {
+    let mounted = true
+
+    const setupRealtime = async () => {
+      if (mounted) {
+        await setupRealtimeSubscriptions()
+      }
+    }
+
+    setupRealtime()
+
+    // Cleanup on unmount
+    return () => {
+      mounted = false
+      cleanupSubscriptions()
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   useEffect(() => {
     loadTeams()
@@ -110,7 +161,7 @@ export default function EnhancedCalendarScreen() {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
       setFiltersExpanded((prev) => !prev)
     })
-  }, [filtersExpanded])
+  }, [])
 
   const formatSelectedDate = useCallback((date: Date) => {
     const formatted = date.toLocaleDateString("en-US", {
@@ -181,12 +232,9 @@ export default function EnhancedCalendarScreen() {
 
   const hasActiveFilters = useMemo(() => selectedTeam || locationType, [selectedTeam, locationType])
 
-  const renderGameItem = useCallback(
-    (game: Game) => {
-      return <SelectableGameItem key={game.id} game={game} />
-    },
-    [selectedDate],
-  )
+  const renderGameItem = useCallback((game: Game) => {
+    return <SelectableGameItem key={game.id} game={game} />
+  }, [])
 
   const getNoGamesMessage = useCallback(() => {
     if (selectedTeam && locationType) {
@@ -239,7 +287,6 @@ export default function EnhancedCalendarScreen() {
                   placeholder="Game location"
                 />
               </View>
-
               {/* Active Filters Display */}
               {hasActiveFilters && (
                 <View style={styles.activeFiltersContainer}>
@@ -268,6 +315,7 @@ export default function EnhancedCalendarScreen() {
         {/* Calendar Section */}
         <View style={styles.card}>
           <CalendarView
+            key={calendarKey} // Force re-render when games update
             selectedTeam={selectedTeam ? convertUiTeamToDbTeam(selectedTeam) : undefined}
             locationType={locationType ?? undefined}
             onDateSelect={handleDateSelect}
@@ -283,7 +331,6 @@ export default function EnhancedCalendarScreen() {
                 {gamesOnSelectedDate.length} game{gamesOnSelectedDate.length !== 1 ? "s" : ""} found
               </Text>
             </View>
-
             {gamesOnSelectedDate.length > 0 ? (
               <View style={styles.gamesList}>{gamesOnSelectedDate.map(renderGameItem)}</View>
             ) : (
@@ -331,6 +378,22 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: "rgba(255, 255, 255, 0.8)",
+    marginBottom: 8,
+  },
+  connectionStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  connectionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  connectionText: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.7)",
+    fontWeight: "500",
   },
   filterToggle: {
     padding: 8,

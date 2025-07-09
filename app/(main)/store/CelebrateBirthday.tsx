@@ -234,7 +234,7 @@ export default function BirthdaysScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <Image source={require("../../IMAGES/crowd.jpg")} style={styles.backgroundImage} contentFit="cover" />
+      <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} contentFit="cover" />
 
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Hero Section */}
@@ -308,7 +308,7 @@ export default function BirthdaysScreen() {
               <View style={styles.tabContentContainer2}>
                 <Text style={styles.sectionTitle}>Birthday Packages</Text>
                 <Text style={styles.sectionSubtitle}>
-                  {packages.length > 0 ? `${packages.length} packages available from all teams` : "Loading packages..."}
+                  {packages.length > 0 ? `${packages.length} available` : "Loading packages..."}
                 </Text>
               </View>
 
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: colors.text,
-    marginBottom: 14,
+    marginBottom: 4,
   },
   sectionSubtitle: {
     fontSize: 14,
