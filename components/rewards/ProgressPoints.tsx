@@ -1,7 +1,7 @@
 import type React from "react"
 import { View, Text, StyleSheet } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
-import { Feather } from "@expo/vector-icons"
+import { MaterialCommunityIcons } from "@expo/vector-icons"
 import Animated, { FadeInUp } from "react-native-reanimated"
 import { colors } from "@/constants/colors"
 import type { UserStatusWithLevel } from "@/app/actions/points"
@@ -35,37 +35,20 @@ export const PointsStatusCard: React.FC<PointsStatusCardProps> = ({
 
   const membershipTier = getMembershipTier(userStatus?.level_number)
 
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "Bronze":
-        return "#CD7F32"
-      case "Silver":
-        return "#C0C0C0"
-      case "Gold":
-        return "#FFD700"
-      case "Platinum":
-        return "#E5E4E2"
-      case "Diamond":
-        return "#B9F2FF"
-      default:
-        return colors.primary
-    }
-  }
-
   const getTierIcon = (tier: string) => {
     switch (tier) {
       case "Bronze":
-        return "award"
+        return "medal-outline"
       case "Silver":
-        return "award"
+        return "trophy-award"
       case "Gold":
-        return "star"
+        return "star-outline"
       case "Platinum":
-        return "crown"
+        return "crown-outline"
       case "Diamond":
-        return "gem"
+        return "diamond-stone"
       default:
-        return userStatus?.badge_icon || "star"
+        return userStatus?.badge_icon || "star-outline"
     }
   }
 
@@ -87,7 +70,7 @@ export const PointsStatusCard: React.FC<PointsStatusCardProps> = ({
                 {name && <Text style={styles.statusGreeting}>Hello, {userFirstName}!</Text>}
                 <Text style={styles.statusLevel}>{userStatus?.level_name || "Rookie Fan"}</Text>
                 <View style={styles.statusBadge}>
-                  <Feather name={getTierIcon(membershipTier) as any} size={16} color="white" />
+                  <MaterialCommunityIcons name={getTierIcon(membershipTier) as any} size={16} color="white" />
                   <Text style={styles.statusBadgeText}>{membershipTier}</Text>
                 </View>
               </View>

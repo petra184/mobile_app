@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import type { QRCodeScan } from "@/types/index"
-
+import { v4 as uuidv4 } from "uuid"
 // Import your database actions
 import {
   getUserProfile,
@@ -144,10 +144,6 @@ export const useUserStore = create<UserState>()(
             getUserById(userId),
           ])
 
-          console.log("=== STORE INITIALIZATION DEBUG ===")
-          console.log("Raw userPreferences from DB:", userPreferences)
-          console.log("Default preferences:", defaultPreferences)
-
           const firstName = userProfile?.first_name || userData?.first_name || authUserData?.first_name || null
           const lastName = userProfile?.last_name || userData?.last_name || authUserData?.last_name || null
           const username = userData?.username || authUserData?.username || null
@@ -158,9 +154,6 @@ export const useUserStore = create<UserState>()(
             ...defaultPreferences,
             ...userPreferences,
           }
-
-          console.log("Final merged preferences:", mergedPreferences)
-          console.log("===================================")
 
           set({
             first_name: firstName,
@@ -270,28 +263,31 @@ export const useUserStore = create<UserState>()(
       },
 
       addScan: async (scan: Omit<QRCodeScan, "id" | "scannedAt">) => {
-        const { userId } = get()
-        if (!userId) return
+      const { userId } = get()
+      if (!userId) return
 
-        try {
-          const newScan: QRCodeScan = {
-            id: Date.now().toString(),
-            ...scan,
-            scannedAt: new Date().toISOString(),
-          }
-
-          set((state) => ({
-            scanHistory: [newScan, ...state.scanHistory],
-          }))
-
-          await addUserScan(userId, newScan)
-        } catch (error) {
-          console.error("Failed to add scan:", error)
-          set((state) => ({
-            scanHistory: state.scanHistory.slice(1),
-          }))
+      try {
+        const newScan: QRCodeScan = {
+          id: uuidv4(),
+          ...scan,
+          scannedAt: new Date().toISOString(),
         }
-      },
+
+        set((state) => ({
+          scanHistory: [
+            newScan,
+            ...state.scanHistory.filter((existing) => existing.id !== newScan.id), // 🧼 prevent duplicate
+          ],
+        }))
+
+        await addUserScan(userId, newScan)
+      } catch (error) {
+        console.error("Failed to add scan:", error)
+        set((state) => ({
+          scanHistory: state.scanHistory.slice(1), // remove the failed scan
+        }))
+      }
+    },
 
       toggleFavoriteTeam: async (teamId: string) => {
         const { userId, preferences } = get()
@@ -331,25 +327,17 @@ export const useUserStore = create<UserState>()(
           console.error("No userId found when trying to update notification preference")
           return
         }
-
-        console.log(`=== UPDATING ${key} ===`)
-        console.log("Current preferences:", preferences)
-        console.log("Setting", key, "to", enabled)
-
         try {
           const newPreferences = {
             ...preferences,
             [key]: enabled,
           }
 
-          console.log("New preferences:", newPreferences)
-
           // Update local state first
           set({ preferences: newPreferences })
 
           // Then save to database
           await updateUserPreferences(userId, newPreferences)
-          console.log("Successfully saved to database")
         } catch (error) {
           console.error(`Failed to update ${key}:`, error)
           // Revert the change

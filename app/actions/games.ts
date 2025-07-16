@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase"
-import type { Game, GameStatus } from "@/types/game"
+import type { Game } from "@/types/game"
 import type { Team } from "@/app/actions/teams"
 import { formatTimeString } from "@/utils/dateUtils"
 import type { Database } from "@/types/supabase"
@@ -120,7 +120,7 @@ export async function getPastGames(limit = 1000, teamId?: string): Promise<Game[
       throw new Error(`Failed to fetch past games: ${error.message}`)
     }
 
-    const games = await transformGameSchedules(gameSchedules || [], "completed")
+    const games = await transformGameSchedules(gameSchedules || [])
     return games
   } catch (error) {
     console.error("Failed to fetch past games:", error)
@@ -244,7 +244,6 @@ export async function getGameById(gameId: string): Promise<Game | null> {
 export async function getLiveGames(limit = 100): Promise<Game[]> {
   try {
     const today = new Date().toISOString().split("T")[0]
-
     const { data: gameSchedules, error } = await supabase
       .from("game_schedule")
       .select(`
@@ -279,7 +278,6 @@ export async function getLiveGames(limit = 100): Promise<Game[]> {
 
     const now = new Date()
     const currentHour = now.getHours()
-
     const potentiallyLiveGames =
       gameSchedules?.filter((game) => {
         if (!game.game_time) return false
@@ -288,7 +286,7 @@ export async function getLiveGames(limit = 100): Promise<Game[]> {
         return gameHour <= currentHour && gameHour >= currentHour - 3
       }) || []
 
-    const games = await transformGameSchedules(potentiallyLiveGames, "live")
+    const games = await transformGameSchedules(potentiallyLiveGames)
     return games
   } catch (error) {
     console.error("Failed to fetch live games:", error)
@@ -380,20 +378,16 @@ export function convertUiTeamToDbTeam(uiTeam: Team): any {
     image_fit: null,
     image_position: null,
     image_scale: null,
-    last_updated: new Date().toISOString(), // Add the missing field
+    last_updated: new Date().toISOString(),
   }
 }
 
 /**
  * Transform game schedule data from Supabase into Game objects
  * @param gameSchedules Array of game schedule rows from Supabase
- * @param defaultStatus Optional default status to assign to games
  * @returns Array of transformed Game objects
  */
-async function transformGameSchedules(
-  gameSchedules: GameScheduleWithRelations[],
-  defaultStatus?: GameStatus,
-): Promise<Game[]> {
+async function transformGameSchedules(gameSchedules: GameScheduleWithRelations[]): Promise<Game[]> {
   const gamePromises = gameSchedules.map(async (schedule) => {
     try {
       // Handle home team (sport_id relationship)
@@ -401,7 +395,6 @@ async function transformGameSchedules(
         console.warn(`No sport_id found for game ${schedule.game_id}`)
         return null
       }
-
       const homeTeam = convertDbTeamToTeam(schedule.sport_id)
 
       // Create away team from opponent data
@@ -425,21 +418,16 @@ async function transformGameSchedules(
             gender: homeTeam.gender,
           }
 
-      // Determine game status
-      let status: GameStatus = defaultStatus || "scheduled"
-
-      if (schedule.final_home_score !== null && schedule.final_guest_score !== null) {
-        status = "completed"
-      }
+      const status = schedule.status || "scheduled"
 
       // Create game object
       const game: Game = {
         id: schedule.game_id,
         date: schedule.date,
         time: formatTimeString(schedule.game_time),
-        status,
+        status: status as any, // Cast to your GameStatus type
         location: schedule.location || "TBD",
-        location_type: schedule.location || "home",
+        game_type: schedule.game_type || "TBD",
         homeTeam,
         awayTeam,
         sport: {
@@ -452,7 +440,7 @@ async function transformGameSchedules(
         special_events: schedule.special_events,
       }
 
-      // Add score if available - note that final_guest_score is string | null in DB
+      // Add score if available
       if (schedule.final_home_score !== null && schedule.final_guest_score !== null) {
         game.score = {
           home: schedule.final_home_score,

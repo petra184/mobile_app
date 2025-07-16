@@ -70,29 +70,29 @@ export const GameCard: React.FC<GameCardProps> = ({
   }))
 
   // Format time properly
-  const formatGameTime = (timeString?: string) => {
-    if (!timeString) return "TBD"
+  const formatGameTime = (timeString?: string | null) => {
+  if (!timeString) return "TBD"
 
-    try {
-      let date: Date
+  try {
+    let date: Date
 
-      if (timeString.includes(":")) {
-        const [hours, minutes] = timeString.split(":")
-        date = new Date()
-        date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
-      } else {
-        date = new Date(timeString)
-      }
-
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-    } catch (error) {
-      return timeString
+    if (timeString.includes(":")) {
+      const [hours, minutes] = timeString.split(":")
+      date = new Date()
+      date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
+    } else {
+      date = new Date(timeString)
     }
+
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+  } catch (error) {
+    return timeString
   }
+}
 
   const isCompleted = game.status === "completed"
   const isLive = game.status === "live"

@@ -1,9 +1,10 @@
 import { Stack } from "expo-router";
 import { colors } from "@/constants/colors";
-
+import { NotificationProvider } from "@/context/notification-context";
 
 export default function AuthLayout() {
   return (
+    <NotificationProvider>
     <Stack
       screenOptions={{
         headerStyle: {
@@ -40,5 +41,6 @@ export default function AuthLayout() {
         }}
       />
     </Stack>
+    </NotificationProvider>
   );
 }

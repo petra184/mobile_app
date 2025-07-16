@@ -1,13 +1,7 @@
+"use client"
+
 import React, { useState, useEffect, useCallback, useRef } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Image,
-  ActivityIndicator,
-  Dimensions,
-} from "react-native"
+import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, Dimensions } from "react-native"
 import { Gesture, GestureDetector } from "react-native-gesture-handler"
 import Animated, {
   useAnimatedStyle,
@@ -18,13 +12,10 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from "react-native-reanimated"
-import { 
-  getTeams, 
-  getTeamsByGender, 
-  type Team
-} from "@/app/actions/teams"
+import { getTeams, getTeamsByGender, type Team } from "@/app/actions/teams"
 import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore"
+import { useUserStore } from "@/hooks/userStore" // Updated import path
+import { useNotifications } from "@/context/notification-context" // Add notifications import
 import AntDesign from "@expo/vector-icons/AntDesign"
 import Feather from "@expo/vector-icons/Feather"
 
@@ -112,24 +103,14 @@ const SwipeableCard = React.memo(
           event.translationX,
           [-screenWidth, 0, screenWidth],
           [-10, 0, 10],
-          Extrapolation.CLAMP
+          Extrapolation.CLAMP,
         )
-        scale.value = interpolate(
-          Math.abs(event.translationX),
-          [0, screenWidth],
-          [1, 0.95],
-          Extrapolation.CLAMP
-        )
-        opacity.value = interpolate(
-          Math.abs(event.translationX),
-          [0, screenWidth],
-          [1, 0.7],
-          Extrapolation.CLAMP
-        )
+        scale.value = interpolate(Math.abs(event.translationX), [0, screenWidth], [1, 0.95], Extrapolation.CLAMP)
+        opacity.value = interpolate(Math.abs(event.translationX), [0, screenWidth], [1, 0.7], Extrapolation.CLAMP)
       })
       .onEnd((event) => {
         if (cardOffset !== 0) return
-        
+
         const shouldSwipeRight = event.translationX > SWIPE_THRESHOLD && event.velocityX > 0
         const shouldSwipeLeft = event.translationX < -SWIPE_THRESHOLD && event.velocityX < 0
 
@@ -185,7 +166,7 @@ const SwipeableCard = React.memo(
             {/* Team Logo Section - Keep Original */}
             <View style={styles.logoSection}>
               <Image source={{ uri: team.logo }} style={styles.teamLogo} resizeMode="cover" />
-              
+
               {/* Selection Indicator */}
               {isSelected && (
                 <View style={[styles.selectedIndicator, { backgroundColor: team.primaryColor }]}>
@@ -218,18 +199,15 @@ const SwipeableCard = React.memo(
                       </Pressable>
                     )}
                   </View>
-                  <Text style={styles.teamShortName}>
-                    {team.shortName}
-                  </Text>
+                  <Text style={styles.teamShortName}>{team.shortName}</Text>
                 </View>
               </View>
-
             </View>
           </Pressable>
         </Animated.View>
       </GestureDetector>
     )
-  }
+  },
 )
 
 export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
@@ -241,6 +219,7 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
   autoAdvanceDelay = 3000,
 }) => {
   const { preferences, toggleFavoriteTeam } = useUserStore()
+  const { showSuccess, showInfo } = useNotifications() // Add notifications hook
 
   // State
   const [teams, setTeams] = useState<Team[]>([])
@@ -254,7 +233,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
     try {
       setLoadingTeams(true)
       let fetchedTeams: Team[] = []
-
       if (filterByGender === "men") {
         fetchedTeams = await getTeamsByGender("men")
       } else if (filterByGender === "women") {
@@ -262,7 +240,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
       } else {
         fetchedTeams = await getTeams()
       }
-
       setTeams(fetchedTeams)
       setCurrentIndex(0)
     } catch (error) {
@@ -279,7 +256,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
       autoAdvanceRef.current = setInterval(() => {
         setCurrentIndex((prev) => (prev + 1) % teams.length)
       }, autoAdvanceDelay)
-
       return () => {
         if (autoAdvanceRef.current) {
           clearInterval(autoAdvanceRef.current)
@@ -317,10 +293,22 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
     }
   }
 
-  // Handle favorite toggle
+  // Handle favorite toggle with notifications
   const handleToggleFavorite = async (teamId: string) => {
     try {
+      const team = teams.find((t) => t.id === teamId)
+      const wasAlreadyFavorite = preferences.favoriteTeams.includes(teamId)
+
       await toggleFavoriteTeam(teamId)
+
+      // Show appropriate notification
+      if (team) {
+        if (wasAlreadyFavorite) {
+          showInfo("Removed from Favorites", `${team.name} has been removed from your favorite teams.`)
+        } else {
+          showSuccess("Added to Favorites", `${team.name} has been added to your favorite teams!`)
+        }
+      }
     } catch (error) {
       console.error("Error toggling favorite team:", error)
     }
@@ -363,7 +351,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
         {teams.map((team, index) => {
           const isSelected = selectedTeamIds.includes(team.id)
           const isFavorite = preferences.favoriteTeams.includes(team.id)
-
           return (
             <SwipeableCard
               key={team.id}
@@ -388,7 +375,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
         <Pressable style={styles.navButton} onPress={goToPrevious}>
           <Feather name="chevron-left" size={24} color={colors.primary} />
         </Pressable>
-
         <View style={styles.cardCounter}>
           <Text style={styles.counterText}>
             {currentIndex + 1} of {teams.length}
@@ -396,11 +382,14 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
           {/* Dots Indicator */}
           <View style={styles.dotsContainer}>
             {teams.slice(0, Math.min(teams.length, 5)).map((_, index) => {
-              const dotIndex = teams.length <= 5 ? index : 
-                currentIndex < 2 ? index :
-                currentIndex > teams.length - 3 ? teams.length - 5 + index :
-                currentIndex - 2 + index
-
+              const dotIndex =
+                teams.length <= 5
+                  ? index
+                  : currentIndex < 2
+                    ? index
+                    : currentIndex > teams.length - 3
+                      ? teams.length - 5 + index
+                      : currentIndex - 2 + index
               const isActive = dotIndex === currentIndex
               return (
                 <Pressable
@@ -408,7 +397,7 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
                   style={[
                     styles.dot,
                     isActive && styles.activeDot,
-                    { backgroundColor: isActive ? colors.primary : colors.border }
+                    { backgroundColor: isActive ? colors.primary : colors.border },
                   ]}
                   onPress={() => setCurrentIndex(dotIndex)}
                 />
@@ -416,7 +405,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
             })}
           </View>
         </View>
-
         <Pressable style={styles.navButton} onPress={goToNext}>
           <Feather name="chevron-right" size={24} color={colors.primary} />
         </Pressable>
@@ -540,17 +528,17 @@ const styles = StyleSheet.create({
   },
   enhancedContent: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   teamDescription: {
     fontSize: 14,
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 16,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   actionButtons: {
-    marginTop: 'auto',
+    marginTop: "auto",
   },
   actionButton: {
     flexDirection: "row",

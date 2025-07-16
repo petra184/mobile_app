@@ -67,10 +67,6 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     const { data, error } = await supabase.from("user_profiles_with_stats").select("*").eq("user_id", userId).single()
 
     if (error) {
-      console.error("=== getUserProfile ERROR ===")
-      console.error("Error code:", error.code)
-      console.error("Error message:", error.message)
-
       // If no user found in view, try to create the user record
       if (error.code === "PGRST116") {
         // Get the current authenticated user
@@ -391,14 +387,24 @@ export async function getUserLeaderboard(limit = 10): Promise<LeaderboardEntry[]
 
 // Get user by ID with full type safety
 export async function getUserById(userId: string): Promise<UsersRow | null> {
-  const { data, error } = await supabase.from("users").select("*").eq("user_id", userId).single()
+  try {
+    const { data, error } = await supabase.from("users").select("*").eq("user_id", userId).maybeSingle()
 
-  if (error) {
-    console.error("Error fetching user:", error)
+    if (error) {
+      console.error("Error fetching user:", error)
+      return null
+    }
+
+    if (!data) {
+      console.log("User not found in users table:", userId)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error("Unexpected error in getUserById:", error)
     return null
   }
-
-  return data
 }
 
 // Create a new user with full type safety
@@ -713,25 +719,39 @@ export async function updateProfileWithImage(
   }
 }
 
-// ===== PASSWORD AND VALIDATION FUNCTIONS =====
+// Enhanced password update function with better error handling
 
+// Enhanced password update function with better error handling
 export async function updateUserPassword(currentPassword: string, newPassword: string) {
   try {
-    // First, verify the current password by attempting to sign in
-    const { data: user } = await supabase.auth.getUser()
+    // Get current user
+    const { data: userData, error: userError } = await supabase.auth.getUser()
 
-    if (!user.user?.email) {
-      throw new Error("No authenticated user found")
+    if (userError) {
+      throw new Error("AUTHENTICATION_ERROR")
+    }
+
+    if (!userData.user?.email) {
+      throw new Error("NO_USER_FOUND")
     }
 
     // Verify current password by attempting to sign in
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: user.user.email,
+      email: userData.user.email,
       password: currentPassword,
     })
 
     if (signInError) {
-      throw new Error("Current password is incorrect")
+      // Handle specific Supabase auth errors
+      if (signInError.message.includes("Invalid login credentials")) {
+        throw new Error("INVALID_CREDENTIALS")
+      } else if (signInError.message.includes("Email not confirmed")) {
+        throw new Error("EMAIL_NOT_CONFIRMED")
+      } else if (signInError.message.includes("Too many requests")) {
+        throw new Error("RATE_LIMITED")
+      } else {
+        throw new Error("VERIFICATION_FAILED")
+      }
     }
 
     // Update the password
@@ -740,13 +760,27 @@ export async function updateUserPassword(currentPassword: string, newPassword: s
     })
 
     if (updateError) {
-      throw updateError
+      // Handle specific update errors
+      if (updateError.message.includes("New password should be different")) {
+        throw new Error("PASSWORD_SAME_AS_CURRENT")
+      } else if (updateError.message.includes("Password should be at least")) {
+        throw new Error("PASSWORD_TOO_WEAK")
+      } else if (updateError.message.includes("network")) {
+        throw new Error("NETWORK_ERROR")
+      } else {
+        throw new Error("UPDATE_FAILED")
+      }
     }
 
     return { success: true }
-  } catch (error) {
-    console.error("Password update error:", error)
-    throw error
+  } catch (error: any) {
+    // Re-throw with original error type if it's already categorized
+    if (typeof error.message === "string" && error.message.includes("_")) {
+      throw error
+    }
+
+    // Handle uncategorized errors
+    throw new Error("UNKNOWN_ERROR")
   }
 }
 

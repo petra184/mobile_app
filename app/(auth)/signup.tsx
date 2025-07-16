@@ -152,16 +152,11 @@ export default function SignupScreen() {
   }
 
   const handleFinalSubmit = async () => {
-      console.log("🎯 Final submit triggered")
-      console.log("📋 Current form data:", { ...formData, password: "[HIDDEN]", confirmPassword: "[HIDDEN]" })
-
       if (!validateForm()) return
 
       setLoading(true)
 
       try {
-        console.log("🚀 SIGNING UP")
-
         const result = await signUpWithEmail(
           formData.email.trim(),
           formData.password,
@@ -171,9 +166,6 @@ export default function SignupScreen() {
           formData.phone_number.trim(),
           formData.birthday.trim()
         )
-
-        console.log("📤 Signup result:", result)
-
         if (result.success && result.user) {
           await updateUserPreferences(result.user.id, {
             favoriteTeams: formData.favoriteTeams || [],
@@ -184,14 +176,10 @@ export default function SignupScreen() {
             newsNotifications: true,
             specialOffers: true,
           })
-          console.log("✅ User signup successful!")
 
-          showSuccess("Account Created!", result.message || "Your account has been created successfully!")
+          showSuccess("Almost Done!", result.message || "Check your email to verify the account!")
 
-          // Directly navigate to login
-          router.push("./login")
         } else {
-          console.error("❌ Signup failed:", result.message)
           showError("Signup Failed", result.message || "Failed to create account")
         }
       } catch (error) {
