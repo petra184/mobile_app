@@ -6,14 +6,7 @@ import { View, Text, StyleSheet, Pressable, Modal, ScrollView, SafeAreaView } fr
 import { colors } from "@/constants/colors"
 import Feather from "@expo/vector-icons/Feather"
 import { supabase } from "@/lib/supabase"
-
-// UPDATED: Added 'sport' to the filter options
-export interface GameFilterOptions {
-  status?: "upcoming" | "past" | "live" | "all"
-  location?: "home" | "away" | "neutral"
-  teamId?: string
-  sport?: string // <-- ADDED
-}
+import type { GameFilterOptions } from "@/types/updated_types"
 
 interface GameFilterProps {
   onFilterChange: (filters: GameFilterOptions) => void

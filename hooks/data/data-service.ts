@@ -1,12 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
 import { CacheManager } from "./cache-manager"
-import type { Database } from "@/types/supabase"
+import type { Database, TeamsRow, PlayersRow, CoachesRow} from "@/types/updated_types"
 
-type Tables = Database["public"]["Tables"]
-type Team = Tables["teams"]["Row"]
-type Player = Tables["players"]["Row"]
-type Coach = Tables["coaches"]["Row"]
-type GameSchedule = Tables["game_schedule"]["Row"]
+type GameSchedule = Database["public"]["Tables"]["game_schedule"]["Row"]
 
 export class DataService {
   private supabase = createClient<Database>(
@@ -38,7 +34,7 @@ export class DataService {
   }
 
   // Get teams with caching
-  async getTeams(forceRefresh = false): Promise<Team[]> {
+  async getTeams(forceRefresh = false): Promise<TeamsRow[]> {
     if (!forceRefresh) {
       const cached = await CacheManager.getCachedTeams()
       if (cached) {
@@ -67,7 +63,7 @@ export class DataService {
   }
 
   // Get players (roster) with caching
-  async getPlayers(teamId?: string, forceRefresh = false): Promise<Player[]> {
+  async getPlayers(teamId?: string, forceRefresh = false): Promise<PlayersRow[]> {
     if (!forceRefresh) {
       const cached = await CacheManager.getCachedPlayers()
       if (cached) {
@@ -102,7 +98,7 @@ export class DataService {
   }
 
   // Get coaches with caching
-  async getCoaches(teamId?: string, forceRefresh = false): Promise<Coach[]> {
+  async getCoaches(teamId?: string, forceRefresh = false): Promise<CoachesRow[]> {
     if (!forceRefresh) {
       const cached = await CacheManager.getCachedCoaches()
       if (cached) {

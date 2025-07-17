@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
 import Animated, { FadeInUp } from "react-native-reanimated"
 import { colors } from "@/constants/colors"
-import type { UserStatusWithLevel } from "@/app/actions/points"
+import type { UserStatusWithLevel } from "@/types/updated_types"
 
 interface PointsStatusCardProps {
   userFirstName: string

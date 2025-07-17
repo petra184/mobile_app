@@ -1,74 +1,6 @@
 import { supabase } from "@/lib/supabase"
-import type { Database } from '@/types/supabase';
+import type { Team, Player, Coach, TeamsRow, PlayersRow, CoachesRow } from '@/types/updated_types';
 
-// Extract types from the generated Database type
-type Tables = Database['public']['Tables'];
-type TeamsRow = Tables['teams']['Row'];
-type PlayersRow = Tables['players']['Row'];
-type CoachesRow = Tables['coaches']['Row'];
-
-// App-specific interface for UI components (transformed from database)
-export interface Team {
-  id: string
-  name: string
-  shortName: string
-  primaryColor: string
-  logo: string,
-  sport: string
-  gender: string
-  about_team?: string;
-  socialMedia?: {
-    website?: string
-    facebook?: string
-    instagram?: string
-    twitter?: string
-  }
-}
-
-// Player interface for UI
-export interface Player {
-  id: string
-  firstName?: string
-  lastName?: string
-  middleName?: string
-  jerseyNumber?: string
-  position?: string
-  height?: string
-  age?: string
-  photo?: string
-  bio?: string
-  schoolYear?: string
-  homeCountry?: string
-  previousSchool?: string
-  socialMedia?: {
-    facebook?: string
-    instagram?: string
-    twitter?: string
-  }
-}
-
-// Coach interface for UI
-export interface Coach {
-  id: string
-  firstName?: string
-  lastName?: string
-  middleName?: string
-  title?: string
-  bio?: string
-  image?: string
-  age?: number
-  birthdate?: string
-  origin?: string
-  education?: string
-  coachingExperience?: string
-  coachingYear?: string
-  achievements?: string
-  socialMedia?: {
-    facebook?: string
-    instagram?: string
-    twitter?: string
-  }
-}
 
 // Transform database team to UI team
 function transformTeamForUI(dbTeam: TeamsRow): Team {
@@ -96,48 +28,52 @@ function transformTeamForUI(dbTeam: TeamsRow): Team {
 function transformPlayerForUI(dbPlayer: PlayersRow): Player {
   return {
     id: dbPlayer.id,
-    firstName: dbPlayer.first_name || undefined,
-    lastName: dbPlayer.last_name || undefined,
-    middleName: dbPlayer.middle_name || undefined,
-    jerseyNumber: dbPlayer.jersey_number || undefined,
-    position: dbPlayer.position || undefined,
-    height: dbPlayer.height || undefined,
-    age: dbPlayer.age || undefined,
-    photo: dbPlayer.photo || undefined,
-    bio: dbPlayer.bio || undefined,
-    schoolYear: dbPlayer.school_year || undefined,
-    homeCountry: dbPlayer.home_country || undefined,
-    previousSchool: dbPlayer.previous_school || undefined,
-    socialMedia: {
-      facebook: dbPlayer.facebook || undefined,
-      instagram: dbPlayer.instagram || undefined,
-      twitter: dbPlayer.twitter || undefined,
-    }
+    first_name: dbPlayer.first_name || null,
+    last_name: dbPlayer.last_name || null,
+    middle_name: dbPlayer.middle_name || null,
+    jersey_number: dbPlayer.jersey_number || null,
+    position: dbPlayer.position || null,
+    height: dbPlayer.height || null,
+    birthday: dbPlayer.birthday || null,
+    age: dbPlayer.age || null,
+    team_id: dbPlayer.team_id,
+    photo: dbPlayer.photo || null,
+    bio: dbPlayer.bio || null,
+    school_year: dbPlayer.school_year || null,
+    home_country: dbPlayer.home_country || null,
+    previous_school: dbPlayer.previous_school || null,
+    facebook: dbPlayer.facebook || null,
+    instagram: dbPlayer.instagram || null,
+    twitter: dbPlayer.twitter || null,
   }
 }
 
 // Transform database coach to UI coach
 function transformCoachForUI(dbCoach: CoachesRow): Coach {
   return {
+    team_id: dbCoach.id,
     id: dbCoach.id,
-    firstName: dbCoach.first_name || undefined,
-    lastName: dbCoach.last_name || undefined,
-    middleName: dbCoach.middle_name || undefined,
-    title: dbCoach.title || undefined,
-    bio: dbCoach.bio || undefined,
-    image: dbCoach.image || undefined,
-    age: dbCoach.age || undefined,
-    birthdate: dbCoach.birthdate || undefined,
-    origin: dbCoach.origin || undefined,
-    education: dbCoach.education || undefined,
-    coachingExperience: dbCoach.coaching_experience || undefined,
-    coachingYear: dbCoach.coaching_year || undefined,
-    achievements: dbCoach.achievements || undefined,
-    socialMedia: {
-      facebook: dbCoach.facebook || undefined,
-      instagram: dbCoach.instagram || undefined,
-      twitter: dbCoach.twitter || undefined,
-    }
+    first_name: dbCoach.first_name || null,
+    last_name: dbCoach.last_name || null,
+    middle_name: dbCoach.middle_name || null,
+    title: dbCoach.title || null,
+    bio: dbCoach.bio || null,
+    image: dbCoach.image || null,
+    age: dbCoach.age || null,
+    birthdate: dbCoach.birthdate || null,
+    origin: dbCoach.origin || null,
+    education: dbCoach.education || null,
+    coaching_experience: dbCoach.coaching_experience || null,
+    coaching_year: dbCoach.coaching_year || null,
+    achievements: dbCoach.achievements || null,
+    facebook: dbCoach.facebook || null,
+    instagram: dbCoach.instagram || null,
+    twitter: dbCoach.twitter || null,
+    // socialMedia: {
+    //   facebook: dbCoach.facebook || undefined,
+    //   instagram: dbCoach.instagram || undefined,
+    //   twitter: dbCoach.twitter || undefined,
+    // }
   }
 }
 

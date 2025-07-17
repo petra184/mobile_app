@@ -1,4 +1,4 @@
-import type { Game } from "@/types/game"
+import type { Game } from "@/types/updated_types"
 
 export const sortGamesByPriority = (games: Game[]): Game[] => {
   return games.sort((a, b) => {

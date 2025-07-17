@@ -1,36 +1,5 @@
 import { supabase } from "@/lib/supabase"
-
-export interface BirthdayPackage {
-  id: string
-  name: string
-  description: string | null
-  price: number
-  points: number // This will map to max_guests for compatibility
-  features: any[] // Will be parsed from jsonb
-  is_featured: boolean
-  is_limited_time: boolean
-  is_active: boolean
-  is_scheduled: boolean
-  scheduled_publish_date: string | null
-  published_at: string | null
-  image: string | null // mapped from image_url
-  image_url: string | null
-  team_id: string
-  bookings_count: number
-  created_at: string
-  updated_at: string
-  image_filename: string | null
-  image_size: number | null
-  image_type: string | null
-  max_guests: number | null
-}
-
-export interface BirthdayPackageFilters {
-  team_id?: string
-  is_active?: boolean
-  is_featured?: boolean
-  is_limited_time?: boolean
-}
+import type { BirthdayPackage, BirthdayPackageFilters } from "@/types/updated_types"
 
 /**
  * Transform database row to BirthdayPackage type

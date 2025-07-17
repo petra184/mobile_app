@@ -6,7 +6,7 @@ import { colors } from "@/constants/colors"
 import type { FormData } from "@/app/(auth)/signup"
 import { SwipeableTeamSelector } from "@/components/teams/SwipingCard"
 import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
-import type { Team } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types"
 
 interface TeamSelectionStepProps {
   formData: FormData

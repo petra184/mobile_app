@@ -1,31 +1,6 @@
 import { supabase } from "@/lib/supabase"
-import type { Database } from "@/types/supabase"
+import type { StoriesRow, TeamsRow, NewsArticle } from "@/types/updated_types"
 
-// Database table types
-type StoriesRow = Database["public"]["Tables"]["stories"]["Row"]
-type TeamsRow = Database["public"]["Tables"]["teams"]["Row"]
-
-// App-specific interfaces
-export interface NewsArticle {
-  id: string
-  title: string
-  headline: string
-  content: string
-  author: string
-  imageUrl: string | null
-  createdAt: string
-  publishDate: string | null
-  status: string
-  tag: string | null
-  teamId: string | null
-  team?: {
-    id: string
-    name: string
-    sport: string
-    gender: string
-    photo: string | null
-  }
-}
 
 // Transform database story to app interface
 function transformStoryToArticle(story: StoriesRow, team?: TeamsRow): NewsArticle {

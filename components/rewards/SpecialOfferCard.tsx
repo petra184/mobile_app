@@ -16,7 +16,7 @@ import {
 import { Feather } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
-import type { SpecialOffer } from "@/app/actions/points"
+import type { SpecialOffer } from "@/types/updated_types"
 
 const { width: screenWidth } = Dimensions.get("window")
 

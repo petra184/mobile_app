@@ -17,8 +17,8 @@ import {
   getTeamsByGender,
   getTeamsBySport,
   searchTeams,
-  type Team,
 } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types"
 import { colors } from "@/constants/colors"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"

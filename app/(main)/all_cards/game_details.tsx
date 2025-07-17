@@ -4,8 +4,7 @@ import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
-import type { Game } from "@/types/game"
-import type { Team } from "@/app/actions/teams"
+import type { Game, Team } from "@/types/updated_types"
 import Feather from "@expo/vector-icons/Feather"
 import { Linking } from "react-native"
 import Animated, { FadeInDown } from "react-native-reanimated"
@@ -188,7 +187,7 @@ if (game.time) {
   const isUpcoming =
     (game.status === "scheduled" || (!isCompleted && !isLive && !isPostponed && !isCanceled)) && !isGameInPast
 
-    
+
   const teamColor = team?.primaryColor || game.homeTeam.primaryColor || colors.primary
 
   // Get status display info with proper date logic

@@ -10,7 +10,7 @@ import {
   type ProductFilters,
   type SortOptions,
 } from "@/app/actions/store"
-import type { Database } from "@/types/supabase"
+import type { Database } from "@/types/database"
 
 type StoreProduct = Database["public"]["Tables"]["store_products"]["Row"]
 type Promotion = Database["public"]["Tables"]["promotions"]["Row"]

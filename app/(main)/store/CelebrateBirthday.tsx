@@ -21,7 +21,6 @@ import { useNavigation } from "expo-router"
 import { Feather } from "@expo/vector-icons"
 import { getBirthdayPackages } from "@/app/actions/birthdays"
 import { getFAQsForMobile, type FAQ } from "@/app/actions/birthdays"
-import type { BirthdayPackage } from "@/app/actions/birthdays"
 import PackageCard from "@/components/rewards/PackageCard"
 import ReservationForm from "@/components/rewards/ReservationForm"
 import { colors } from "@/constants/colors"
@@ -29,7 +28,7 @@ import { LinearGradient } from "expo-linear-gradient"
 import { useRouter } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
 import { getSchoolById } from "@/app/actions/school_info"
-import type { SchoolInfo } from "@/constants/all"
+import type { SchoolInfo, BirthdayPackage } from "@/types/updated_types"
 
 const { width, height } = Dimensions.get("window")
 const HERO_HEIGHT = 260

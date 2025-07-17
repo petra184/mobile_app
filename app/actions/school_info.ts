@@ -1,7 +1,7 @@
 // app/actions/school.ts
 
 import { supabase } from "@/lib/supabase"
-import type { SchoolInfo } from "@/constants/all"
+import type { SchoolInfo } from "@/types/updated_types"
 
 export async function getSchoolById(school_id: string): Promise<SchoolInfo | null> {
   const { data, error } = await supabase

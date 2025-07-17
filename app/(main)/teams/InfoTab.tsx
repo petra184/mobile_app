@@ -2,7 +2,7 @@
 import type React from "react"
 import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking, Dimensions, FlatList } from "react-native"
 import { colors } from "@/constants/colors"
-import type { Team } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types"
 import { getTeamPhotos } from "@/app/actions/teams"
 import { Feather } from "@expo/vector-icons"
 import Animated, { FadeInDown, withTiming, withSpring, useAnimatedStyle, useSharedValue } from "react-native-reanimated"

@@ -19,7 +19,7 @@ import { Feather } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
 import BirthdayBanner from "@/components/rewards/BirthdayBanner"
 import SpecialOfferCard from "@/components/rewards/SpecialOfferCard"
-import { RewardCard, RewardDetailModal, type RewardCardData } from "@/components/rewards/rewards"
+import { RewardCard, RewardDetailModal } from "@/components/rewards/rewards"
 import { colors } from "@/constants/colors"
 import { useRouter } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
@@ -29,13 +29,9 @@ import {
   fetchRewards,
   fetchSpecialOffers,
   fetchUserAchievements,
-  fetchUserStatus,
-  type Reward,
-  type SpecialOffer,
-  type UserAchievement,
-  type UserStatusWithLevel,
+  fetchUserStatus
 } from "@/app/actions/points"
-
+import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, RewardCardData } from "@/types/updated_types"
 const { width } = Dimensions.get("window")
 
 type SortOption = "none" | "points_low_high" | "points_high_low" | "newest" | "popular"
@@ -342,7 +338,10 @@ const RewardsStoreScreen: React.FC = () => {
            filteredRewards.map((reward) => {
         const normalizedReward = {
           ...reward,
-          category: reward.category ?? undefined, // convert null to undefined
+          category: reward.category ?? undefined,
+          image_url: reward.image_url ?? undefined,
+          stock_quantity: reward.stock_quantity ?? 0,
+          is_sold: reward.is_sold ?? false,
         };
 
         return (

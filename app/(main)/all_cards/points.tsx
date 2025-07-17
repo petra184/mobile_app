@@ -31,13 +31,9 @@ import {
   fetchScanHistory,
   fetchUserStatus,
   fetchUserAchievements,
-  checkUserAchievements,
-  type Reward,
-  type SpecialOffer,
-  type ScanHistory,
-  type UserStatusWithLevel,
-  type UserAchievement,
+  checkUserAchievements
 } from "@/app/actions/points"
+import { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, ScanHistory } from "@/types/updated_types"
 import { supabase } from "@/lib/supabase"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 

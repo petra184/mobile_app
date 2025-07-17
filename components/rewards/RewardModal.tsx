@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { Feather } from "@expo/vector-icons"
 import { LinearGradient } from "expo-linear-gradient"
 import { colors } from "@/constants/colors"
-import type { RewardCardData } from "./RewardCard"
+import type { RewardCardData } from "@/types/updated_types"
 
 const { width, height } = Dimensions.get("window")
 

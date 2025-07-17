@@ -4,12 +4,11 @@ import { useMemo } from "react"
 import { View, Text, StyleSheet, Image, ActivityIndicator, SectionList } from "react-native"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
-import type { Game } from "@/types/game"
+import type { Game } from "@/types/updated_types"
 import { GameCard } from "@/components/games/new_game_card"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { Feather } from "@expo/vector-icons"
 import { useNotifications } from "@/context/notification-context"
-import { sortGamesByPriority } from "@/utils/sortGame"
 
 interface ScheduleTabProps {
   games: Game[]

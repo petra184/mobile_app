@@ -1,14 +1,8 @@
 import { supabase } from "@/lib/supabase"
-import type { Game } from "@/types/game"
-import type { Team } from "@/app/actions/teams"
 import { formatTimeString } from "@/utils/dateUtils"
-import type { Database } from "@/types/supabase"
 import { colors } from "@/constants/colors"
+import type {GameScheduleRow, OpposingTeamRow, TeamsRow, Game, Team} from "@/types/updated_types"
 
-// Database types from your schema
-type GameScheduleRow = Database["public"]["Tables"]["game_schedule"]["Row"]
-type OpposingTeamRow = Database["public"]["Tables"]["opposing_teams"]["Row"]
-type TeamsRow = Database["public"]["Tables"]["teams"]["Row"]
 
 // Query result type with relationships
 type GameScheduleWithRelations = GameScheduleRow & {
@@ -40,6 +34,7 @@ export async function getUpcomingGames(limit = 1000, teamId?: string): Promise<G
         final_home_score,
         final_guest_score,
         special_events,
+        halftime_activity,
         status,
         photo_url,
         game_type,
@@ -97,6 +92,7 @@ export async function getPastGames(limit = 1000, teamId?: string): Promise<Game[
         final_home_score,
         final_guest_score,
         special_events,
+        halftime_activity,
         status,
         photo_url,
         game_type,
@@ -155,6 +151,7 @@ export async function getGamesByMonth(year: number, month: number, teamId?: stri
         final_home_score,
         final_guest_score,
         special_events,
+        halftime_activity,
         status,
         photo_url,
         game_type,
@@ -208,6 +205,7 @@ export async function getGameById(gameId: string): Promise<Game | null> {
         final_home_score,
         final_guest_score,
         special_events,
+        halftime_activity,
         status,
         photo_url,
         game_type,
@@ -259,6 +257,7 @@ export async function getLiveGames(limit = 100): Promise<Game[]> {
         final_home_score,
         final_guest_score,
         special_events,
+        halftime_activity,
         status,
         photo_url,
         game_type,
@@ -317,6 +316,7 @@ export async function getTeamGames(teamId: string, limit = 1000): Promise<Game[]
         final_home_score,
         final_guest_score,
         special_events,
+        halftime_activity,
         status,
         photo_url,
         game_type,
@@ -438,6 +438,7 @@ async function transformGameSchedules(gameSchedules: GameScheduleWithRelations[]
         points: schedule.points || 0,
         photo_url: schedule.photo_url,
         special_events: schedule.special_events,
+        halftime_activity: schedule.halftime_activity || null,
       }
 
       // Add score if available

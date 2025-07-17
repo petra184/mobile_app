@@ -12,26 +12,7 @@ import AntDesign from "@expo/vector-icons/AntDesign"
 import Feather from "@expo/vector-icons/Feather"
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import FontAwesome from "@expo/vector-icons/FontAwesome"
-// Define the Coach type based on database structure
-export type CoachData = {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  title: string | null
-  coaching_experience: string | null
-  image: string | null
-  bio: string | null
-  birthdate: string | null
-  age: number | null
-  origin: string | null
-  education: string | null
-  achievements: string | null
-  coaching_year: string | null
-  twitter: string | null
-  instagram: string | null
-  facebook: string | null
-  team_id: string
-}
+import type { Coach as CoachData } from "@/types/updated_types"
 
 export default function CoachProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()

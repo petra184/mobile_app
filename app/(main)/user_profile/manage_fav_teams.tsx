@@ -16,7 +16,8 @@ import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import { useUserStore } from "@/hooks/userStore" // Updated import path
-import { getTeams, type Team } from "@/app/actions/teams"
+import { getTeams } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types" 
 import { Feather } from "@expo/vector-icons"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 

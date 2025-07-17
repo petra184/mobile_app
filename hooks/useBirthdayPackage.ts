@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import type { BirthdayPackage, BirthdayPackageFilters } from "@/app/actions/birthdays"
+import type { BirthdayPackage, BirthdayPackageFilters } from "@/types/updated_types"
 import { getBirthdayPackages } from "@/app/actions/birthdays"
 
 export function useBirthdayPackages(filters?: BirthdayPackageFilters) {

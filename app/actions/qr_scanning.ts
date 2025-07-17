@@ -1,19 +1,7 @@
 import { supabase } from "@/lib/supabase"
 import { Alert } from "react-native"
-import type { Game } from "@/types/game"
-import type { Team } from "@/app/actions/teams"
+import type { Game, QRCodeData, ScanHistoryItem, ScannedUser } from "@/types/updated_types"
 import { getUpcomingGames, getGameById } from "@/app/actions/games"
-
-export interface QRCodeData {
-  id: string
-  user_id: string
-  game_id: string
-  qr_code_data: string
-  created_at: string
-  is_used: boolean
-  scanned_at?: string | null
-  points_awarded?: number | null
-}
 
 // Generate unique QR code data
 const generateQRCodeData = (userId: string, gameId: string): string => {
@@ -153,36 +141,6 @@ export const checkIfAlreadyScannedAction = async (userId: string, gameId: string
   } catch (error) {
     console.error("Error checking scan status:", error)
     return false
-  }
-}
-
-export interface ScannedUser {
-  user_id: string
-  first_name: string
-  last_name: string | null
-  email: string
-  points: number | null
-}
-
-export interface QRCodeScanData {
-  id: string
-  user_id: string
-  game_id: string
-  qr_code_data: string
-  is_used: boolean
-  users: ScannedUser
-}
-
-export interface ScanHistoryItem {
-  id: string
-  user_id: string
-  game_id: string
-  points_awarded: number
-  scanned_at: string
-  users: {
-    first_name: string
-    last_name: string | null
-    email: string
   }
 }
 

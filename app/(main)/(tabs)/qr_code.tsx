@@ -28,10 +28,9 @@ import { sortGamesByPriority } from "@/utils/sortGame"
 import {
   loadGamesAction,
   generateOrGetQRCodeAction,
-  checkIfAlreadyScannedAction,
-  type QRCodeData,
+  checkIfAlreadyScannedAction
 } from "@/app/actions/qr_scanning"
-import type { Game } from "@/types/game"
+import type { Game, QRCodeData } from "@/types/updated_types"
 
 interface GameSelectionModalProps {
   visible: boolean

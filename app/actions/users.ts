@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase"
-import type { Database } from "@/types/supabase"
+import type { Database } from "@/types/database"
 import * as FileSystem from "expo-file-system"
+import type { QRCodeScan, UserProfile, LeaderboardEntry } from "@/types/updated_types"
 
 // Extract types from the generated Database type
 type Tables = Database["public"]["Tables"]
@@ -13,13 +14,6 @@ type UsersRow = Tables["users"]["Row"]
 type GetUserScanHistoryReturn = Functions["get_user_scan_history"]["Returns"][0]
 type GetUserLeaderboardReturn = Functions["get_user_leaderboard"]["Returns"][0]
 
-export interface QRCodeScan {
-  id: string
-  points: number
-  description: string
-  scannedAt: string
-}
-
 type UserPreferences = {
   favoriteTeams: string[]
   notificationsEnabled: boolean
@@ -30,36 +24,6 @@ type UserPreferences = {
   specialOffers?: boolean
 }
 
-
-export interface LeaderboardEntry {
-  user_id: string
-  email: string
-  points: number
-  total_scans: number
-  rank: number
-}
-
-// Your app-specific interfaces
-export interface UserProfile {
-  id: string
-  email?: string
-  first_name?: string
-  last_name?: string
-  points: number
-  total_scans?: number
-  total_points_earned?: number
-  last_scan_date?: string
-  created_at: string
-  updated_at: string
-  current_streak?: number
-  level_number?: number
-  membership_tier?: string
-  achievements_count?: number
-  level_name?: string
-  badge_icon?: string
-  badge_color?: string
-  benefits?: string[]
-}
 
 // Get user profile with stats - now using the view
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {

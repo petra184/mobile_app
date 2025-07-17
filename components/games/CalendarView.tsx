@@ -4,10 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { colors } from "@/constants/colors"
-import type { Game } from "@/types/game"
-import type { Team } from "@/types/index"
 import { getGamesByMonth } from "@/app/actions/games"
 import { Feather } from "@expo/vector-icons"
+import type { Game, Team } from "@/types/updated_types"
 
 // Transform types for your UI components
 export interface TeamForUI {
@@ -24,10 +23,10 @@ export function transformTeamForUI(dbTeam: Team): TeamForUI {
     ...dbTeam,
     id: dbTeam.id,
     name: dbTeam.name,
-    shortName: dbTeam.short_name,
-    primaryColor: dbTeam.color || "red",
+    shortName: dbTeam.shortName,
+    primaryColor: dbTeam.primaryColor || "red",
     logo:
-      dbTeam.photo ||
+      dbTeam.logo ||
       null ||
       "https://upload.wikimedia.org/wikipedia/commons/thumb/0/06/Manhattan_Jaspers_logo.svg/1200px-Manhattan_Jaspers_logo.svg.png",
   }
@@ -233,7 +232,7 @@ export function CalendarView({ selectedTeam, locationType, onDateSelect }: Calen
       games.forEach((game) => {
         if (selectedTeam) {
           // If a team is selected, use that team's color
-          teamColors.add(selectedTeam.color || "#3B82F6")
+          teamColors.add(selectedTeam.primaryColor || "#3B82F6")
         } else {
           // Otherwise, use both teams' colors
           if (game.homeTeam?.primaryColor) teamColors.add(game.homeTeam.primaryColor)
@@ -244,7 +243,7 @@ export function CalendarView({ selectedTeam, locationType, onDateSelect }: Calen
 
       // Ensure we always have at least one color
       if (teamColors.size === 0) {
-        teamColors.add(selectedTeam?.color || "#3B82F6")
+        teamColors.add(selectedTeam?.primaryColor || "#3B82F6")
       }
 
       return Array.from(teamColors)

@@ -12,7 +12,8 @@ import {
   RefreshControl,
   Dimensions,
 } from "react-native"
-import { getTeams, getTeamsByGender, type Team } from "@/app/actions/teams"
+import { getTeams, getTeamsByGender } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types"
 import { colors } from "@/constants/colors"
 import { useUserStore } from "@/hooks/userStore"
 import AntDesign from "@expo/vector-icons/AntDesign"

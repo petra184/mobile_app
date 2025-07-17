@@ -1,6 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { checkBothAvailability } from './users';
-
 
 // New or modified function to handle Supabase interaction
 export async function signUpWithEmail(

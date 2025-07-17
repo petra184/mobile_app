@@ -16,8 +16,8 @@ import { colors } from "@/constants/colors"
 
 const { height, width } = Dimensions.get("window")
 
-export type SortOption = "newest" | "price_low_high" | "price_high_low" | "none"
-export type GenderFilter = "all" | "men" | "women" | "coed"
+type SortOption = "newest" | "price_low_high" | "price_high_low" | "none"
+type GenderFilter = "all" | "men" | "women" | "coed"
 
 interface FilterDrawerProps {
   isVisible: boolean

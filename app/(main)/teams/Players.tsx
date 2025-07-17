@@ -13,27 +13,7 @@ import AntDesign from "@expo/vector-icons/AntDesign"
 import Feather from "@expo/vector-icons/Feather"
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-
-// Define the Player type based on database structure
-export type PlayerData = {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  jersey_number: string | null
-  position: string | null
-  height: string | null
-  school_year: string | null
-  home_country: string | null
-  photo: string | null
-  bio: string | null
-  birthday: string | null
-  age: string | null
-  previous_school: string | null
-  twitter: string | null
-  instagram: string | null
-  facebook: string | null
-  team_id: string
-}
+import type { Player as PlayerData } from "@/types/updated_types"
 
 export default function PlayerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()

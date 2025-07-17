@@ -12,7 +12,8 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from "react-native-reanimated"
-import { getTeams, getTeamsByGender, type Team } from "@/app/actions/teams"
+import { getTeams, getTeamsByGender } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types"
 import { colors } from "@/constants/colors"
 import { useUserStore } from "@/hooks/userStore" // Updated import path
 import { useNotifications } from "@/context/notification-context" // Add notifications import

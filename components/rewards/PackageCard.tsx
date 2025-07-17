@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
 import { Image } from "expo-image"
-import type { BirthdayPackage } from "@/app/actions/birthdays"
+import type { BirthdayPackage } from "@/types/updated_types"
 import { colors } from "@/constants/colors"
 import { LinearGradient } from "expo-linear-gradient"
 import { Feather } from "@expo/vector-icons"

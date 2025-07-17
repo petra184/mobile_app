@@ -27,9 +27,8 @@ import {
   loadScanHistoryAction,
   processQRCodeScanAction,
   validateQRCodeFormatAction,
-  type ScanHistoryItem,
 } from "@/app/actions/qr_scanning"
-import type { Game } from "@/types/game"
+import type { Game, ScanHistoryItem } from "@/types/updated_types"
 
 export default function AdminQRScanner() {
   const { userId, isLoading: userLoading } = useUserStore()

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { DataService } from "./data-service"
-import type { Database } from "../../types/supabase"
+import type { Database } from "../../types/database"
 
 type Tables = Database["public"]["Tables"]
 type Team = Tables["teams"]["Row"]

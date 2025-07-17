@@ -1,11 +1,8 @@
+
 import { supabase } from "@/lib/supabase"
-import type { Database } from "@/types/supabase"
+import type { Database, Coach, Player } from "@/types/updated_types"
 
-export type Coach = Database["public"]["Tables"]["coaches"]["Row"]
-
-"use server"
-
-export type Team = {
+type Team = {
   id: string
   name: string
   photo: string | null
@@ -164,9 +161,6 @@ export async function getHeadCoach(teamId: string): Promise<Coach | null> {
     return null
   }
 }
-
-export type Player = Database["public"]["Tables"]["players"]["Row"]
-
 /**
  * Get all players for a specific team
  * @param teamId The team ID to fetch players for
@@ -357,6 +351,7 @@ export async function getPlayerDetails(playerId: string): Promise<{
   id: string
   first_name: string | null
   last_name: string | null
+  middle_name: string | null
   jersey_number: string | null
   position: string | null
   height: string | null
@@ -398,6 +393,7 @@ export async function getCoachDetails(coachId: string): Promise<{
   id: string
   first_name: string | null
   last_name: string | null
+  middle_name: string | null
   title: string | null
   coaching_experience: string | null
   image: string | null

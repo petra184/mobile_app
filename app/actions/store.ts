@@ -1,10 +1,4 @@
 import { supabase } from "@/lib/supabase"
-import type { Database } from "@/types/supabase"
-
-type StoreProduct = Database["public"]["Tables"]["store_products"]["Row"]
-type Promotion = Database["public"]["Tables"]["promotions"]["Row"]
-type SpecialOffer = Database["public"]["Tables"]["special_offers"]["Row"]
-type BirthdayPackage = Database["public"]["Tables"]["birthday_packages"]["Row"]
 
 export interface ProductFilters {
   category?: string

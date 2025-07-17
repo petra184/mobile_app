@@ -5,19 +5,9 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Dim
 import { Feather } from "@expo/vector-icons"
 import { LinearGradient } from "expo-linear-gradient"
 import { colors } from "@/constants/colors"
+import type { RewardCardData } from "@/types/updated_types"
 
 const { width } = Dimensions.get("window")
-
-export interface RewardCardData {
-  id: string
-  title: string
-  description?: string
-  points_required: number
-  category?: string
-  image_url?: string
-  stock_quantity?: number
-  is_sold?: boolean
-}
 
 interface RewardCardProps {
   reward: RewardCardData

@@ -2,7 +2,7 @@
 import type React from "react"
 import { View, Text, StyleSheet, Pressable, ImageBackground } from "react-native"
 import { colors } from "@/constants/colors"
-import type { Game } from "@/types/game"
+import type { Game } from "@/types/updated_types"
 import Feather from "@expo/vector-icons/Feather"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 import { useState, useEffect } from "react"
@@ -10,6 +10,7 @@ import { getStoryByGameId } from "@/app/actions/news"
 import { router } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
+
 
 interface GameCardProps {
   game: Game

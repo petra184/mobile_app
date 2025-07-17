@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import type { Database } from "@/types/index"
+import type { Database } from "@/types/database"
 
 type Tables = Database["public"]["Tables"]
 type Team = Tables["teams"]["Row"]

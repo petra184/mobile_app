@@ -6,7 +6,7 @@ import { View, Text, StyleSheet, StatusBar, TouchableOpacity, Image } from "reac
 import { SafeAreaView } from "react-native-safe-area-context"
 import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
 import { colors } from "@/constants/colors"
-import type { Team } from "@/app/actions/teams"
+import type { Team } from "@/types/updated_types"
 import { useRouter } from "expo-router"
 import Animated, { FadeInDown} from "react-native-reanimated"
 
