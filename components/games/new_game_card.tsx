@@ -11,7 +11,6 @@ import { router } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
 
-
 interface GameCardProps {
   game: Game
   onPress?: (game: Game) => void
@@ -25,9 +24,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   game,
   onPress,
   onNotifyPress,
-  onQRScanPress,
   onNewsPress,
-  onGameDetailsPress,
 }) => {
   const [gameStory, setGameStory] = useState<{ id: string; title: string; headline: string } | null>(null)
   const [isLoadingStory, setIsLoadingStory] = useState(false)
@@ -51,6 +48,22 @@ export const GameCard: React.FC<GameCardProps> = ({
   const isLive = game.status === "live"
   const isPostponed = game.status === "postponed"
   const isCanceled = game.status === "canceled"
+
+  // Function to count special events
+  const getSpecialEventsCount = () => {
+    let count = 0
+    if (game.special_events && game.special_events.trim()) count++
+    if (game.halftime_activity && game.halftime_activity.trim()) count++
+    return count
+  }
+
+  // Function to get special events display text
+  const getSpecialEventsText = () => {
+    const count = getSpecialEventsCount()
+    if (count === 0) return null
+    if (count === 1) return "1 Special Event!"
+    return `${count} Special Events`
+  }
 
   // Check for story when component mounts or game changes
   useEffect(() => {
@@ -128,6 +141,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   }
 
   const statusInfo = getStatusInfo()
+
   const handlePress = () => onPress?.(game)
 
   const handleNotifyPress = (e: any) => {
@@ -327,6 +341,15 @@ export const GameCard: React.FC<GameCardProps> = ({
                         {game.game_type?.toUpperCase() || "GAME"} • {game.location}
                       </Text>
                     </View>
+                    <View style={styles.locationRow}>
+                      <MaterialCommunityIcons name="trophy-award" size={20} color={colors.primary} />
+                      <Text style={styles.locationText}>
+                        {game.seasonType
+                          ?.split("-")
+                          .map((word) => word.toUpperCase())
+                          .join(" ")}
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.postponedWarning}>
                     <View style={[styles.statusNotification, { backgroundColor: "#FEF3C7" }]}>
@@ -348,26 +371,32 @@ export const GameCard: React.FC<GameCardProps> = ({
                   <View style={styles.locationContainer}>
                     <Feather name="map-pin" size={20} color={colors.primary} />
                     <Text style={styles.locationText}>
-                     {game.game_type?.toUpperCase() || "GAME"} • {game.location}
+                      {game.game_type?.toUpperCase() || "GAME"} • {game.location}
                     </Text>
+                  </View>
+                  <View style={styles.locationContainer2}>
+                      <MaterialCommunityIcons name="trophy-award" size={20} color={colors.primary} />
+                      <Text style={styles.locationText}>
+                        {game.seasonType
+                          ?.split("-")
+                          .map((word) => word.toUpperCase())
+                          .join(" ")}
+                      </Text>
                   </View>
                 </>
               ))}
-
-            {game.special_events && !isCanceled && (
+            {getSpecialEventsCount() > 0 && !isCanceled && (
               <View style={styles.alertsSection}>
                 <View style={styles.specialEventCard}>
                   <View style={styles.specialEventHeader}>
                     <View style={styles.specialEventBadge}>
                       <MaterialCommunityIcons name="star-circle" size={18} color="#8B5CF6" />
-                      <Text style={styles.specialEventTitle}>SPECIAL EVENT</Text>
+                      <Text style={styles.specialEventTitle}>{getSpecialEventsText()}</Text>
                     </View>
                   </View>
-                  <Text style={styles.specialEventText}>{game.special_events}</Text>
                 </View>
               </View>
             )}
-
             {!isCanceled && (
               <View style={styles.actionsContainer}>
                 {onNotifyPress && !isPostponed && !isCompleted && !isLive && (
@@ -641,6 +670,11 @@ const styles = StyleSheet.create({
   locationContainer: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 8,
+  },
+  locationContainer2: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 16,
   },
   locationText: {
@@ -658,7 +692,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: "#8B5CF6",
     paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingVertical: 8,
     borderRadius: 8,
     shadowColor: "#8B5CF6",
     shadowOffset: { width: 0, height: 1 },
@@ -667,7 +701,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   specialEventHeader: {
-    marginBottom: 2,
+    marginBottom: 0,
   },
   specialEventBadge: {
     flexDirection: "row",
@@ -685,7 +719,7 @@ const styles = StyleSheet.create({
     color: "#475569",
     lineHeight: 20,
     fontWeight: "500",
-    marginLeft:2,
+    marginLeft: 2,
   },
   actionsContainer: {
     flexDirection: "row",

@@ -27,6 +27,7 @@ export interface GameLocation {
   name: string | null
   type: string | null
 }
+
 export interface Game {
   id: string
   date: string // text in DB
@@ -48,7 +49,7 @@ export interface Game {
   seasonType?: string | null
   points?: number | null
   type?: string | null // corresponds to game_type
-  notes?: string | null // corresponds to game_notes
+  game_notes?: string | null // corresponds to game_notes
   lastUpdated?: string // timestamp with timezone
 }
 
@@ -180,6 +181,7 @@ export type UserStatusWithLevel = UserStatus & {
 export type Reward = {
   id: string
   title: string
+  expirty_date?: string | null
   description: string
   points_required: number
   category?: string | null
@@ -213,7 +215,7 @@ export type SpecialOffer = {
   is_active: boolean
   limited_quantity?: number | null
   claimed_count?: number | null
-  category?: string | null
+  category?: string | null | undefined
   image_url?: string | null
 }
 

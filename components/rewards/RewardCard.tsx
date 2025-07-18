@@ -1,446 +1,261 @@
-"use client"
 import type React from "react"
-import { useState } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Dimensions } from "react-native"
-import { Feather } from "@expo/vector-icons"
-import { LinearGradient } from "expo-linear-gradient"
+import { StyleSheet, Text, View, Image, Pressable, Dimensions, Platform } from "react-native"
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons"
 import { colors } from "@/constants/colors"
-import type { RewardCardData } from "@/types/updated_types"
+import type { Reward } from "@/types/updated_types"
 
-const { width } = Dimensions.get("window")
+const { width: screenWidth } = Dimensions.get("window")
 
 interface RewardCardProps {
-  reward: RewardCardData
+  reward: Reward
   userPoints: number
-  isInCart?: boolean
-  cartQuantity?: number
-  onPress?: (reward: RewardCardData) => void
-  onAddToCart?: (reward: RewardCardData) => void
-  onRemoveFromCart?: (reward: RewardCardData) => void
-  size?: "small" | "medium" | "large"
-  showActions?: boolean
-}
-
-const RewardImage: React.FC<{
-  imageUrl?: string
-  containerStyle?: any
-  fallbackSize?: number
-}> = ({ imageUrl, containerStyle, fallbackSize = 32 }) => {
-  const [imageError, setImageError] = useState(false)
-  const [imageLoading, setImageLoading] = useState(true)
-
-  if (!imageUrl || imageError) {
-    return (
-      <View style={[styles.fallbackContainer, containerStyle]}>
-        <LinearGradient colors={[colors.primary + "20", colors.primary + "10"]} style={styles.fallbackGradient}>
-          <Feather name="gift" size={fallbackSize} color={colors.primary} />
-        </LinearGradient>
-      </View>
-    )
-  }
-
-  return (
-    <View style={[styles.imageContainer, containerStyle]}>
-      {imageLoading && (
-        <View style={styles.imageLoadingOverlay}>
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      )}
-      <Image
-        source={{ uri: imageUrl }}
-        style={styles.rewardImage}
-        onError={() => {
-          setImageError(true)
-          setImageLoading(false)
-        }}
-        onLoad={() => setImageLoading(false)}
-        onLoadStart={() => setImageLoading(true)}
-        resizeMode="cover"
-      />
-    </View>
-  )
+  onPress: (reward: Reward) => void
+  onAddToCart?: (reward: Reward) => void
+  cardWidth?: number | `${number}%`
 }
 
 export const RewardCard: React.FC<RewardCardProps> = ({
   reward,
   userPoints,
-  isInCart = false,
-  cartQuantity = 0,
   onPress,
   onAddToCart,
-  onRemoveFromCart,
-  size = "medium",
-  showActions = true,
+  cardWidth = screenWidth * 0.9,
 }) => {
   const canAfford = userPoints >= reward.points_required
-  const isLowStock = (reward.stock_quantity ?? 0) <= 5 && (reward.stock_quantity ?? 0) > 0
-  const isOutOfStock = (reward.stock_quantity ?? 0) === 0 || reward.is_sold
+  const isAvailable = (reward.stock_quantity ?? 0) > 0 && !reward.is_sold
+  const isExpired = reward.expirty_date ? new Date() > new Date(reward.expirty_date) : false
 
-  const cardWidth = size === "small" ? width * 0.4 : size === "large" ? width * 0.9 : width * 0.43
-  const imageHeight = size === "small" ? 120 : size === "large" ? 200 : 140
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return ""
+    const date = new Date(dateString)
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
 
   const handlePress = () => {
-    if (!isOutOfStock) {
-      onPress?.(reward)
-    }
-  }
-
-  const handleAddToCart = (e: any) => {
-    e.stopPropagation()
-    if (canAfford && !isOutOfStock) {
-      onAddToCart?.(reward)
-    }
-  }
-
-  const handleRemoveFromCart = (e: any) => {
-    e.stopPropagation()
-    onRemoveFromCart?.(reward)
+    onPress(reward)
   }
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        { width: cardWidth },
-        !canAfford && styles.cardDisabled,
-        isOutOfStock && styles.cardOutOfStock,
-      ]}
+    <Pressable
+      style={[styles.card, { width: cardWidth }, (!canAfford || !isAvailable || isExpired) && styles.unavailableCard]}
       onPress={handlePress}
-      activeOpacity={isOutOfStock ? 1 : 0.8}
-      disabled={isOutOfStock}
+      android_ripple={{ color: "rgba(0,0,0,0.1)" }}
     >
-      {/* Image Container */}
-      <View style={[styles.imageWrapper, { height: imageHeight }]}>
-        <RewardImage
-          imageUrl={reward.image_url}
-          containerStyle={styles.imageContainerStyle}
-          fallbackSize={size === "small" ? 24 : size === "large" ? 48 : 32}
+      <View style={styles.imageContainer}>
+        <Image
+          source={reward.image_url ? { uri: reward.image_url } : require("../../IMAGES/MAIN_LOGO.png")}
+          style={styles.image}
         />
 
-        {/* Overlays */}
-        {isInCart && cartQuantity > 0 && (
-          <View style={styles.cartBadge}>
-            <Text style={styles.cartBadgeText}>{cartQuantity}</Text>
-          </View>
-        )}
-
-        {isLowStock && !isOutOfStock && (
+        {/* Stock Warning Badge */}
+        {reward.stock_quantity && reward.stock_quantity <= 5 && (
           <View style={styles.stockBadge}>
+            <Feather name="alert-triangle" size={12} color={colors.error} />
             <Text style={styles.stockBadgeText}>Only {reward.stock_quantity} left!</Text>
           </View>
         )}
-
-        {isOutOfStock && (
-          <View style={styles.outOfStockOverlay}>
-            <LinearGradient colors={["rgba(0,0,0,0.7)", "rgba(0,0,0,0.9)"]} style={styles.outOfStockGradient}>
-              <Feather name="x-circle" size={32} color="#FFFFFF" />
-              <Text style={styles.outOfStockText}>Out of Stock</Text>
-            </LinearGradient>
-          </View>
-        )}
-
-        {!canAfford && !isOutOfStock && (
-          <View style={styles.insufficientPointsOverlay}>
-            <LinearGradient colors={["rgba(0,0,0,0.6)", "rgba(0,0,0,0.8)"]} style={styles.insufficientPointsGradient}>
-              <Feather name="lock" size={24} color="#FFFFFF" />
-              <Text style={styles.insufficientPointsText}>Need {reward.points_required - userPoints} more points</Text>
-            </LinearGradient>
+        {/* Out of Stock Overlay */}
+        {!isAvailable && (
+          <View style={styles.unavailableOverlay}>
+            <Text style={styles.unavailableText}>OUT OF STOCK</Text>
           </View>
         )}
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
-        <Text style={[styles.title, !canAfford && styles.titleDisabled]} numberOfLines={2}>
-          {reward.title}
+        <View style={styles.headerRow}>
+          <Text style={styles.title} numberOfLines={1}>
+            {reward.title}
+          </Text>
+        </View>
+
+        {reward.category && <Text style={styles.category}>{reward.category}</Text>}
+
+        <Text style={styles.description} numberOfLines={2}>
+          {reward.description}
         </Text>
 
-        {reward.description && (
-          <Text style={[styles.description, !canAfford && styles.descriptionDisabled]} numberOfLines={2}>
-            {reward.description}
-          </Text>
-        )}
-
-        {/* Points and Actions */}
         <View style={styles.footer}>
           <View style={styles.pointsContainer}>
-            <View style={styles.pointsGradient}>
-              <Feather name="star" size={18} color={canAfford ? "#F59E0B" : "#6B7280"} />
-            </View>
-            <Text style={[styles.pointsText, !canAfford && styles.pointsTextDisabled]}>{reward.points_required}</Text>
+            <MaterialCommunityIcons name="star-circle" size={16} color={colors.accent} />
+            <Text style={[styles.points, !canAfford && styles.disabledText]}>{reward.points_required}</Text>
+            <Text style={[styles.pointsLabel, !canAfford && styles.disabledText]}>POINTS</Text>
           </View>
 
-          {showActions && canAfford && !isOutOfStock && (
-            <View style={styles.actions}>
-              {isInCart ? (
-                <View style={styles.cartActions}>
-                  <TouchableOpacity style={styles.removeButton} onPress={handleRemoveFromCart}>
-                    <Feather name="minus" size={16} color="#EF4444" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.addButton} onPress={handleAddToCart}>
-                    <Feather name="plus" size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity style={styles.primaryButton} onPress={handleAddToCart}>
-                  <LinearGradient colors={[colors.primary, colors.primary + "CC"]} style={styles.buttonGradient}>
-                    <Feather name="plus" size={16} color="#FFFFFF" />
-                  </LinearGradient>
-                </TouchableOpacity>
-              )}
+          {/* Insufficient Points Warning */}
+          {!canAfford && (
+            <View style={styles.insufficientContainer}>
+              <Feather name="lock" size={12} color="#EF4444" />
+              <Text style={styles.insufficientText}>
+                Need {(reward.points_required - userPoints).toLocaleString()} more
+              </Text>
             </View>
           )}
         </View>
       </View>
-    </TouchableOpacity>
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
-    overflow: "hidden",
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginVertical: 8,
+    alignSelf: "center",
+    overflow: Platform.OS === "android" ? "hidden" : "visible",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  cardDisabled: {
-    opacity: 0.7,
-  },
-  cardOutOfStock: {
-    opacity: 0.8,
-  },
-  imageWrapper: {
-    width: "100%",
-    position: "relative",
-    backgroundColor: "#F8F9FA",
-  },
-  imageContainerStyle: {
-    width: "100%",
-    height: "100%",
+  unavailableCard: {
+    opacity: 0.6,
   },
   imageContainer: {
+    position: "relative",
+    width: "100%",
+    height: 140,
+  },
+  image: {
     width: "100%",
     height: "100%",
-  },
-  rewardImage: {
-    width: "100%",
-    height: "100%",
-  },
-  fallbackContainer: {
-    width: "100%",
-    height: "100%",
-  },
-  fallbackGradient: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  imageLoadingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    zIndex: 1,
-  },
-  cartBadge: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#10B981",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-    zIndex: 10,
-  },
-  cartBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
+    resizeMode: "cover",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
   stockBadge: {
     position: "absolute",
-    bottom: 12,
-    left: 12,
-    right: 12,
-    backgroundColor: "#F59E0B",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  stockBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  categoryBadge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  categoryText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.primary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  stockBadgeText: {
+    fontSize: 11,
+    color: "#F59E0B",
+    fontWeight: "500",
   },
-  outOfStockOverlay: {
+  expiryBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FFF5F0",
+    borderColor: colors.error,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  expiryBadgeText: {
+    fontSize: 11,
+    color: colors.error,
+    fontWeight: "500",
+  },
+  unavailableOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 5,
-  },
-  outOfStockGradient: {
-    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
-  outOfStockText: {
+  unavailableText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 8,
+    fontWeight: "bold",
+    fontSize: 14,
     textAlign: "center",
-  },
-  insufficientPointsOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 5,
-  },
-  insufficientPointsGradient: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 12,
-  },
-  insufficientPointsText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "600",
-    marginTop: 6,
-    textAlign: "center",
-    lineHeight: 14,
   },
   content: {
     padding: 16,
-    flex: 1,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 6,
-    lineHeight: 20,
+    color: colors.text,
+    flexShrink: 1,
   },
-  titleDisabled: {
-    color: "#9CA3AF",
+  category: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "600",
+    marginBottom: 4,
   },
   description: {
-    fontSize: 13,
-    color: "#6B7280",
-    lineHeight: 18,
+    fontSize: 14,
+    color: colors.textSecondary,
     marginBottom: 12,
-  },
-  descriptionDisabled: {
-    color: "#D1D5DB",
+    lineHeight: 20,
   },
   footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: "auto",
+    flexDirection: "column",
+    gap: 8,
   },
   pointsContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
+    gap: 4,
   },
-  pointsGradient: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
+  points: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#8B5CF6",
   },
-  pointsText: {
-    fontSize: 15,
+  pointsLabel: {
+    fontSize: 14,
     fontWeight: "700",
-    color: "#111827",
+    color: colors.accent,
+    marginLeft: 4,
   },
-  pointsTextDisabled: {
-    color: "#9CA3AF",
-  },
-  actions: {
+  insufficientContainer: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  cartActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  removeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     backgroundColor: "#FEE2E2",
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignSelf: "flex-start",
+    gap: 4,
   },
-  addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
+  insufficientText: {
+    fontSize: 11,
+    color: "#EF4444",
+    fontWeight: "600",
   },
-  primaryButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-  buttonGradient: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
+  disabledText: {
+    color: "#999",
   },
 })
+
+export default RewardCard

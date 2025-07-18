@@ -1,6 +1,6 @@
 "use client"
 
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator, Alert } from "react-native"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -17,6 +17,7 @@ import Ionicons from "@expo/vector-icons/Ionicons"
 import { StatusBar } from "expo-status-bar"
 import { supabase } from "@/lib/supabase"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
+import * as WebBrowser from "expo-web-browser"
 
 // Type for news story
 type NewsStory = {
@@ -182,7 +183,8 @@ if (game.time) {
   console.log("Game start time:", gameDateTime.toISOString());
   console.log("Game end time (1.5 hrs after start):", gameEndTime.toISOString());
   console.log("Is game live now:", isLive);
-
+  
+  console.log("game game_notes:", game.game_notes)
   // Determine if it's truly upcoming (scheduled AND in the future)
   const isUpcoming =
     (game.status === "scheduled" || (!isCompleted && !isLive && !isPostponed && !isCanceled)) && !isGameInPast
@@ -296,8 +298,40 @@ if (game.time) {
     router.push(`../(tabs)/qr_code`)
   }
 
-  const handleGameNotesPress = () => {
-    router.push(`../(tabs)/qr_code`)
+  const isURL = (str: string) => {
+    try {
+      new URL(str)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const handleGamegame_notesPress = async () => {
+  if (!game.game_notes ) {
+    Alert.alert("No Game game_notes", "Game game_notes are not available.")
+    return
+  }
+
+  try {
+      const isPdf = game.game_notes.toLowerCase().endsWith(".pdf")
+
+      if (isPdf) {
+        // Open PDF in system browser or fallback PDF viewer
+        await WebBrowser.openBrowserAsync(game.game_notes)
+      } else {
+        // Open regular link
+        const supported = await Linking.canOpenURL(game.game_notes)
+        if (supported) {
+          await Linking.openURL(game.game_notes)
+        } else {
+          Alert.alert("Error", "Cannot open the link.")
+        }
+      }
+    } catch (err) {
+      console.error("Failed to open game game_notes:", err)
+      Alert.alert("Error", "Something went wrong while opening the file.")
+    }
   }
 
   const handleNewsPress = () => {
@@ -439,6 +473,20 @@ if (game.time) {
                 </View>
               )}
 
+              {game.halftime_activity && (
+                <View style={styles.infoRow}>
+                  <View style={[styles.infoIconContainer, { backgroundColor: teamColor }]}>
+                    <Feather name="star" size={20} color="white" />
+                  </View>
+                  <View style={styles.infoTextContainer}>
+                    <Text style={styles.infoLabel}>Halftime Activity</Text>
+                    <Text style={styles.infoValue}>
+                      <Text style={styles.locationTag}>{game.halftime_activity}</Text>
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               {/* Postponed/Canceled Status Card - Only show if NOT in the past */}
               {((isPostponed && !isPostponedInPast) || isCanceled) && (
                 <View
@@ -529,11 +577,13 @@ if (game.time) {
               <Feather name="chevron-right" size={20} color={colors.textSecondary} />
             </Pressable>
             )}
-            <Pressable style={styles.infoLink} onPress={handleGameNotesPress}>
+            {game.game_notes && (
+              <Pressable style={styles.infoLink} onPress={handleGamegame_notesPress}>
               <Feather name="file-text" size={20} color={teamColor} />
               <Text style={styles.infoLinkText}>Game Notes</Text>
               <Feather name="chevron-right" size={20} color={colors.textSecondary} />
             </Pressable>
+            )}
             <Pressable style={styles.infoLink} onPress={handleMatchupHistoryPress}>
               <Feather name="bar-chart-2" size={20} color={teamColor} />
               <Text style={styles.infoLinkText}>Matchup History</Text>

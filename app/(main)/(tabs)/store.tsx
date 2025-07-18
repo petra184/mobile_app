@@ -18,30 +18,35 @@ import {
 import { Feather } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
 import BirthdayBanner from "@/components/rewards/BirthdayBanner"
-import SpecialOfferCard from "@/components/rewards/SpecialOfferCard"
-import { RewardCard, RewardDetailModal } from "@/components/rewards/rewards"
+import { HorizontalRewardItem } from "@/components/rewards/HorizontalReward"
 import { colors } from "@/constants/colors"
 import { useRouter } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import { useCart } from "@/context/cart-context"
-import {
-  fetchRewards,
-  fetchSpecialOffers,
-  fetchUserAchievements,
-  fetchUserStatus
-} from "@/app/actions/points"
-import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, RewardCardData } from "@/types/updated_types"
+import { fetchRewards, fetchSpecialOffers, fetchUserAchievements, fetchUserStatus } from "@/app/actions/points"
+import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel } from "@/types/updated_types"
+import OfferCard from "@/components/rewards/OfferCard"
+import RedeemModal from "@/components/rewards/RedeemModal" // Import the unified modal
+
 const { width } = Dimensions.get("window")
 
 type SortOption = "none" | "points_low_high" | "points_high_low" | "newest" | "popular"
+type RewardOrSpecial = Reward | SpecialOffer
+
+// Helper function to check if an item is a SpecialOffer
+const isSpecialOffer = (item: RewardOrSpecial): item is SpecialOffer => {
+  return "end_date" in item && "start_date" in item
+}
 
 const RewardsStoreScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [sortOption, setSortOption] = useState<SortOption>("none")
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("")
   const [refreshing, setRefreshing] = useState(false)
-  const [selectedReward, setSelectedReward] = useState<RewardCardData | null>(null)
+
+  // Unified modal state
+  const [selectedItem, setSelectedItem] = useState<RewardOrSpecial | null>(null)
   const [modalVisible, setModalVisible] = useState(false)
 
   const router = useRouter()
@@ -129,12 +134,48 @@ const RewardsStoreScreen: React.FC = () => {
       }
     })
 
-  const handleRewardPress = (reward: RewardCardData) => {
-    setSelectedReward(reward)
+  // Unified handler for both rewards and special offers
+  const handleItemPress = (item: RewardOrSpecial) => {
+    setSelectedItem(item)
     setModalVisible(true)
   }
 
-  const handleAddToCart = (reward: RewardCardData) => {
+  // Unified redeem handler
+  const handleItemRedeem = (item: RewardOrSpecial) => {
+    if (!userId) {
+      Alert.alert("Login Required", "Please log in to redeem items.")
+      return
+    }
+
+    if (points < item.points_required) {
+      Alert.alert("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
+      return
+    }
+
+    if (isSpecialOffer(item)) {
+      // Handle special offer redemption
+      showSuccess("Offer Redeemed!", `${item.title} has been redeemed successfully!`)
+      setModalVisible(false)
+      fetchData() // Refresh data to update points and offers
+    } else {
+      // Handle reward - add to cart
+      addToCart({
+        id: item.id,
+        title: item.title,
+        description: item.description || "",
+        points_required: item.points_required,
+        category: item.category || undefined,
+        image_url: item.image_url || undefined,
+      })
+      showSuccess("Added to Cart!", `${item.title} has been added to your cart.`)
+      setModalVisible(false)
+      setTimeout(() => {
+        router.push("../store/Checkout")
+      }, 1000)
+    }
+  }
+
+  const handleAddToCart = (reward: Reward) => {
     if (!userId) {
       Alert.alert("Login Required", "Please log in to add rewards to cart.")
       return
@@ -143,7 +184,6 @@ const RewardsStoreScreen: React.FC = () => {
       Alert.alert("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
       return
     }
-
     addToCart({
       id: reward.id,
       title: reward.title,
@@ -152,30 +192,15 @@ const RewardsStoreScreen: React.FC = () => {
       category: reward.category || undefined,
       image_url: reward.image_url || undefined,
     })
-
     showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
     setTimeout(() => {
       router.push("../store/Checkout")
     }, 1000)
   }
 
-  const handleRemoveFromCart = (reward: RewardCardData) => {
+  const handleRemoveFromCart = (reward: Reward) => {
     removeOneFromCart(reward.id)
     showInfo("Removed from Cart", `One ${reward.title} has been removed from your cart.`)
-  }
-
-  const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
-    if (!userId) {
-      Alert.alert("Login Required", "Please log in to redeem special offers.")
-      return
-    }
-    if (points < offer.points_required) {
-      Alert.alert("Insufficient Points", `You need ${offer.points_required - points} more points to redeem this offer.`)
-      return
-    }
-
-    showSuccess("Offer Redeemed!", `${offer.title} has been redeemed successfully!`)
-    fetchData()
   }
 
   const resetFilters = () => {
@@ -192,6 +217,11 @@ const RewardsStoreScreen: React.FC = () => {
         timestamp: Date.now().toString(),
       },
     })
+  }
+
+  const handleCloseModal = () => {
+    setModalVisible(false)
+    setSelectedItem(null)
   }
 
   if (loading && rewards.length === 0) {
@@ -238,7 +268,9 @@ const RewardsStoreScreen: React.FC = () => {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Special Offers</Text>
-              <TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push({ pathname: "../all_cards/points", params: { tab: "offers" } })}
+              >
                 <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
@@ -249,11 +281,11 @@ const RewardsStoreScreen: React.FC = () => {
               contentContainerStyle={styles.featuredContainer}
             >
               {activeSpecialOffers.map((offer) => (
-                <SpecialOfferCard
+                <OfferCard
                   key={offer.id}
                   offer={offer}
                   userPoints={points}
-                  onRedeem={handleSpecialOfferRedeem}
+                  onPress={() => handleItemPress(offer)} // Use unified handler
                 />
               ))}
             </ScrollView>
@@ -261,7 +293,7 @@ const RewardsStoreScreen: React.FC = () => {
         )}
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle2}>All Rewards</Text>
+          <Text style={styles.sectionTitle2}>Rewards</Text>
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() => {
@@ -333,32 +365,20 @@ const RewardsStoreScreen: React.FC = () => {
           </View>
         )}
 
-        <View style={styles.rewardsGrid}>
+        <View style={styles.rewardsList}>
           {filteredRewards.length > 0 ? (
-           filteredRewards.map((reward) => {
-        const normalizedReward = {
-          ...reward,
-          category: reward.category ?? undefined,
-          image_url: reward.image_url ?? undefined,
-          stock_quantity: reward.stock_quantity ?? 0,
-          is_sold: reward.is_sold ?? false,
-        };
-
-        return (
-          <RewardCard
-            key={reward.id}
-            reward={normalizedReward}
-            userPoints={points}
-            isInCart={isInCart(reward.id)}
-            cartQuantity={getItemQuantity(reward.id)}
-            onPress={handleRewardPress}
-            onAddToCart={handleAddToCart}
-            onRemoveFromCart={handleRemoveFromCart}
-            size="medium"
-            showActions={true}
-          />
-        );
-      })
+            filteredRewards.map((reward) => (
+              <HorizontalRewardItem
+                key={reward.id}
+                reward={reward}
+                userPoints={points}
+                isInCart={isInCart(reward.id)}
+                cartQuantity={getItemQuantity(reward.id)}
+                onPress={() => handleItemPress(reward)} // Use unified handler
+                onAddToCart={handleAddToCart}
+                onRemoveFromCart={handleRemoveFromCart}
+              />
+            ))
           ) : (
             <View style={styles.noResultsContainer}>
               <Feather name="search" size={48} color="#999" />
@@ -380,19 +400,8 @@ const RewardsStoreScreen: React.FC = () => {
         )}
       </TouchableOpacity>
 
-      <RewardDetailModal
-        reward={selectedReward}
-        visible={modalVisible}
-        userPoints={points}
-        isInCart={selectedReward ? isInCart(selectedReward.id) : false}
-        cartQuantity={selectedReward ? getItemQuantity(selectedReward.id) : 0}
-        onClose={() => {
-          setModalVisible(false)
-          setSelectedReward(null)
-        }}
-        onAddToCart={handleAddToCart}
-        onRemoveFromCart={handleRemoveFromCart}
-      />
+      {/* Unified Modal for both rewards and special offers */}
+      <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} />
     </SafeAreaView>
   )
 }
@@ -568,12 +577,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
-  rewardsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: 8,
+  rewardsList: {
+    flexDirection: "column",
     paddingBottom: 100,
-    justifyContent: "space-between",
   },
   noResultsContainer: {
     width: "100%",

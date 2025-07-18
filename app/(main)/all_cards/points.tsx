@@ -11,8 +11,6 @@ import {
   RefreshControl,
   Pressable,
   Image,
-  Modal,
-  Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -24,18 +22,21 @@ import { useNotifications } from "@/context/notification-context"
 import Animated, { FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated"
 import { StatusBar } from "expo-status-bar"
 import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
-import SpecialOfferCard from "@/components/rewards/SpecialOfferCard"
+import OfferCard from "@/components/rewards/OfferCard"
+import RewardCard from "@/components/rewards/RewardCard"
+import RedeemModal from "@/components/rewards/RedeemModal"
 import {
   fetchRewards,
   fetchSpecialOffers,
   fetchScanHistory,
   fetchUserStatus,
   fetchUserAchievements,
-  checkUserAchievements
+  checkUserAchievements,
 } from "@/app/actions/points"
-import { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, ScanHistory } from "@/types/updated_types"
+import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, ScanHistory } from "@/types/updated_types"
 import { supabase } from "@/lib/supabase"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import { useLocalSearchParams } from "expo-router"
 
 type PurchaseHistory = {
   id: string
@@ -46,6 +47,13 @@ type PurchaseHistory = {
   quantity: number
   purchase_date: string
   status: string
+}
+
+type RewardOrSpecial = Reward | SpecialOffer
+
+// Helper function to check if an item is a SpecialOffer
+const isSpecialOffer = (item: RewardOrSpecial): item is SpecialOffer => {
+  return "end_date" in item && "start_date" in item
 }
 
 // Reward Image Component
@@ -88,114 +96,6 @@ const RewardImage: React.FC<RewardImageProps> = ({ imageUrl, containerStyle }) =
   )
 }
 
-// Full Screen Detail Modal Component
-const DetailModal: React.FC<{
-  visible: boolean
-  onClose: () => void
-  item: Reward | SpecialOffer | null
-  type: "reward" | "offer"
-  userPoints: number
-  onClaim: (item: Reward | SpecialOffer) => void
-}> = ({ visible, onClose, item, type, userPoints, onClaim }) => {
-  if (!item) return null
-
-  const canAfford = userPoints >= item.points_required
-  const isOffer = type === "offer"
-  const offer = isOffer ? (item as SpecialOffer) : null
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={styles.modalContainer}>
-        <StatusBar style="dark" />
-        {/* Header */}
-        <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Feather name="x" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.modalHeaderTitle}>{isOffer ? "Special Offer" : "Reward Details"}</Text>
-          <View style={styles.closeButton} />
-        </View>
-
-        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-          {/* Hero Image */}
-          <View style={styles.modalImageContainer}>
-            <RewardImage imageUrl={item.image_url ?? undefined} containerStyle={styles.modalImage} />
-            {isOffer && (
-              <View style={styles.modalOfferBadge}>
-                <View style={styles.offerBadgeGradient}>
-                  <Feather name="zap" size={16} color="white" />
-                  <Text style={styles.modalOfferBadgeText}>LIMITED TIME</Text>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Content */}
-          <View style={styles.modalDetailsContainer}>
-            <Text style={[styles.modalTitle, !canAfford && styles.disabledText]}>{item.title}</Text>
-            <Text style={[styles.modalDescription, !canAfford && styles.disabledText]}>{item.description}</Text>
-
-            {/* Points Section */}
-            <View style={styles.modalPointsSection}>
-              <View style={styles.modalPointsContainer}>
-                {isOffer && offer?.original_points && (
-                  <View style={styles.modalPricingRow}>
-                    <View style={styles.modalCurrentPoints}>
-                      <Feather name="star" size={20} color={canAfford ? "#FFD700" : "#999"} />
-                      <Text style={[styles.modalPointsText, !canAfford && styles.disabledText]}>
-                        Get it for {item.points_required} pts
-                      </Text>
-                    </View>
-                    <Text style={styles.modalOriginalPoints}>{offer.original_points} pts</Text>
-                    <View style={styles.modalSavingsBadge}>
-                      <Text style={styles.modalSavingsText}>
-                        Save {offer.original_points - item.points_required} PTS!
-                      </Text>
-                    </View>
-                  </View>
-                )}
-                {(!isOffer || !offer?.original_points) && (
-                  <View style={styles.modalCurrentPoints}>
-                    <Feather name="star" size={20} color={canAfford ? "#FFD700" : "#999"} />
-                    <Text style={[styles.modalPointsText, !canAfford && styles.disabledText]}>
-                      {item.points_required} points
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {!canAfford && (
-                <View style={styles.modalInsufficientBadge}>
-                  <Feather name="lock" size={16} color="#EF4444" />
-                  <Text style={styles.modalInsufficientText}>
-                    Need {(item.points_required - userPoints).toLocaleString()} more points
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* Action Button */}
-        <View style={styles.modalFooter}>
-          <TouchableOpacity
-            style={[styles.modalActionButton, !canAfford && styles.modalActionButtonDisabled]}
-            onPress={() => onClaim(item)}
-            disabled={!canAfford}
-          >
-            <Text style={[styles.modalActionButtonText, !canAfford && styles.modalActionButtonTextDisabled]}>
-              {!canAfford
-                ? "Insufficient Points"
-                : isOffer
-                  ? `Claim Offer for ${item.points_required} PTS`
-                  : "Add to Cart"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </Modal>
-  )
-}
-
 // Achievement icon mapping
 const achievementIconMap = {
   milestone: "award",
@@ -219,6 +119,10 @@ const achievementColorMap = {
 }
 
 export default function PointsScreen() {
+  const { tab } = useLocalSearchParams<{ tab?: string }>()
+  const [activeTab, setActiveTab] = useState<"overview" | "rewards" | "offers" | "history">(
+    tab === "rewards" || tab === "offers" || tab === "history" ? tab : "overview",
+  )
   const { points, userId, getUserFirstName } = useUserStore()
   const { addToCart, totalItems } = useCart()
   const { showSuccess, showError, showInfo } = useNotifications()
@@ -232,12 +136,10 @@ export default function PointsScreen() {
   const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState<"overview" | "rewards" | "offers" | "history">("overview")
 
-  // Modal states
-  const [detailModalVisible, setDetailModalVisible] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<Reward | SpecialOffer | null>(null)
-  const [modalType, setModalType] = useState<"reward" | "offer">("reward")
+  // Unified modal states
+  const [selectedItem, setSelectedItem] = useState<RewardOrSpecial | null>(null)
+  const [modalVisible, setModalVisible] = useState(false)
 
   useEffect(() => {
     if (userId) {
@@ -332,50 +234,48 @@ export default function PointsScreen() {
     fetchData()
   }
 
-  const handleItemPress = (item: Reward | SpecialOffer, type: "reward" | "offer") => {
+  // Unified handler for both rewards and special offers
+  const handleItemPress = (item: RewardOrSpecial) => {
     setSelectedItem(item)
-    setModalType(type)
-    setDetailModalVisible(true)
+    setModalVisible(true)
   }
 
-  const handleClaimItem = useCallback(
-    (item: Reward | SpecialOffer) => {
+  // Unified redeem handler
+  const handleItemRedeem = useCallback(
+    (item: RewardOrSpecial) => {
       if (!userId) {
-        showError("Login Required", "Please log in to claim rewards.")
+        showError("Login Required", "Please log in to redeem items.")
         return
       }
 
       if (points < item.points_required) {
-        showError(
-          "Insufficient Points",
-          `You need ${item.points_required - points} more points to claim this ${modalType}.`,
-        )
+        showError("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
         return
       }
 
-      // Add to cart
-      addToCart({
-        id: item.id,
-        title: item.title,
-        description: item.description || "",
-        points_required: item.points_required,
-        category: item.category || undefined,
-        image_url: item.image_url || undefined,
-      })
-
-      // Show success notification
-      showSuccess(
-        `${modalType === "offer" ? "Offer Claimed!" : "Added to Cart!"}`,
-        `${item.title} has been added to your cart.`,
-      )
-
-      // Close modal and navigate to cart
-      setDetailModalVisible(false)
-      setTimeout(() => {
-        router.push("../store/Checkout")
-      }, 1000)
+      if (isSpecialOffer(item)) {
+        // Handle special offer redemption
+        showSuccess("Offer Redeemed!", `${item.title} has been redeemed successfully!`)
+        setModalVisible(false)
+        fetchData() // Refresh data to update points and offers
+      } else {
+        // Handle reward - add to cart
+        addToCart({
+          id: item.id,
+          title: item.title,
+          description: item.description || "",
+          points_required: item.points_required,
+          category: item.category || undefined,
+          image_url: item.image_url || undefined,
+        })
+        showSuccess("Added to Cart!", `${item.title} has been added to your cart.`)
+        setModalVisible(false)
+        setTimeout(() => {
+          router.push("../store/Checkout")
+        }, 1000)
+      }
     },
-    [userId, points, modalType, addToCart, showSuccess, showError, router],
+    [userId, points, addToCart, showSuccess, showError, router],
   )
 
   const handleAddToCart = (reward: Reward) => {
@@ -383,7 +283,6 @@ export default function PointsScreen() {
       showError("Login Required", "Please log in to add rewards to cart.")
       return
     }
-
     if (points < reward.points_required) {
       showError("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
       return
@@ -408,25 +307,13 @@ export default function PointsScreen() {
     }, 1000)
   }
 
-  const handleRedeemReward = async (reward: Reward) => {
-    handleItemPress(reward, "reward")
+  const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
+    handleItemPress(offer)
   }
 
-  const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
-    if (!userId) {
-      Alert.alert("Login Required", "Please log in to redeem special offers.")
-      return
-    }
-
-    if (points < offer.points_required) {
-      Alert.alert("Insufficient Points", `You need ${offer.points_required - points} more points to redeem this offer.`)
-      return
-    }
-
-    // In a real app, you would call an API to redeem the special offer
-    showSuccess("Offer Redeemed!", `${offer.title} has been redeemed successfully!`)
-    // Refresh data to update claimed count
-    fetchData()
+  const handleCloseModal = () => {
+    setModalVisible(false)
+    setSelectedItem(null)
   }
 
   const formatDate = (dateString: string) => {
@@ -516,7 +403,7 @@ export default function PointsScreen() {
             >
               {specialOffers.map((offer, index) => (
                 <Animated.View key={offer.id} entering={FadeInUp.duration(600).delay(300 + index * 100)}>
-                  <SpecialOfferCard offer={offer} userPoints={points} onRedeem={handleSpecialOfferRedeem} />
+                  <OfferCard offer={offer} userPoints={points} onPress={() => handleItemPress(offer)} />
                 </Animated.View>
               ))}
             </ScrollView>
@@ -533,47 +420,21 @@ export default function PointsScreen() {
           </View>
           {rewards.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-              {rewards.slice(0, 3).map((reward) => {
-                const canAfford = points >= reward.points_required
-                return (
-                  <TouchableOpacity
-                    key={reward.id}
-                    style={[styles.featuredRewardCard, !canAfford && styles.featuredRewardCardDisabled]}
-                    onPress={() => handleRedeemReward(reward)}
-                  >
-                    {!canAfford && <View style={styles.rewardOverlay} />}
-                    <View style={styles.rewardImageContainer}>
-                      <RewardImage
-                        imageUrl={reward.image_url ?? undefined}
-                        containerStyle={styles.rewardImageWrapper}
-                      />
-                    </View>
-                    <Text style={[styles.rewardTitle, !canAfford && styles.disabledText]} numberOfLines={2}>
-                      {reward.title}
-                    </Text>
-                    <View style={styles.rewardPoints}>
-                      <Feather name="star" size={14} color={canAfford ? "#FFD700" : "#999"} />
-                      <Text style={[styles.rewardPointsText, !canAfford && styles.disabledText]}>
-                        {reward.points_required}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[styles.rewardButton, !canAfford && styles.rewardButtonDisabled]}
-                      onPress={(e) => {
-                        e.stopPropagation()
-                        if (canAfford) {
-                          handleAddToCart(reward)
-                        }
-                      }}
-                      disabled={!canAfford}
-                    >
-                      <Text style={[styles.rewardButtonText, !canAfford && styles.rewardButtonTextDisabled]}>
-                        {!canAfford ? "Not Enough PTS" : "Add to Cart"}
-                      </Text>
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                )
-              })}
+              {rewards.slice(0, 3).map((reward, index) => (
+                <Animated.View
+                  key={reward.id}
+                  entering={FadeInUp.duration(400).delay(index * 50)}
+                  style={styles.featuredRewardCardContainer}
+                >
+                  <RewardCard
+                    reward={reward}
+                    userPoints={points}
+                    onPress={handleItemPress}
+                    onAddToCart={handleAddToCart}
+                    cardWidth={160}
+                  />
+                </Animated.View>
+              ))}
             </ScrollView>
           ) : (
             <View style={styles.emptyState}>
@@ -670,74 +531,29 @@ export default function PointsScreen() {
   )
 
   const renderRewards = () => (
-    <ScrollView showsVerticalScrollIndicator={false}>
+    <ScrollView showsVerticalScrollIndicator={false} style={styles.rewardsContainer}>
       {rewards.length > 0 ? (
-        rewards.map((reward) => {
-          const canAfford = points >= reward.points_required
-          return (
-            <Animated.View key={reward.id} entering={FadeInUp.duration(400)} style={styles.rewardCard}>
-              <TouchableOpacity style={styles.rewardCardContent} onPress={() => handleRedeemReward(reward)}>
-                <View style={styles.rewardCardHeader}>
-                  <View style={styles.rewardIconContainer}>
-                    <RewardImage imageUrl={reward.image_url ?? undefined} containerStyle={styles.rewardImageWrapper} />
-                  </View>
-                  <View style={styles.rewardCardInfo}>
-                    <Text style={[styles.rewardCardTitle, !canAfford && styles.disabledText]}>{reward.title}</Text>
-                    {/* PRICE BELOW TITLE */}
-                    <View style={styles.rewardCardPoints}>
-                      <Feather name="star" size={16} color={canAfford ? "#FFD700" : "#999"} />
-                      <Text style={[styles.rewardCardPointsText, !canAfford && styles.disabledText]}>
-                        {reward.points_required} points
-                      </Text>
-                    </View>
-                    {/* LOW STOCK WARNING */}
-                    {reward.stock_quantity && reward.stock_quantity <= 5 && (
-                      <View style={styles.stockWarning}>
-                        <Feather name="alert-triangle" size={12} color="#F59E0B" />
-                        <Text style={styles.stockWarningText}>Only {reward.stock_quantity} left!</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                <Text style={[styles.rewardCardDescription, !canAfford && styles.disabledText]}>
-                  {reward.description}
-                </Text>
-
-                {/* BUTTON */}
-                <View style={styles.rewardCardFooter}>
-                  <View style={{ flex: 1, alignContent:"center" }} />
-                  <TouchableOpacity
-                    style={[
-                      styles.rewardCardButton,
-                      !canAfford && styles.rewardCardButtonInsufficientPoints, // New style for insufficient points
-                    ]}
-                    onPress={(e) => {
-                      e.stopPropagation()
-                      if (canAfford) {
-                        handleAddToCart(reward)
-                      }
-                    }}
-                    disabled={!canAfford}
-                  >
-                    {canAfford ? (
-                      <View style={{flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center"}}>
-                      <Feather name="shopping-cart" color="white" size={18}/>
-                      <Text style={styles.rewardCardButtonText}>Add to Cart</Text>
-                      </View>
-                    ) : (
-                      <>
-                        <Feather name="lock" size={12} color="#EF4444" />
-                        <Text style={styles.rewardCardButtonInsufficientText}>
-                          Need {(reward.points_required - points).toLocaleString()} more points
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
+        <View style={styles.rewardsGrid}>
+          {rewards.map((reward, index) => (
+            <Animated.View
+              key={reward.id}
+              entering={FadeInUp.duration(400).delay(index * 50)}
+              style={[
+                styles.rewardCardWrapper,
+                // If it's an odd number and this is the last item, align it to the left
+                rewards.length % 2 !== 0 && index === rewards.length - 1 && styles.lastItemLeft,
+              ]}
+            >
+              <RewardCard
+                reward={reward}
+                userPoints={points}
+                onPress={handleItemPress}
+                onAddToCart={handleAddToCart}
+                cardWidth="100%"
+              />
             </Animated.View>
-          )
-        })
+          ))}
+        </View>
       ) : (
         <View style={styles.emptyState}>
           <Feather name="gift" size={64} color={colors.textSecondary} />
@@ -758,9 +574,12 @@ export default function PointsScreen() {
               entering={FadeInUp.duration(600).delay(index * 100)}
               style={styles.offerCardWrapper}
             >
-              <SpecialOfferCard 
-                  cardWidth="85%" 
-                  offer={offer} userPoints={points} onRedeem={handleSpecialOfferRedeem} />
+              <OfferCard
+                cardWidth="85%"
+                offer={offer}
+                userPoints={points}
+                onPress={() => handleItemPress(offer)}
+              />
             </Animated.View>
           ))}
         </View>
@@ -897,6 +716,7 @@ export default function PointsScreen() {
     <SafeAreaView style={styles.container}>
       <Image source={require("@/IMAGES/crowd.jpg")} style={styles.backgroundImage} />
       <StatusBar style="dark" />
+
       {/* Header with centered title */}
       <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -956,15 +776,8 @@ export default function PointsScreen() {
         </ScrollView>
       </View>
 
-      {/* Detail Modal */}
-      <DetailModal
-        visible={detailModalVisible}
-        onClose={() => setDetailModalVisible(false)}
-        item={selectedItem}
-        type={modalType}
-        userPoints={points}
-        onClaim={handleClaimItem}
-      />
+      {/* Unified Modal for both rewards and special offers */}
+      <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} />
     </SafeAreaView>
   )
 }
@@ -973,18 +786,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  rewardCardButtonInsufficientPoints: {
-    backgroundColor: "#FEE2E2", // Red background
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 15,
-  },
-  rewardCardButtonInsufficientText: {
-    color: "#EF4444",
-    fontSize: 12,
-    fontWeight: "600",
+  rewardsContainer: {
+    paddingTop: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -1223,6 +1026,7 @@ const styles = StyleSheet.create({
   },
   horizontalScroll: {
     paddingLeft: 20,
+    paddingRight: 20,
   },
   featuredRewardCard: {
     width: 160,
@@ -1396,114 +1200,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-  rewardCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    marginTop: 15,
-    marginBottom: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-    marginHorizontal: 20,
-    position: "relative",
-  },
-  rewardCardContent: {
-    padding: 20,
-  },
-  rewardCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  rewardIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary + "20",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    overflow: "hidden",
-  },
-  rewardCardInfo: {
-    flex: 1,
-  },
-  rewardCardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.text,
-    marginBottom: 4,
-  },
-  rewardCardCategory: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  stockWarning: {
-    position: "absolute",
-    top: -25,
-    right: -20,
-    backgroundColor: "#FEF3C7",
-    borderRadius: 12,
-    borderColor: "#D97706",
-    paddingHorizontal: 8,
-    borderWidth: 0.2,
-    paddingVertical: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    zIndex: 10,
-  },
-  stockWarningText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#D97706",
-    marginLeft: 4,
-  },
-  rewardCardDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  rewardCardFooter: {
-    width: "50%",
-    alignSelf: "center",
-  },
-  rewardCardPoints: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  rewardCardPointsText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.text,
-    marginLeft: 4,
-  },
-  rewardCardButton: {
-    flex:1,
-    alignItems: "flex-start",
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 22,
-    alignContent:"center",
-  },
-  rewardCardButtonDisabled: {
-    backgroundColor: colors.border,
-  },
-  rewardCardButtonText: {
-    color: "white",
-    fontSize: 14,
-    marginLeft:10,
-    fontWeight: "600",
-  },
-  rewardCardButtonTextDisabled: {
-    color: colors.textSecondary,
-  },
   historyCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1581,197 +1277,22 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingBottom: 20,
   },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  modalHeader: {
+  rewardsGrid: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 10,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 20,
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  modalContent: {
-    flex: 1,
-  },
-  modalImageContainer: {
-    height: 250,
-    backgroundColor: colors.primary + "10",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  modalImage: {
-    width: "100%",
-    height: "100%",
-  },
-  modalOfferBadge: {
-    position: "absolute",
-    top: 20,
-    right: 20,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  offerBadgeGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "#EF4444",
-  },
-  modalOfferBadgeText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "700",
-    marginLeft: 6,
-  },
-  modalDetailsContainer: {
-    padding: 24,
-  },
-  modalTitle: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: colors.text,
-    marginBottom: 8,
-    lineHeight: 34,
-  },
-  modalCategory: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.primary,
+  rewardCardWrapper: {
+    width: "48%",
     marginBottom: 16,
-    letterSpacing: 1,
   },
-  modalDescription: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  modalPointsSection: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-  },
-  modalPointsContainer: {
-    alignItems: "flex-start",
-  },
-  modalPricingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  modalOriginalPoints: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textDecorationLine: "line-through",
-  },
-  modalCurrentPoints: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  modalPointsText: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: colors.text,
-    marginLeft: 8,
-  },
-  modalSavingsBadge: {
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  modalSavingsText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#D97706",
-  },
-  modalInsufficientBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+  lastItemLeft: {
     alignSelf: "flex-start",
   },
-  modalInsufficientText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#EF4444",
-    marginLeft: 8,
-  },
-  modalUserPointsSection: {
-    backgroundColor: "#F0F9FF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-  },
-  modalUserPointsLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  modalUserPointsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  modalUserPointsText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.text,
-    marginLeft: 8,
-  },
-  modalFooter: {
-    padding: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  modalActionButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 36,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  modalActionButtonDisabled: {
-    backgroundColor: colors.border,
-    opacity: 0.6,
-  },
-  modalActionButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "white",
-    letterSpacing: 0.5,
-  },
-  modalActionButtonTextDisabled: {
-    color: colors.textSecondary,
+  featuredRewardCardContainer: {
+    marginRight: 12,
+    width: 160,
   },
 })

@@ -428,6 +428,7 @@ async function transformGameSchedules(gameSchedules: GameScheduleWithRelations[]
         status: status as any, // Cast to your GameStatus type
         location: schedule.location || "TBD",
         game_type: schedule.game_type || "TBD",
+        game_notes: schedule.game_notes || null,
         homeTeam,
         awayTeam,
         sport: {
