@@ -241,43 +241,49 @@ export default function PointsScreen() {
   }
 
   // Unified redeem handler
-  const handleItemRedeem = useCallback(
-    (item: RewardOrSpecial) => {
-      if (!userId) {
-        showError("Login Required", "Please log in to redeem items.")
-        return
-      }
+  // Replace your existing handleItemRedeem function with this fixed version:
 
-      if (points < item.points_required) {
-        showError("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
-        return
-      }
+const handleItemRedeem = useCallback(
+  (item: RewardOrSpecial) => {
+    if (!userId) {
+      showError("Login Required", "Please log in to redeem items.")
+      return
+    }
 
-      if (isSpecialOffer(item)) {
-        // Handle special offer redemption
-        showSuccess("Offer Redeemed!", `${item.title} has been redeemed successfully!`)
-        setModalVisible(false)
-        fetchData() // Refresh data to update points and offers
-      } else {
-        // Handle reward - add to cart
-        addToCart({
-          id: item.id,
-          title: item.title,
-          description: item.description || "",
-          points_required: item.points_required,
-          category: item.category || undefined,
-          image_url: item.image_url || undefined,
-        })
-        showSuccess("Added to Cart!", `${item.title} has been added to your cart.`)
-        setModalVisible(false)
-        setTimeout(() => {
-          router.push("../store/Checkout")
-        }, 1000)
-      }
-    },
-    [userId, points, addToCart, showSuccess, showError, router],
+    if (points < item.points_required) {
+      showError("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
+      return
+    }
+
+    // Create cart item object that works for both rewards and special offers
+    const cartItem = {
+      id: item.id,
+      title: item.title,
+      description: item.description || "",
+      points_required: item.points_required,
+      category: item.category || undefined,
+      image_url: item.image_url || undefined,
+      // Add item type to distinguish between rewards and special offers in cart
+      item_type: (isSpecialOffer(item) ? 'special_offer' : 'reward') as "special_offer" | "reward"
+    }
+
+    // Add to cart (works for both rewards and special offers)
+    addToCart(cartItem)
+    
+    // Show success message
+    const itemType = isSpecialOffer(item) ? 'Special Offer' : 'Reward'
+    showSuccess("Added to Cart!", `${itemType} "${item.title}" has been added to your cart.`)
+    
+    // Close modal
+    setModalVisible(false)
+    
+    // Refresh data to update points and availability
+    fetchData()
+  },
+  [userId, points, addToCart, showSuccess, showError, fetchData]
   )
 
+  // Also update your handleAddToCart function to be consistent:
   const handleAddToCart = (reward: Reward) => {
     if (!userId) {
       showError("Login Required", "Please log in to add rewards to cart.")
@@ -288,27 +294,22 @@ export default function PointsScreen() {
       return
     }
 
-    // Add to cart
-    addToCart({
+    // Create cart item with item_type
+    const cartItem = {
       id: reward.id,
       title: reward.title,
       description: reward.description || "",
       points_required: reward.points_required,
       category: reward.category || undefined,
       image_url: reward.image_url || undefined,
-    })
+      //item_type: "reward"
+    }
+
+    // Add to cart
+    addToCart(cartItem)
 
     // Show success notification
     showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
-
-    // Navigate to cart after a short delay
-    setTimeout(() => {
-      router.push("../store/Checkout")
-    }, 1000)
-  }
-
-  const handleSpecialOfferRedeem = (offer: SpecialOffer) => {
-    handleItemPress(offer)
   }
 
   const handleCloseModal = () => {
@@ -354,6 +355,10 @@ export default function PointsScreen() {
     return achievementColorMap[category] || colors.primary
   }
 
+  const [showAllPurchases, setShowAllPurchases] = useState(false)
+  const [showAllScans, setShowAllScans] = useState(false)
+  const [showAllAchievements, setShowAllAchievements] = useState(false)
+
   const renderOverview = () => (
     <>
       <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
@@ -377,7 +382,7 @@ export default function PointsScreen() {
           <View style={styles.statCard}>
             <Feather name="zap" size={24} color="#FF6B35" />
             <Text style={styles.statValue}>{userStatus?.current_streak || 0}</Text>
-            <Text style={styles.statLabel}>Day Streak</Text>
+            <Text style={styles.statLabel}>Game Streak</Text>
           </View>
           <View style={styles.statCard}>
             <Feather name="shopping-bag" size={24} color="#45B7D1" />
@@ -598,28 +603,42 @@ export default function PointsScreen() {
       {/* Purchase History Section */}
       <Text style={styles.sectionTitle3}>Purchase History</Text>
       {purchaseHistory.length > 0 ? (
-        purchaseHistory.map((purchase) => (
-          <Animated.View key={purchase.id} entering={FadeInUp.duration(400)} style={styles.historyCard}>
-            <View style={styles.historyIcon}>
-              <Feather
-                name={purchase.item_type === "special_offer" ? "zap" : "gift"}
-                size={24}
-                color={purchase.item_type === "special_offer" ? "#EF4444" : "#10B981"}
-              />
-            </View>
-            <View style={styles.historyInfo}>
-              <Text style={styles.historyTitle}>{purchase.item_title}</Text>
-              <Text style={styles.historySubtitle}>
-                {purchase.item_type === "special_offer" ? "Special Offer" : "Reward"} • Qty: {purchase.quantity}
+        <>
+          {purchaseHistory.slice(0, showAllPurchases ? purchaseHistory.length : 4).map((purchase, index) => (
+            <Animated.View key={purchase.id} entering={FadeInUp.duration(400).delay(index * 50)} style={styles.historyCard}>
+              <View style={styles.historyIcon}>
+                <Feather
+                  name={purchase.item_type === "special_offer" ? "zap" : "gift"}
+                  size={24}
+                  color={purchase.item_type === "special_offer" ? "#EF4444" : "#10B981"}
+                />
+              </View>
+              <View style={styles.historyInfo}>
+                <Text style={styles.historyTitle}>{purchase.item_title}</Text>
+                <Text style={styles.historySubtitle}>
+                  {purchase.item_type === "special_offer" ? "Special Offer" : "Reward"} • Qty: {purchase.quantity}
+                </Text>
+                <Text style={styles.historyDate}>{formatDate(purchase.purchase_date)}</Text>
+              </View>
+              <View style={styles.historyPoints}>
+                <Text style={styles.historyPointsValue}>-{purchase.points_used}</Text>
+                <Text style={styles.historyPointsLabel}>points</Text>
+              </View>
+            </Animated.View>
+          ))}
+          {purchaseHistory.length > 4 && (
+            <TouchableOpacity onPress={() => setShowAllPurchases(!showAllPurchases)} style={styles.seeAllButton}>
+              <Text style={styles.seeAllButtonText}>
+                {showAllPurchases ? "Show Less" : "See All Purchases"}
               </Text>
-              <Text style={styles.historyDate}>{formatDate(purchase.purchase_date)}</Text>
-            </View>
-            <View style={styles.historyPoints}>
-              <Text style={styles.historyPointsValue}>-{purchase.points_used}</Text>
-              <Text style={styles.historyPointsLabel}>points</Text>
-            </View>
-          </Animated.View>
-        ))
+              <Feather
+                name={showAllPurchases ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          )}
+        </>
       ) : (
         <View style={styles.emptyState}>
           <Feather name="shopping-bag" size={64} color={colors.textSecondary} />
@@ -631,21 +650,34 @@ export default function PointsScreen() {
       {/* Scan History Section */}
       <Text style={styles.sectionTitle3}>Scan History</Text>
       {scanHistory.length > 0 ? (
-        scanHistory.map((scan) => (
-          <Animated.View key={scan.id} entering={FadeInUp.duration(400)} style={styles.historyCard}>
-            <View style={styles.historyIcon}>
-              <Feather name="check-circle" size={24} color="#10B981" />
-            </View>
-            <View style={styles.historyInfo}>
-              <Text style={styles.historyTitle}>{scan.description}</Text>
-              <Text style={styles.historyDate}>{formatDate(scan.scanned_at || scan.created_at)}</Text>
-            </View>
-            <View style={styles.historyPoints}>
-              <Text style={styles.historyPointsValue}>+{scan.points}</Text>
-              <Text style={styles.historyPointsLabel}>points</Text>
-            </View>
-          </Animated.View>
-        ))
+        <>
+          {scanHistory.slice(0, showAllScans ? scanHistory.length : 4).map((scan, index) => (
+            <Animated.View key={scan.id} entering={FadeInUp.duration(400).delay(index * 50)} style={styles.historyCard}>
+              <View style={styles.historyIcon}>
+                <Feather name="check-circle" size={24} color="#10B981" />
+              </View>
+              <View style={styles.historyInfo}>
+                <Text style={styles.historyTitle}>{scan.description}</Text>
+                <Text style={styles.historyDate}>{formatDate(scan.scanned_at || scan.created_at)}</Text>
+              </View>
+              <View style={styles.historyPoints}>
+                <Text style={styles.historyPointsValue}>+{scan.points}</Text>
+              </View>
+            </Animated.View>
+          ))}
+          {scanHistory.length > 4 && (
+            <TouchableOpacity onPress={() => setShowAllScans(!showAllScans)} style={styles.seeAllButton}>
+              <Text style={styles.seeAllButtonText}>
+                {showAllScans ? "Show Less" : "See All Scans"}
+              </Text>
+              <Feather
+                name={showAllScans ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          )}
+        </>
       ) : (
         <View style={styles.emptyState}>
           <Feather name="clock" size={64} color={colors.textSecondary} />
@@ -658,38 +690,52 @@ export default function PointsScreen() {
       <View style={styles.achievementsHistorySection}>
         <Text style={styles.sectionTitle3}>All Achievements</Text>
         {userAchievements.length > 0 ? (
-          <View style={styles.achievementsContainer}>
-            {userAchievements.map((achievement) => {
-              const iconName = getAchievementIcon(achievement)
-              const iconColor = getAchievementColor(achievement)
-              return (
-                <Animated.View
-                  key={achievement.id}
-                  entering={FadeInUp.duration(400).delay(100 * userAchievements.indexOf(achievement))}
-                  style={styles.achievementCard}
-                >
-                  <View style={[styles.achievementIconContainer, { backgroundColor: `${iconColor}20` }]}>
-                    <Feather name={iconName as any} size={24} color={iconColor} />
-                  </View>
-                  <View style={styles.achievementContent}>
-                    <Text style={styles.achievementTitle}>{achievement.achievement_name}</Text>
-                    <Text style={styles.achievementDescription} numberOfLines={2}>
-                      {achievement.achievement_description || "Complete special tasks to earn points"}
-                    </Text>
-                    <View style={styles.achievementMeta}>
-                      <View style={styles.achievementPoints}>
-                        <Feather name="star" size={12} color="#FFD700" />
-                        <Text style={styles.achievementPointsText}>{achievement.points_earned || 0} points</Text>
-                      </View>
-                      <Text style={styles.achievementDate}>
-                        {achievement.earned_at ? formatDate(achievement.earned_at) : "Recently earned"}
-                      </Text>
+          <>
+            <View style={styles.achievementsContainer}>
+              {userAchievements.slice(0, showAllAchievements ? userAchievements.length : 4).map((achievement, index) => {
+                const iconName = getAchievementIcon(achievement);
+                const iconColor = getAchievementColor(achievement);
+                return (
+                  <Animated.View
+                    key={achievement.id}
+                    entering={FadeInUp.duration(400).delay(100 * index)}
+                    style={styles.achievementCard}
+                  >
+                    <View style={[styles.achievementIconContainer, { backgroundColor: `${iconColor}20` }]}>
+                      <Feather name={iconName as any} size={24} color={iconColor} />
                     </View>
-                  </View>
-                </Animated.View>
-              )
-            })}
-          </View>
+                    <View style={styles.achievementContent}>
+                      <Text style={styles.achievementTitle}>{achievement.achievement_name}</Text>
+                      <Text style={styles.achievementDescription} numberOfLines={2}>
+                        {achievement.achievement_description || "Complete special tasks to earn points"}
+                      </Text>
+                      <View style={styles.achievementMeta}>
+                        <View style={styles.achievementPoints}>
+                          <Feather name="star" size={12} color="#FFD700" />
+                          <Text style={styles.achievementPointsText}>{achievement.points_earned || 0} points</Text>
+                        </View>
+                        <Text style={styles.achievementDate}>
+                          {achievement.earned_at ? formatDate(achievement.earned_at) : "Recently earned"}
+                        </Text>
+                      </View>
+                    </View>
+                  </Animated.View>
+                );
+              })}
+            </View>
+            {userAchievements.length > 4 && (
+              <TouchableOpacity onPress={() => setShowAllAchievements(!showAllAchievements)} style={styles.seeAllButton}>
+                <Text style={styles.seeAllButtonText}>
+                  {showAllAchievements ? "Show Less" : "See All Achievements"}
+                </Text>
+                <Feather
+                  name={showAllAchievements ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+            )}
+          </>
         ) : (
           <View style={styles.emptyAchievements}>
             <Feather name="award" size={48} color={colors.textSecondary} />
@@ -700,6 +746,7 @@ export default function PointsScreen() {
       </View>
     </ScrollView>
   )
+
 
   if (loading) {
     return (
@@ -807,6 +854,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     justifyContent: "space-between",
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 15,
+    paddingVertical: 12,
+    marginHorizontal:40,
+    marginBottom: 10,
+    shadowColor: colors.background,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  seeAllButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    marginRight: 8,
   },
   backgroundImage: {
     position: "absolute",

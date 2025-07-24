@@ -8,7 +8,7 @@ import type { Game, Team } from "@/types/updated_types"
 import Feather from "@expo/vector-icons/Feather"
 import { Linking } from "react-native"
 import Animated, { FadeInDown } from "react-native-reanimated"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react" // Added useCallback
 import { getGameById } from "@/app/actions/games"
 import { getTeamById } from "@/app/actions/teams"
 import { useNotifications } from "@/context/notification-context"
@@ -39,6 +39,47 @@ export default function GameDetailsScreen() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [gameNewsStory, setGameNewsStory] = useState<NewsStory | null>(null)
+
+  // Helper function to parse 12-hour time to 24-hour format
+  const parse12HourTime = useCallback((timeStr: string): string => {
+    try {
+      // Handle cases like "7:00 PM" or "10:30 AM"
+      const [time, modifier] = timeStr.toUpperCase().split(" ")
+      let [hours, minutes] = time.split(":").map(Number)
+
+      if (modifier === "PM" && hours < 12) {
+        hours += 12
+      }
+      if (modifier === "AM" && hours === 12) {
+        hours = 0 // Midnight (12 AM) is 0 hours
+      }
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+    } catch (e) {
+      console.error("Error parsing 12-hour time:", timeStr, e)
+      // Fallback to a default or original string if parsing fails
+      return "00:00:00"
+    }
+  }, []);
+
+  // Calculate game start and end times
+  const getGameTimings = useCallback((gameData: Game) => {
+    const gameDate = new Date(gameData.date);
+    let gameStartTime = new Date(gameDate); // Initialize with date part
+
+    if (gameData.time) {
+      const time24h = parse12HourTime(gameData.time);
+      // Combine date and 24h time string
+      gameStartTime = new Date(`${gameDate.toISOString().split('T')[0]}T${time24h}`);
+    } else {
+      // If no time is provided, assume midnight of the game date
+      gameStartTime.setHours(0, 0, 0, 0);
+    }
+
+    const gameEndTime = new Date(gameStartTime.getTime() + 60 * 60 * 1000); // 1 hour after game start
+
+    return { gameStartTime, gameEndTime };
+  }, [parse12HourTime]);
+
 
   // Fetch game data on component mount
   useEffect(() => {
@@ -127,64 +168,29 @@ export default function GameDetailsScreen() {
     )
   }
 
-  // Enhanced game status logic with proper date comparison
+  // --- Date and Time Calculations ---
   const now = new Date()
-  const gameDate = new Date(game.date)
-
-  // If game has time, set it properly for comparison
-  if (game.time) {
-    console.log("Game time:", game.time)
-    const [hours, minutes] = game.time.split(":")
-    gameDate.setHours(Number.parseInt(hours), Number.parseInt(minutes))
-    console.log("Game date with time:", gameDate)
-    console.log("Current date:", now)
-  }
+  const { gameStartTime, gameEndTime } = getGameTimings(game) // Use the memoized helper
 
   const isCompleted = game.status === "completed"
-  //const isLive = game.status === "live"
   const isPostponed = game.status === "postponed"
   const isCanceled = game.status === "canceled"
 
-  const gameDateStr = gameDate.toISOString().split("T")[0]; // "2025-07-16"
-  const nowDateStr = now.toISOString().split("T")[0];       // "2025-07-16"
-
+  const gameDateStr = gameStartTime.toISOString().split("T")[0];
+  const nowDateStr = now.toISOString().split("T")[0];
 
   // Check if game is actually in the past (but not completed)
-  const isGameInPast = gameDateStr < nowDateStr;
-  console.log("Is game in past:", isGameInPast, "Game date:", gameDateStr, "Now date:", nowDateStr)
-
+  const isGameInPast = gameDateStr < nowDateStr || (gameDateStr === nowDateStr && now > gameEndTime && !isCompleted);
   const isPostponedInPast = isPostponed && isGameInPast
 
   // Check if game is today
-  const isToday = now.toDateString() === gameDate.toDateString()
+  const isToday = now.toDateString() === gameStartTime.toDateString()
 
+  // Determine if the game is currently "live" (started and within 1 hour duration)
+  const isLive = now >= gameStartTime && now <= gameEndTime;
   // Check if game is within an hour from now (for QR code button)
-  const gameDateTime = new Date(game.date)
-  if (game.time) {
-    const [hours, minutes] = game.time.split(":")
-    gameDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes))
-  }
-  const timeDiff = gameDateTime.getTime() - now.getTime()
-  const hoursUntilGame = timeDiff / (1000 * 60 * 60)
-  const isWithinAnHour = hoursUntilGame <= 1 && hoursUntilGame >= 0
-  console.log("Is within an hour:", isWithinAnHour, "Time diff (hours):", hoursUntilGame)
-
-if (game.time) {
-  const [hours, minutes] = game.time.split(":");
-  gameDateTime.setHours(Number.parseInt(hours), Number.parseInt(minutes), 0, 0);
-}
-
-
-  const gameEndTime = new Date(gameDateTime.getTime() + 1.5 * 60 * 60 * 1000); // game start + 1.5 hours
-
-  const isLive = now >= gameDateTime && now <= gameEndTime;
-
-  console.log("Is within an hour:", isWithinAnHour, "Time diff (hours):", hoursUntilGame);
-  console.log("Game start time:", gameDateTime.toISOString());
-  console.log("Game end time (1.5 hrs after start):", gameEndTime.toISOString());
-  console.log("Is game live now:", isLive);
-  
-  console.log("game game_notes:", game.game_notes)
+  const timeDiffUntilGame = gameStartTime.getTime() - now.getTime();
+  const isWithinAnHour = timeDiffUntilGame <= 60 * 60 * 1000 && timeDiffUntilGame >= 0;
   // Determine if it's truly upcoming (scheduled AND in the future)
   const isUpcoming =
     (game.status === "scheduled" || (!isCompleted && !isLive && !isPostponed && !isCanceled)) && !isGameInPast
@@ -230,7 +236,7 @@ if (game.time) {
         bgColor: "#EF4444",
         gradient: ["#EF4444", "#DC2626"] as const,
       }
-    if (isGameInPast && !isCompleted)
+    if (isGameInPast && !isCompleted) // If it's in the past and not explicitly completed, it's finished
       return {
         text: "FINISHED",
         color: "#FFFFFF",
@@ -291,36 +297,27 @@ if (game.time) {
   }
 
   const handleQRScanPress = () => {
-    router.push("../(tabs)/qr_code")
+     router.push({ pathname: "../(tabs)/qr_code", params: { id: game.id } })
   }
 
   const handleMatchupHistoryPress = () => {
-    router.push(`../(tabs)/qr_code`)
+    // This route might need to be adjusted based on your actual file structure
+    // If it's also a tab, it should probably be accessed similarly to `qr_code`
+    router.push(`../(tabs)/matchup_history`) // Assuming a matchup_history tab
   }
 
-  const isURL = (str: string) => {
-    try {
-      new URL(str)
-      return true
-    } catch {
-      return false
+  const handleGameNotesPress = async () => {
+    if (!game.game_notes) {
+      Alert.alert("No Game Notes", "Game notes are not available for this game.")
+      return
     }
-  }
 
-  const handleGamegame_notesPress = async () => {
-  if (!game.game_notes ) {
-    Alert.alert("No Game game_notes", "Game game_notes are not available.")
-    return
-  }
-
-  try {
+    try {
       const isPdf = game.game_notes.toLowerCase().endsWith(".pdf")
 
       if (isPdf) {
-        // Open PDF in system browser or fallback PDF viewer
         await WebBrowser.openBrowserAsync(game.game_notes)
       } else {
-        // Open regular link
         const supported = await Linking.canOpenURL(game.game_notes)
         if (supported) {
           await Linking.openURL(game.game_notes)
@@ -329,7 +326,7 @@ if (game.time) {
         }
       }
     } catch (err) {
-      console.error("Failed to open game game_notes:", err)
+      console.error("Failed to open game notes:", err)
       Alert.alert("Error", "Something went wrong while opening the file.")
     }
   }
@@ -344,15 +341,15 @@ if (game.time) {
   }
 
   const getColor = () => {
-      if (game.score) {
-        if (game.score?.away < game.score?.home) {
-          return "#10B981"
-        } else {
-          return "rgba(129, 25, 25, 0.84)"
-        }
+    if (game.score) {
+      if (game.score?.home > game.score?.away) { // Home team wins, show green
+        return "#10B981"
+      } else if (game.score?.away > game.score?.home) { // Away team wins, show red
+        return "rgba(129, 25, 25, 0.84)"
       }
-      return "#10B981"
     }
+    return colors.text; // Default color if no score or tie
+  }
 
   return (
     <View style={styles.container}>
@@ -376,8 +373,8 @@ if (game.time) {
         <View style={styles.contentContainer}>
           {/* Game Details Card */}
           <Animated.View entering={FadeInDown.duration(400)} style={styles.detailsCard}>
-            {/* Status Badge - Only show if TODAY or LIVE */}
-            {getStatusInfo() && (
+            {/* Status Badge */}
+            {statusInfo && (
               <View style={styles.topRow}>
                 <LinearGradient
                   colors={statusInfo.gradient}
@@ -388,7 +385,8 @@ if (game.time) {
                   {isLive && <View style={styles.liveDot} />}
                   <Text style={styles.statusText}>
                     {statusInfo.text}
-                    {!isCompleted && !isCanceled && !isGameInPast && ` • EARN ${game.points} POINTS`}
+                    {/* Only show points for upcoming/today/live games */}
+                    {!isCompleted && !isCanceled && !isPostponedInPast && !isGameInPast && ` • EARN ${game.points} POINTS`}
                   </Text>
                 </LinearGradient>
               </View>
@@ -459,7 +457,7 @@ if (game.time) {
                 </View>
               )}
 
-              {game.special_events && (
+              {((game.special_events) && !isCanceled) && (
                 <View style={styles.infoRow}>
                   <View style={[styles.infoIconContainer, { backgroundColor: teamColor }]}>
                     <Feather name="star" size={20} color="white" />
@@ -548,7 +546,7 @@ if (game.time) {
                   </Pressable>
                 )}
 
-                {/* QR Code Button - Show if live or within an hour */}
+                {/* QR Code Button - Show if live OR within an hour of start */}
                 {(isLive || isWithinAnHour) && (
                   <Pressable style={[styles.actionButton]} onPress={handleQRScanPress}>
                     <LinearGradient
@@ -558,7 +556,7 @@ if (game.time) {
                       style={StyleSheet.absoluteFill}
                     />
                     <View style={styles.actionButtonIcon}>
-                      <Ionicons name="qr-code" size={20} color="white" />
+                      <Ionicons name="qr-code-sharp" size={20} color="white" />
                     </View>
                     <Text style={[styles.actionButtonText, { color: "white" }]}>Scan QR Code</Text>
                   </Pressable>
@@ -568,35 +566,38 @@ if (game.time) {
           )}
 
           {/* Additional Information */}
-          <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.additionalInfoCard}>
-            <Text style={styles.sectionTitle}>Additional Information</Text>
-            {gameNewsStory && (
-            <Pressable style={styles.infoLink} onPress={handleNewsPress}>
-              <Feather name="book-open" size={20} color={teamColor} />
-              <Text style={styles.infoLinkText}>Read Game Story</Text>
-              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-            </Pressable>
-            )}
-            {game.game_notes && (
-              <Pressable style={styles.infoLink} onPress={handleGamegame_notesPress}>
-              <Feather name="file-text" size={20} color={teamColor} />
-              <Text style={styles.infoLinkText}>Game Notes</Text>
-              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-            </Pressable>
-            )}
-            <Pressable style={styles.infoLink} onPress={handleMatchupHistoryPress}>
-              <Feather name="bar-chart-2" size={20} color={teamColor} />
-              <Text style={styles.infoLinkText}>Matchup History</Text>
-              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
-            </Pressable>
-            {!isCompleted && !isPostponed && !isCanceled && !isGameInPast && (
-              <Pressable style={styles.infoLink} onPress={handleTicketPress}>
-                <Ionicons name="ticket-outline" size={20} color={teamColor} />
-                <Text style={styles.infoLinkText}>Tickets available online or at the entrance</Text>
+          {(gameNewsStory || game.game_notes) && (
+            <Animated.View entering={FadeInDown.duration(400).delay(200)} style={styles.additionalInfoCard}>
+              <Text style={styles.sectionTitle}>Additional Information</Text>
+              {gameNewsStory && (
+                <Pressable style={styles.infoLink} onPress={handleNewsPress}>
+                  <Feather name="book-open" size={20} color={teamColor} />
+                  <Text style={styles.infoLinkText}>Read Game Story</Text>
+                  <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+                </Pressable>
+              )}
+              {game.game_notes && (
+                <Pressable style={styles.infoLink} onPress={handleGameNotesPress}>
+                  <Feather name="file-text" size={20} color={teamColor} />
+                  <Text style={styles.infoLinkText}>Game Notes</Text>
+                  <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+                </Pressable>
+              )}
+              {/* Matchup History should probably be a dedicated screen, not just a QR code. */}
+              <Pressable style={styles.infoLink} onPress={handleMatchupHistoryPress}>
+                <Feather name="bar-chart-2" size={20} color={teamColor} />
+                <Text style={styles.infoLinkText}>Matchup History</Text>
                 <Feather name="chevron-right" size={20} color={colors.textSecondary} />
               </Pressable>
-            )}
-          </Animated.View>
+              {!isCompleted && !isPostponed && !isCanceled && !isGameInPast && (
+                <Pressable style={styles.infoLink} onPress={handleTicketPress}>
+                  <Ionicons name="ticket-outline" size={20} color={teamColor} />
+                  <Text style={styles.infoLinkText}>Tickets available online or at the entrance</Text>
+                  <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+                </Pressable>
+              )}
+            </Animated.View>
+          )}
         </View>
       </ScrollView>
     </View>

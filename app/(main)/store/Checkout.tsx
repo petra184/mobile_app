@@ -1,10 +1,11 @@
 "use client"
+
 import type React from "react"
 import { useState, useCallback, useEffect } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { Feather } from "@expo/vector-icons"
-import { useRouter, useLocalSearchParams } from "expo-router"
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router"
 import { colors } from "@/constants/colors"
 import { useCart, type CartItem } from "@/context/cart-context"
 import { useUserStore } from "@/hooks/userStore"
@@ -15,318 +16,163 @@ import Animated, { FadeInUp } from "react-native-reanimated"
 const RewardsCheckoutScreen: React.FC = () => {
   const router = useRouter()
   const params = useLocalSearchParams()
-  const { items, totalItems, totalPoints, updateQuantity, removeFromCart, clearCart, isLoading } = useCart()
-  const { points, userId, userEmail, redeemPoints } = useUserStore() // Added userEmail here
+  const { items, totalItems, totalPoints, updateQuantity, removeFromCart, clearCart, isLoading, refreshCart } =
+    useCart()
+  const { points, userId, userEmail, redeemPoints } = useUserStore()
   const { showSuccess, showError } = useNotifications()
   const [processing, setProcessing] = useState(false)
+  const [screenLoading, setScreenLoading] = useState(true)
+
   const canAfford = points >= totalPoints
   const hasItems = items.length > 0
 
-  // Force refresh cart when params change (coming from store screen)
+  useFocusEffect(
+    useCallback(() => {
+      console.log("🔄 Checkout screen focused, ensuring cart is loaded...")
+      const loadCart = async () => {
+        setScreenLoading(true)
+        await refreshCart()
+        setTimeout(() => {
+          setScreenLoading(false)
+        }, 100)
+      }
+      loadCart()
+    }, [refreshCart]),
+  )
+
   useEffect(() => {
     if (params.timestamp) {
       console.log("🔄 Checkout screen refreshed with new params:", params)
+      refreshCart()
     }
-  }, [params])
+  }, [params, refreshCart])
 
-  // Debug cart state
   useEffect(() => {
-    console.log("🛒 Checkout screen - Cart state:", {
+    console.log("🛒 Checkout screen - Detailed cart state:", {
       items: items.length,
+      itemsArray: items,
       totalItems,
       totalPoints,
       isLoading,
+      screenLoading,
       userPoints: points,
       canAfford,
+      hasItems,
+      userId,
     })
-  }, [items, totalItems, totalPoints, isLoading, points, canAfford])
+  }, [items, totalItems, totalPoints, isLoading, screenLoading, points, canAfford, hasItems, userId])
 
+  useEffect(() => {
+    console.log(
+      "🛒 Cart items detailed:",
+      items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        quantity: item.quantity,
+      })),
+    )
+  }, [items])
+
+  // --- MODIFIED handleQuantityChange ---
   const handleQuantityChange = useCallback(
     (id: string, change: number) => {
+      console.log("🔄 Quantity change requested:", { id, change })
+
       const item = items.find((item) => item.id === id)
       if (item) {
         const newQuantity = item.quantity + change
-        if (newQuantity > 0) {
-          updateQuantity(id, newQuantity)
-        } else {
-          removeFromCart(id)
-        }
+        console.log("📊 Quantity calculation:", { currentQuantity: item.quantity, change, newQuantity })
+
+        // The key is to pass the 'newQuantity' to updateQuantity.
+        // Your CartProvider's updateQuantity correctly handles quantity <= 0 by calling removeFromCart.
+        updateQuantity(id, newQuantity)
+      } else {
+        console.log("❌ Item not found in cart:", id)
       }
     },
-    [items, updateQuantity, removeFromCart],
+    [items, updateQuantity], // Dependencies for useCallback
   )
 
   const handleRemoveItem = useCallback(
     (id: string) => {
+      console.log("REMOVE THE ITEM VHDVSJKXNC SGVDNK🗑️ Remove item requested (trash icon):", id)
       removeFromCart(id)
     },
     [removeFromCart],
   )
-
-  // Database lookup to determine if item is a special offer or reward
-  const determineItemType = useCallback(
-    async (itemId: string): Promise<{ isSpecialOffer: boolean; exists: boolean }> => {
-      try {
-        // First check if the item exists in special_offers table
-        const { data: specialOffer, error: specialOfferError } = await supabase
-          .from("special_offers")
-          .select("id")
-          .eq("id", itemId)
-          .single()
-        if (specialOffer && !specialOfferError) {
-          return { isSpecialOffer: true, exists: true }
-        }
-        // If not found in special_offers, check if it exists in rewards table
-        const { data: reward, error: rewardError } = await supabase
-          .from("rewards")
-          .select("id")
-          .eq("id", itemId)
-          .single()
-        if (reward && !rewardError) {
-          return { isSpecialOffer: false, exists: true }
-        }
-        // If not found in either table
-        return { isSpecialOffer: false, exists: false }
-      } catch (error) {
-        console.error(`Error determining item type for ${itemId}:`, error)
-        return { isSpecialOffer: false, exists: false }
-      }
-    },
-    [],
-  )
+  // --- END handleRemoveItem ---
 
   const processCheckout = useCallback(async () => {
     setProcessing(true)
     try {
-      // Verify user is authenticated and get the session
       const {
-        data: { session }, // Get the session object
+        data: { session },
         error: authError,
       } = await supabase.auth.getSession()
 
       if (authError || !session || !session.user) {
         throw new Error("User not authenticated or session not found")
       }
-      const user = session.user // Extract the user from the session
-      const accessToken = session.access_token // Get the access_token from the session
 
-      // Create a snapshot of current cart items before clearing
+      const accessToken = session.access_token
       const cartSnapshot = [...items]
       const snapshotTotalItems = totalItems
       const snapshotTotalPoints = totalPoints
+
       console.log("🛒 Processing checkout with items:", cartSnapshot)
-      console.log("🔐 Authenticated user:", user.id)
 
-      // Determine item types for all items first
-      const itemsWithTypes = await Promise.all(
-        cartSnapshot.map(async (item) => {
-          const { isSpecialOffer, exists } = await determineItemType(item.id)
-          if (!exists) {
-            throw new Error(`Item "${item.title}" not found in database`)
-          }
-          return {
-            ...item,
-            isSpecialOffer,
-          }
-        }),
-      )
+      const CHECKOUT_URL = process.env.EXPO_PUBLIC_SUPABASE_CHECKOUT_FUNCTION_URL
 
-      // Determine transaction subtype
-      const hasRewards = itemsWithTypes.some((item) => !item.isSpecialOffer)
-      const hasOffers = itemsWithTypes.some((item) => item.isSpecialOffer)
-      let transactionSubtype = "reward_only"
-      if (hasRewards && hasOffers) transactionSubtype = "mixed"
-      else if (hasOffers) transactionSubtype = "offer_only"
+      if (!CHECKOUT_URL) {
+        throw new Error("Checkout service not configured. Please contact support.")
+      }
 
-      // Generate a unique 6-digit confirmation number
-      // Note: While Math.random provides a good distribution,
-      // the UNIQUE constraint on the database column will ensure true uniqueness.
-      // If a collision occurs, the insert will fail, and the error will be caught.
-      const confirmationNumber = Math.floor(Math.random() * 900000 + 100000).toString()
-
-      // Start a transaction - make sure to use the authenticated user's ID
-      const { data: transaction, error: transactionError } = await supabase
-        .from("reward_transactions")
-        .insert({
-          user_id: user.id, // Use the authenticated user's ID
-          transaction_type: "reward_purchase",
-          transaction_subtype: transactionSubtype,
-          total_points_used: snapshotTotalPoints,
-          items: itemsWithTypes.map((item) => ({
+      const response = await fetch(CHECKOUT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          cartItems: cartSnapshot.map((item) => ({
             id: item.id,
             title: item.title,
             points_required: item.points_required,
             quantity: item.quantity,
-            total_points: item.points_required * item.quantity,
-            item_type: item.isSpecialOffer ? "special_offer" : "reward",
+            description: item.description,
+            image_url: item.image_url,
           })),
-          status: "completed",
-          confirmation_number: confirmationNumber, // Store the generated confirmation number
-        })
-        .select()
-        .single()
+          totalPoints: snapshotTotalPoints,
+          totalItems: snapshotTotalItems,
+        }),
+      })
 
-      if (transactionError) {
-        console.error("Transaction error:", transactionError)
-        throw new Error("Failed to create transaction record")
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Checkout API error:", response.status, errorText)
+        throw new Error(`Checkout failed: ${response.status} ${response.statusText}`)
       }
-      console.log("✅ Transaction created:", transaction.id)
 
-      // Process each item and create unified transaction items
-      for (const item of itemsWithTypes) {
-        const itemType = item.isSpecialOffer ? "special_offer" : "reward"
-        console.log(`Processing ${itemType}: ${item.title}`)
-
-        // Insert unified transaction item with correct foreign key
-        const transactionItemData = {
-          transaction_id: transaction.id,
-          quantity: item.quantity,
-          points_per_item: item.points_required,
-          total_points: item.points_required * item.quantity,
-          item_title: item.title,
-          item_type: itemType,
-          ...(item.isSpecialOffer
-            ? { special_offer_id: item.id, reward_id: null }
-            : { reward_id: item.id, special_offer_id: null }),
-        }
-        const { error: itemError } = await supabase.from("transaction_items").insert(transactionItemData)
-        if (itemError) {
-          console.error("Transaction item error:", itemError)
-          throw new Error(`Failed to create transaction item for ${item.title}`)
-        }
-
-        // Handle item-specific logic
-        if (item.isSpecialOffer) {
-          // Mark special offer as claimed
-          const { data: claimResult, error: claimError } = await supabase.rpc("mark_special_offer_as_claimed", {
-            p_offer_id: item.id,
-            p_quantity: item.quantity,
-          })
-          if (claimError || !claimResult) {
-            console.error("Special offer claim error:", claimError)
-            throw new Error(`Failed to claim special offer ${item.title}`)
-          }
-        } else {
-          // Mark reward as purchased using the database function
-          const { data: markResult, error: markError } = await supabase.rpc("mark_reward_as_purchased", {
-            p_reward_id: item.id,
-            p_quantity: item.quantity,
-          })
-          if (markError || !markResult) {
-            console.error("Reward mark error:", markError)
-            throw new Error(`Failed to update stock for reward ${item.title}`)
-          }
-        }
-
-        // Create unified redemption record
-        const redemptionData = {
-          user_id: user.id, // Use the authenticated user's ID
-          item_title: item.title,
-          item_type: itemType,
-          points_used: item.points_required * item.quantity,
-          quantity: item.quantity,
-          status: "completed",
-          ...(item.isSpecialOffer
-            ? { special_offer_id: item.id, reward_id: null }
-            : { reward_id: item.id, special_offer_id: null }),
-        }
-        const { error: redemptionError } = await supabase.from("user_redemptions_unified").insert(redemptionData)
-        if (redemptionError) {
-          console.error("Redemption error:", redemptionError)
-          throw new Error(`Failed to create redemption record for ${item.title}`)
-        }
-
-        // Record purchase history
-        const { error: purchaseHistoryError } = await supabase.rpc("record_purchase_history", {
-          p_user_id: user.id,
-          p_item_id: item.id,
-          p_item_title: item.title,
-          p_item_type: itemType,
-          p_points_used: item.points_required * item.quantity,
-          p_quantity: item.quantity,
-          p_transaction_id: transaction.id,
-        })
-        if (purchaseHistoryError) {
-          console.error("Purchase history error:", purchaseHistoryError)
-          // Don't throw error for purchase history as it's not critical
-        }
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.error || "Checkout failed")
       }
-      console.log("✅ All transaction items and redemptions created")
 
-      // Create points transaction record - use the authenticated user's ID
-      const pointsTransactionData = {
-        user_id: user.id, // Use the authenticated user's ID
-        points_change: -snapshotTotalPoints,
-        transaction_type: "redemption",
-        source_type: transactionSubtype,
-        source_id: transaction.id,
-        description: `Redeemed ${snapshotTotalItems} item${snapshotTotalItems > 1 ? "s" : ""} for ${snapshotTotalPoints} points`,
-      }
-      console.log("📝 Creating points transaction:", pointsTransactionData)
-      const { error: pointsTransactionError } = await supabase.from("points_transactions").insert(pointsTransactionData)
-      if (pointsTransactionError) {
-        console.error("Points transaction error:", pointsTransactionError)
-        throw new Error("Failed to create points transaction record")
-      }
-      console.log("✅ Points transaction created")
+      console.log("✅ Checkout completed successfully:", result)
 
-      // Deduct points from user
       await redeemPoints(snapshotTotalPoints)
-
-      // NEW: Send confirmation email directly via Supabase Edge Function
-      if (userEmail && accessToken) {
-        // Ensure accessToken is available
-        const SUPABASE_EDGE_FUNCTION_EMAIL_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_EMAIL_URL // Access Expo public env var
-        if (!SUPABASE_EDGE_FUNCTION_EMAIL_URL) {
-          console.error("SUPABASE_EDGE_FUNCTION_EMAIL_URL is not configured. Skipping email sending.")
-          showError("Email Sending Failed", "Email service not configured. Please contact support.")
-        } else {
-          console.log("📧 Sending redemption confirmation email...")
-          const response = await fetch(SUPABASE_EDGE_FUNCTION_EMAIL_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              // Add the Authorization header with the user's access token
-              Authorization: `Bearer ${accessToken}`, // Use accessToken from the session
-            },
-            body: JSON.stringify({
-              userEmail: userEmail, // Use userEmail from the Zustand store
-              redeemedItems: itemsWithTypes.map((item) => ({
-                id: item.id,
-                title: item.title,
-                points_required: item.points_required,
-                quantity: item.quantity,
-                isSpecialOffer: item.isSpecialOffer,
-              })),
-              confirmationNumber: confirmationNumber, // Pass the generated confirmation number
-            }),
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json()
-            console.error("Failed to send redemption email via Edge Function:", errorData)
-            showError("Email Sending Failed", "Could not send confirmation email. Please check your email address.")
-          } else {
-            console.log("✅ Redemption email sent successfully.")
-          }
-        }
-      } else {
-        console.warn("User email or access token not available, skipping email confirmation.")
-      }
-
-      // Clear cart first
-      console.log("🧹 Clearing cart after successful purchase")
       await clearCart()
 
-      // Show success message
       showSuccess(
-        "Purchase Successful!",
-        `You've successfully redeemed ${snapshotTotalItems} item${snapshotTotalItems > 1 ? "s" : ""} for ${snapshotTotalPoints} points. A confirmation email has been sent. Your confirmation number is #${confirmationNumber}.`, // Updated success message
+        "Success!",
+        `You've successfully redeemed ${snapshotTotalItems} item${
+          snapshotTotalItems > 1 ? "s" : ""
+        } for ${snapshotTotalPoints} points.${
+          result.confirmation_number ? ` Confirmation #${result.confirmation_number}.` : ""
+        }`,
       )
 
-      // Navigate back after a short delay
       setTimeout(() => {
-        console.log("🚀 Navigating back to store")
         router.back()
       }, 1000)
     } catch (error) {
@@ -335,36 +181,24 @@ const RewardsCheckoutScreen: React.FC = () => {
     } finally {
       setProcessing(false)
     }
-  }, [
-    items,
-    totalItems,
-    totalPoints,
-    userId,
-    userEmail, // Added to dependencies
-    redeemPoints,
-    clearCart,
-    showSuccess,
-    showError,
-    router,
-    determineItemType,
-  ])
+  }, [items, totalItems, totalPoints, userEmail, redeemPoints, clearCart, showSuccess, showError, router])
 
   const handleCheckout = useCallback(async () => {
     if (!userId) {
-      Alert.alert("Login Required", "Please log in to complete your purchase.")
+      Alert.alert("Login Required", "Please log in to complete your order.")
       return
     }
     if (!canAfford) {
-      Alert.alert("Insufficient Points", `You need ${totalPoints - points} more points to complete this purchase.`)
+      Alert.alert("Insufficient Points", `You need ${totalPoints - points} more points to place this order.`)
       return
     }
     if (!hasItems) {
-      Alert.alert("Empty Cart", "Please add some items to your cart before checking out.")
+      Alert.alert("Empty Cart", "Please add some items to your cart before placing the order.")
       return
     }
 
     Alert.alert(
-      "Confirm Purchase",
+      "Confirm Order",
       `Are you sure you want to redeem ${totalItems} item${totalItems > 1 ? "s" : ""} for ${totalPoints} points?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -373,8 +207,7 @@ const RewardsCheckoutScreen: React.FC = () => {
     )
   }, [userId, canAfford, hasItems, totalItems, totalPoints, points, processCheckout])
 
-  // Show loading state while cart is loading
-  if (isLoading) {
+  if (isLoading || screenLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -387,8 +220,8 @@ const RewardsCheckoutScreen: React.FC = () => {
 
   const renderCartItem = (item: CartItem, index: number) => {
     const itemCanAfford = points >= item.points_required * item.quantity
-    // For rendering purposes, use a simple heuristic (will be properly determined during checkout)
-    const itemIsSpecialOffer = item.category === "special_offer" || item.title.toLowerCase().includes("offer")
+    const itemIsSpecialOffer = item.item_type === "special_offer" || item.category === "special_offer"
+
     return (
       <Animated.View key={item.id} entering={FadeInUp.duration(400).delay(index * 100)} style={styles.cartItem}>
         <View style={styles.itemImageContainer}>
@@ -417,7 +250,7 @@ const RewardsCheckoutScreen: React.FC = () => {
             {item.description}
           </Text>
           <View style={styles.itemPointsContainer}>
-            <Feather name="star" size={14} color="#FFD700" />
+            <Feather name="star" size={14} color={colors.accent} />
             <Text style={styles.itemPoints}>{item.points_required} points each</Text>
           </View>
           {!itemCanAfford && (
@@ -430,22 +263,24 @@ const RewardsCheckoutScreen: React.FC = () => {
         <View style={styles.itemActions}>
           <View style={styles.quantityContainer}>
             <TouchableOpacity
-              style={styles.quantityButton}
+              style={[styles.quantityButton, item.quantity <= 1 && styles.quantityButtonDisabled]}
               onPress={() => handleQuantityChange(item.id, -1)}
-              disabled={processing}
+              disabled={item.quantity <= 1} // Disable minus button if quantity is 1
             >
-              <Feather name="minus" size={16} color={colors.primary} />
+              <Feather name="minus" size={16} color={item.quantity <= 1 ? "#999" : colors.primary} />
             </TouchableOpacity>
             <Text style={styles.quantityText}>{item.quantity}</Text>
             <TouchableOpacity
               style={styles.quantityButton}
               onPress={() => handleQuantityChange(item.id, 1)}
-              disabled={processing}
             >
               <Feather name="plus" size={16} color={colors.primary} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.removeButton} onPress={() => handleRemoveItem(item.id)} disabled={processing}>
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={() => handleRemoveItem(item.id)} // This calls removeFromCart directly
+          >
             <Feather name="trash-2" size={16} color="#EF4444" />
           </TouchableOpacity>
           <Text style={[styles.itemTotal, !itemCanAfford && styles.itemTotalWarning]}>
@@ -459,15 +294,15 @@ const RewardsCheckoutScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
+
       {hasItems ? (
         <>
-          {/* Cart Items */}
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             <Animated.View entering={FadeInUp.duration(500).delay(200)} style={styles.section}>
               <Text style={styles.sectionTitle}>Your Cart ({totalItems} items)</Text>
               {items.map((item, index) => renderCartItem(item, index))}
             </Animated.View>
-            {/* Points Summary */}
+
             <Animated.View entering={FadeInUp.duration(500).delay(400)} style={styles.summarySection}>
               <Text style={styles.sectionTitle}>Points Summary</Text>
               <View style={styles.summaryCard}>
@@ -496,26 +331,28 @@ const RewardsCheckoutScreen: React.FC = () => {
               )}
             </Animated.View>
           </ScrollView>
-          {/* Checkout Button */}
+
           <Animated.View entering={FadeInUp.duration(500).delay(600)} style={styles.checkoutContainer}>
             <TouchableOpacity
-              style={[styles.checkoutButton, (!canAfford || processing) && styles.checkoutButtonDisabled]}
+              style={[styles.checkoutButton, (!canAfford || processing || !hasItems) && styles.checkoutButtonDisabled]}
               onPress={handleCheckout}
-              disabled={!canAfford || processing}
+              disabled={!canAfford || processing || !hasItems}
             >
               {processing ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <View style={styles.processingContainer}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <Text style={styles.processingText}>Processing...</Text>
+                </View>
               ) : (
                 <>
                   <Feather name="check-circle" size={20} color="#FFFFFF" />
-                  <Text style={styles.checkoutButtonText}>Complete Purchase ({totalPoints.toLocaleString()} pts)</Text>
+                  <Text style={styles.checkoutButtonText}>Complete Order ({totalPoints.toLocaleString()} pts)</Text>
                 </>
               )}
             </TouchableOpacity>
           </Animated.View>
         </>
       ) : (
-        /* Empty Cart */
         <View style={styles.emptyContainer}>
           <Feather name="shopping-cart" size={64} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
@@ -529,6 +366,7 @@ const RewardsCheckoutScreen: React.FC = () => {
   )
 }
 
+// Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -768,6 +606,16 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginLeft: 8,
   },
+  processingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  processingText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginLeft: 8,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
@@ -789,7 +637,7 @@ const styles = StyleSheet.create({
   },
   shopButton: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 32,
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
@@ -797,6 +645,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  quantityButtonDisabled: {
+    opacity: 0.5,
+  },
+  removeButtonDisabled: {
+    opacity: 0.5,
   },
 })
 

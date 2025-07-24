@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
 
-// New or modified function to handle Supabase interaction
 export async function signUpWithEmail(
   email: string,
   password: string,
@@ -11,7 +10,7 @@ export async function signUpWithEmail(
   birthday: string,
 ) {
   try {
-    // Optional: Format birthday to ISO string (YYYY-MM-DD) if provided
+    // Format birthday to ISO string (YYYY-MM-DD) if provided
     let birthdayISO: string | null = null
     if (birthday && birthday.trim() !== "") {
       const parts = birthday.split("/")
@@ -25,37 +24,78 @@ export async function signUpWithEmail(
       }
     }
 
-    // Sign up with Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
+    console.log("🚀 Starting signup process...")
+
+    // Step 1: Create auth user (without metadata to avoid trigger issues)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email: email.toLowerCase(),
       password,
-      options: {
-        data: {
-          first_name,
-          last_name,
-          username: username.toLowerCase(),
-          phone_number,
-          birthday: birthdayISO,
-        },
-      },
     })
 
-    if (error) {
-      return { success: false, message: error.message }
+    console.log("✅ Auth signup result:", { user: authData.user?.id, error: authError })
+
+    if (authError) {
+      console.error("❌ Auth signup failed:", authError)
+      return { success: false, message: authError.message }
     }
 
-    if (!data?.user) {
+    if (!authData?.user) {
+      console.error("❌ No user returned from auth signup")
       return { success: false, message: "Signup failed. No user returned." }
     }
+
+    // Step 2: Create user profile in public.users table
+    console.log("📝 Creating user profile...")
+
+    // Generate unique username if needed
+    let finalUsername = username.toLowerCase().trim()
+
+    // Check if username exists and make it unique
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("username")
+      .eq("username", finalUsername)
+      .single()
+
+    if (existingUser) {
+      finalUsername = `${finalUsername}_${Date.now()}`
+      console.log("🔄 Username exists, using:", finalUsername)
+    }
+
+    const { error: profileError } = await supabase.from("users").insert({
+      user_id: authData.user.id,
+      email: authData.user.email!,
+      first_name: first_name.trim(),
+      last_name: last_name.trim() || null,
+      username: finalUsername,
+      phone_number: phone_number.trim() || null,
+      birthday: birthdayISO,
+      points: 0,
+    })
+
+    if (profileError) {
+      console.error("❌ Profile creation failed:", profileError)
+      // Auth user was created but profile failed
+      // You might want to clean up the auth user here
+      return {
+        success: false,
+        message: `Profile creation failed: ${profileError.message}`,
+      }
+    }
+
+    console.log("✅ User profile created successfully")
+
     return {
       success: true,
       message: "Account created successfully!",
-      user: data.user,
+      user: authData.user,
     }
   } catch (err: any) {
+    console.error("💥 Unexpected error in signUpWithEmail:", err)
     return { success: false, message: "Unexpected error occurred." }
   }
 }
+
 
 
 /**
@@ -213,7 +253,7 @@ export async function upsertProfile(userId: string, profileData: {
 }) {
   try {
     const { error } = await supabase
-      .from('profiles')
+      .from('users')
       .upsert({
         id: userId,
         updated_at: new Date().toISOString(),
@@ -249,7 +289,7 @@ export async function upsertProfile(userId: string, profileData: {
 export async function getProfile(userId: string) {
   try {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('*')
       .eq('id', userId)
       .single();

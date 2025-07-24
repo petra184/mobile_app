@@ -53,7 +53,8 @@ export const HorizontalRewardItem: React.FC<HorizontalRewardItemProps> = ({
       onPress={handlePress}
     >
       <View style={styles.imageContainer}>
-        <Image source={{ uri: reward.image_url || "https://via.placeholder.com/80" }} style={styles.image} />
+        <Image 
+        source={ reward.image_url ? { uri: reward.image_url } : require("../../IMAGES/MAIN_LOGO.png")} style={styles.image} />
         {!isAvailable && (
           <View style={styles.unavailableOverlay}>
             <Text style={styles.unavailableText}>OUT OF STOCK</Text>
@@ -85,7 +86,7 @@ export const HorizontalRewardItem: React.FC<HorizontalRewardItemProps> = ({
         {isInCart ? (
           <View style={styles.quantityControl}>
             <Pressable onPress={handleRemoveFromCart} style={styles.quantityButton}>
-              <Feather name="minus" size={18} color={colors.primary} />
+              <Feather name="minus" size={18} color={"white"} />
             </Pressable>
             <Text style={styles.quantityText}>{cartQuantity}</Text>
             <Pressable
@@ -93,7 +94,7 @@ export const HorizontalRewardItem: React.FC<HorizontalRewardItemProps> = ({
               style={[styles.quantityButton, !canAfford && styles.disabledButton]}
               disabled={!canAfford || cartQuantity >= (reward.stock_quantity ?? 0)}
             >
-              <Feather name="plus" size={18} color={colors.primary} />
+              <Feather name="plus" size={18} color={"white"} />
             </Pressable>
           </View>
         ) : (
@@ -226,7 +227,7 @@ const styles = StyleSheet.create({
   quantityText: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.primary,
+    color: "white",
     marginHorizontal: 4,
   },
   disabledButton: {

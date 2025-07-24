@@ -75,7 +75,9 @@ export const RewardCard: React.FC<RewardCardProps> = ({
 
         {reward.category && <Text style={styles.category}>{reward.category}</Text>}
 
-        <Text style={styles.description} numberOfLines={2}>
+        <Text style={styles.description} 
+          numberOfLines={2}
+          ellipsizeMode="tail">
           {reward.description}
         </Text>
 
@@ -217,6 +219,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 12,
     lineHeight: 20,
+    height: 40,
   },
   footer: {
     flexDirection: "column",

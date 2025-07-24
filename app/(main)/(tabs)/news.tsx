@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator, RefreshControl } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
@@ -152,6 +152,19 @@ export default function NewsScreen() {
     ? newsArticles.filter((article) => article.title.toLowerCase().includes(searchQuery.toLowerCase()))
     : newsArticles
 
+  const [refreshing, setRefreshing] = useState(false)
+  const onRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await loadTeams()
+      await loadNews()
+    } catch (error) {
+      console.error("Error refreshing news:", error)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
 
@@ -209,18 +222,10 @@ export default function NewsScreen() {
             </>
           )}
         </View>
-
-      
-
-        {/* Loading State */}
-        {(loading || teamsLoading) && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>{teamsLoading ? "Loading teams..." : "Loading news..."}</Text>
-          </View>
-        )}
-
-        <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
+        
+        <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}
+         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+         >
 
         {/* News Articles */}
         {!loading && !teamsLoading && (

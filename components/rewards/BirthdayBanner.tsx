@@ -14,6 +14,7 @@ export default function BirthdayBanner() {
   };
 
   return (
+    <View style={styles.shadowWrapper}>
     <TouchableOpacity 
       style={styles.container}
       onPress={navigateToBirthdays}
@@ -38,6 +39,7 @@ export default function BirthdayBanner() {
         </View>
       </View>
     </TouchableOpacity>
+    </View>
   );
 }
 
@@ -47,9 +49,18 @@ const styles = StyleSheet.create({
     height: 145,
     borderRadius: 16,
     overflow: "hidden",
-    marginHorizontal: 16,
-    marginBottom: 20,
     position: "relative",
+  },
+  shadowWrapper: {
+    width: width - 32,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "#fff", // Required for iOS shadows
+    shadowColor: "black",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4, // Android
   },
   backgroundImage: {
     width: "100%",

@@ -177,8 +177,10 @@ export default function SignupScreen() {
             specialOffers: true,
           })
 
-          showSuccess("Almost Done!", result.message || "Check your email to verify the account!")
-
+          showSuccess("Almost Done!", `We've sent a verification email to ${formData.email.trim()}, check your email to verify the account!`)
+          setTimeout(() => {
+            router.push("./login") 
+          }, 6000) 
         } else {
           showError("Signup Failed", result.message || "Failed to create account")
         }

@@ -35,18 +35,19 @@ export async function fetchRewards(): Promise<Reward[]> {
 
 // Fetch special offers
 export async function fetchSpecialOffers(): Promise<SpecialOffer[]> {
-  
-  const now = new Date().toISOString()
-
   const { data, error } = await supabase
     .from("special_offers")
     .select("*")
     .eq("is_active", true)
+    .not("limited_quantity", "is", null)
+    .gt("limited_quantity", 0)
     .order("points_required", { ascending: true })
 
   if (error) {
+    console.error("Error fetching special offers:", error)
     return []
   }
+
   return data as SpecialOffer[]
 }
 

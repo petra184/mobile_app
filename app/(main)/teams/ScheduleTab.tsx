@@ -1,6 +1,6 @@
 "use client"
 import type React from "react"
-import { useMemo } from "react"
+import { useMemo, useCallback } from "react"
 import { View, Text, StyleSheet, Image, ActivityIndicator, SectionList } from "react-native"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
@@ -15,85 +15,160 @@ interface ScheduleTabProps {
   loading?: boolean
 }
 
-// Helper function to properly compare dates
-const compareDates = (gameDate: string, currentDate: Date) => {
-  // Parse the game date
-  const game = new Date(gameDate)
-  
-  // Create a copy of current date and reset time
-  const today = new Date(currentDate)
-  today.setHours(0, 0, 0, 0)
-  
-  // Reset game date time for comparison
-  game.setHours(0, 0, 0, 0)
-
-  if (game < today) return 'past'
-  if (game.getTime() === today.getTime()) return 'today'
-  return 'future'
-}
-
 export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false }) => {
   const router = useRouter()
   const { showSuccess } = useNotifications()
 
-  // FIXED: Better date-based categorization with debugging
+  // Helper function to parse 12-hour time to 24-hour format (same as other components)
+  const parse12HourTime = useCallback((timeStr: string): string => {
+    try {
+      const [time, modifier] = timeStr.toUpperCase().split(" ")
+      let [hours, minutes] = time.split(":").map(Number)
+
+      if (modifier === "PM" && hours < 12) {
+        hours += 12
+      }
+      if (modifier === "AM" && hours === 12) {
+        hours = 0
+      }
+
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+    } catch (e) {
+      console.error("Error parsing 12-hour time:", timeStr, e)
+      return "00:00:00"
+    }
+  }, [])
+
+  // Calculate game start and end times (same as other components)
+  const getGameTimings = useCallback(
+    (gameData: Game) => {
+      const gameDate = new Date(gameData.date)
+      let gameStartTime = new Date(gameDate)
+
+      if (gameData.time) {
+        const time24h = parse12HourTime(gameData.time)
+        gameStartTime = new Date(`${gameDate.toISOString().split("T")[0]}T${time24h}`)
+      } else {
+        gameStartTime.setHours(0, 0, 0, 0)
+      }
+
+      const gameEndTime = new Date(gameStartTime.getTime() + 60 * 60 * 1000) // 1 hour after game start
+      return { gameStartTime, gameEndTime }
+    },
+    [parse12HourTime],
+  )
+
+  // Function to determine if a game is actually live using time-based logic
+  const isGameLive = useCallback(
+    (game: Game): boolean => {
+      // Skip completed, postponed, or canceled games
+      if (
+        game.status === "completed" ||
+        game.status === "final" ||
+        game.status === "postponed" ||
+        game.status === "canceled"
+      ) {
+        return false
+      }
+
+      try {
+        const now = new Date()
+        const { gameStartTime, gameEndTime } = getGameTimings(game)
+
+        // Game is live if current time is between start and end time
+        return now >= gameStartTime && now <= gameEndTime
+      } catch (error) {
+        console.error("Error calculating game timings for game:", game.id, error)
+        return false
+      }
+    },
+    [getGameTimings],
+  )
+
+  // UPDATED: Better date-based categorization using time-based logic
   const sections = useMemo(() => {
     // Get current date once
     const currentDate = new Date()
-    
+    currentDate.setHours(0, 0, 0, 0)
+
     const liveGames: Game[] = []
     const upcomingGames: Game[] = []
     const pastGames: Game[] = []
 
     // Process each game
-    games.forEach((game, index) => {
-    
-      // Live games always go to live section regardless of date
-      if (game.status === "live") {
+    games.forEach((game) => {
+      // Use time-based logic to determine if game is live
+      if (isGameLive(game)) {
         liveGames.push(game)
         return
       }
 
       // For all other games, use date comparison
-      const dateCategory = compareDates(game.date, currentDate)
-      
-      if (dateCategory === 'past') {
+      const gameDate = new Date(game.date)
+      gameDate.setHours(0, 0, 0, 0)
+
+      // Check if game is completed or in the past
+      if (gameDate < currentDate || game.status === "completed" || game.status === "final") {
         pastGames.push(game)
       } else {
+        // Game is in the future (upcoming) - includes today and future dates
         upcomingGames.push(game)
       }
     })
-
 
     // Create sections
     const sectionData = []
 
     if (liveGames.length > 0) {
+      // Sort live games by start time (earliest first)
+      liveGames.sort((a, b) => {
+        try {
+          const { gameStartTime: startA } = getGameTimings(a)
+          const { gameStartTime: startB } = getGameTimings(b)
+          return startA.getTime() - startB.getTime()
+        } catch {
+          return 0
+        }
+      })
       sectionData.push({ title: "Live Games", data: liveGames })
     }
 
     if (upcomingGames.length > 0) {
-      // Sort upcoming games by date (earliest first)
+      // Sort upcoming games by date and time (earliest first)
       upcomingGames.sort((a, b) => {
-        const dateA = new Date(a.date)
-        const dateB = new Date(b.date)
-        return dateA.getTime() - dateB.getTime()
+        try {
+          const { gameStartTime: startA } = getGameTimings(a)
+          const { gameStartTime: startB } = getGameTimings(b)
+          return startA.getTime() - startB.getTime()
+        } catch {
+          // Fallback to date comparison if time parsing fails
+          const dateA = new Date(a.date)
+          const dateB = new Date(b.date)
+          return dateA.getTime() - dateB.getTime()
+        }
       })
       sectionData.push({ title: "Upcoming Games", data: upcomingGames })
     }
 
     if (pastGames.length > 0) {
-      // Sort past games by date (most recent first)
+      // Sort past games by date and time (most recent first)
       pastGames.sort((a, b) => {
-        const dateA = new Date(a.date)
-        const dateB = new Date(b.date)
-        return dateB.getTime() - dateA.getTime()
+        try {
+          const { gameStartTime: startA } = getGameTimings(a)
+          const { gameStartTime: startB } = getGameTimings(b)
+          return startB.getTime() - startA.getTime()
+        } catch {
+          // Fallback to date comparison if time parsing fails
+          const dateA = new Date(a.date)
+          const dateB = new Date(b.date)
+          return dateB.getTime() - dateA.getTime()
+        }
       })
       sectionData.push({ title: "Past Games", data: pastGames })
     }
 
     return sectionData
-  }, [games])
+  }, [games, isGameLive, getGameTimings])
 
   const handleGamePress = (game: Game) => {
     router.push({
@@ -128,6 +203,21 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
     />
   )
 
+  const renderSectionHeader = ({ section }: { section: { title: string; data: Game[] } }) => (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderContent}>
+        {section.title === "Live Games" && (
+          <View style={styles.liveIndicator}>
+            <View style={styles.liveDot} />
+          </View>
+        )}
+        {section.title === "Upcoming Games" && <Feather name="clock" size={18} color={colors.primary} />}
+        {section.title === "Past Games" && <Feather name="check-circle" size={18} color={colors.primary} />}
+        <Text style={styles.sectionTitle}>{`${section.title} (${section.data.length})`}</Text>
+      </View>
+    </View>
+  )
+
   return (
     <View style={styles.container}>
       <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
@@ -137,11 +227,7 @@ export const ScheduleTab: React.FC<ScheduleTabProps> = ({ games, loading = false
             sections={sections}
             keyExtractor={(item) => item.id}
             renderItem={renderGameItem}
-            renderSectionHeader={({ section }) => (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{`${section.title} (${section.data.length})`}</Text>
-              </View>
-            )}
+            renderSectionHeader={renderSectionHeader}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             stickySectionHeadersEnabled={false}
@@ -195,10 +281,25 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingTop: 24,
   },
+  sectionHeaderContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: colors.text,
+  },
+  liveIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EF4444",
   },
   emptyContainer: {
     flex: 1,

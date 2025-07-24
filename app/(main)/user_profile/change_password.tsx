@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 32,
     marginTop: 16,
     shadowColor: "#000",
     shadowOffset: {

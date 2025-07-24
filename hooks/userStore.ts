@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import type { QRCodeScan } from "@/types/updated_types"
 import { v4 as uuidv4 } from "uuid"
+
 // Import your database actions
 import {
   getUserProfile,
@@ -37,15 +38,12 @@ interface UserState {
   points: number
   scanHistory: QRCodeScan[]
   preferences: UserPreferences
-
   // Remember Me functionality
   rememberMe: boolean
-
   // Loading states
   isLoading: boolean
   isPointsLoading: boolean
   isScanHistoryLoading: boolean
-
   // Actions
   setUser: (userId: string, email?: string, remember?: boolean) => Promise<void>
   initializeUser: (userId: string, email?: string) => Promise<void>
@@ -54,7 +52,6 @@ interface UserState {
   redeemPoints: (points: number) => Promise<boolean>
   addScan: (scan: Omit<QRCodeScan, "id" | "scannedAt">) => Promise<void>
   toggleFavoriteTeam: (teamId: string) => Promise<void>
-
   // Updated notification methods
   setNotificationsEnabled: (enabled: boolean) => Promise<void>
   setPushNotifications: (enabled: boolean) => Promise<void>
@@ -63,12 +60,13 @@ interface UserState {
   setNewsNotifications: (enabled: boolean) => Promise<void>
   setSpecialOffers: (enabled: boolean) => Promise<void>
   updateNotificationPreference: (key: keyof UserPreferences, enabled: boolean) => Promise<void>
-
   clearUserData: () => void
   isUserLoggedIn: () => boolean
   getUserName: () => string
   getUserFirstName: () => string
   shouldAutoLogin: () => boolean
+  // Add method to clear user-specific data including cart
+  signOut: () => Promise<void>
 }
 
 function capitalize(name: string) {
@@ -263,31 +261,28 @@ export const useUserStore = create<UserState>()(
       },
 
       addScan: async (scan: Omit<QRCodeScan, "id" | "scannedAt">) => {
-      const { userId } = get()
-      if (!userId) return
-
-      try {
-        const newScan: QRCodeScan = {
-          id: uuidv4(),
-          ...scan,
-          scannedAt: new Date().toISOString(),
+        const { userId } = get()
+        if (!userId) return
+        try {
+          const newScan: QRCodeScan = {
+            id: uuidv4(),
+            ...scan,
+            scannedAt: new Date().toISOString(),
+          }
+          set((state) => ({
+            scanHistory: [
+              newScan,
+              ...state.scanHistory.filter((existing) => existing.id !== newScan.id), // 🧼 prevent duplicate
+            ],
+          }))
+          await addUserScan(userId, newScan)
+        } catch (error) {
+          console.error("Failed to add scan:", error)
+          set((state) => ({
+            scanHistory: state.scanHistory.slice(1), // remove the failed scan
+          }))
         }
-
-        set((state) => ({
-          scanHistory: [
-            newScan,
-            ...state.scanHistory.filter((existing) => existing.id !== newScan.id), // 🧼 prevent duplicate
-          ],
-        }))
-
-        await addUserScan(userId, newScan)
-      } catch (error) {
-        console.error("Failed to add scan:", error)
-        set((state) => ({
-          scanHistory: state.scanHistory.slice(1), // remove the failed scan
-        }))
-      }
-    },
+      },
 
       toggleFavoriteTeam: async (teamId: string) => {
         const { userId, preferences } = get()
@@ -327,6 +322,7 @@ export const useUserStore = create<UserState>()(
           console.error("No userId found when trying to update notification preference")
           return
         }
+
         try {
           const newPreferences = {
             ...preferences,
@@ -394,6 +390,25 @@ export const useUserStore = create<UserState>()(
           isScanHistoryLoading: false,
         })
       },
+
+      // Enhanced sign out method that also clears user-specific cart data
+      signOut: async () => {
+        const { userId } = get()
+
+        // Clear user-specific cart data from AsyncStorage
+        if (userId) {
+          try {
+            const cartKey = `@rewards_cart_user_${userId}`
+            await AsyncStorage.removeItem(cartKey)
+            console.log("✅ Cleared cart data for user:", userId)
+          } catch (error) {
+            console.error("❌ Error clearing cart data:", error)
+          }
+        }
+
+        // Clear user data
+        get().clearUserData()
+      },
     }),
     {
       name: "user-storage",
@@ -417,6 +432,7 @@ export const useUserStore = create<UserState>()(
             userId: state.userId,
           }
         }
+
         return baseData
       },
     },

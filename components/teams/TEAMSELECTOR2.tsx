@@ -32,6 +32,7 @@ interface TeamSelectorProps {
   filterByGender?: "men" | "women" | "all"
   maxSelections?: number
   layoutStyle?: "grid" | "list" // New prop for layout style
+  overlayOnSelect?: boolean // New optional prop for overlay effect
 }
 
 const TeamItem = React.memo(
@@ -43,6 +44,7 @@ const TeamItem = React.memo(
     onFavoriteToggle,
     showFavorites,
     layoutStyle = "grid",
+    overlayOnSelect = false, // Default to false
   }: {
     team: Team
     isSelected: boolean
@@ -51,6 +53,7 @@ const TeamItem = React.memo(
     onFavoriteToggle: () => void
     showFavorites: boolean
     layoutStyle?: "grid" | "list"
+    overlayOnSelect?: boolean // Prop for TeamItem
   }) => {
     const scale = useSharedValue(1)
     const opacity = useSharedValue(1)
@@ -70,7 +73,10 @@ const TeamItem = React.memo(
       opacity.value = withTiming(1, { duration: 150 })
     }
 
-    const teamColorBackground = `${team.primaryColor}15`
+    // Determine the base background color based on selection and overlay setting
+    const baseBackgroundColor = isSelected && overlayOnSelect ? `${team.primaryColor}20` : colors.card; // 20 is for 12.5% opacity
+    const borderColor = isSelected ? team.primaryColor : colors.border;
+
 
     if (layoutStyle === "list") {
       // List layout similar to rewards screen
@@ -81,8 +87,8 @@ const TeamItem = React.memo(
               styles.teamItemList,
               isSelected && styles.selectedTeamItemList,
               {
-                borderColor: isSelected ? team.primaryColor : colors.border,
-                backgroundColor: isSelected ? teamColorBackground : colors.card,
+                borderColor: borderColor,
+                backgroundColor: baseBackgroundColor, // Use baseBackgroundColor
               },
             ]}
             onPress={onPress}
@@ -96,7 +102,7 @@ const TeamItem = React.memo(
                   <View style={[styles.colorLineList, { backgroundColor: team.primaryColor }]} />
                   <View style={styles.teamTextInfo}>
                     <Text style={[styles.teamNameList, { color: isSelected ? team.primaryColor : colors.text }]}>
-                      {team.shortName} {/* Show full name instead of shortName */}
+                      {team.name} {/* Changed to full name */}
                     </Text>
                     <Text style={styles.teamSportList}>
                       {team.shortName} {team.sport}
@@ -124,7 +130,7 @@ const TeamItem = React.memo(
               <Image source={{ uri: team.logo }} style={styles.teamLogoList} resizeMode="cover" />
             </View>
 
-            {isSelected && (
+            {isSelected && !overlayOnSelect && ( // Only show checkmark if overlay is NOT active
               <View style={[styles.selectedIndicatorList, { backgroundColor: team.primaryColor }]}>
                 <Feather name="check" size={14} color="white" />
               </View>
@@ -138,66 +144,68 @@ const TeamItem = React.memo(
     return (
       <Animated.View style={[animatedStyle, { width: cardWidth }]}>
         <View style={styles.shadow}>
-        <Pressable
-          style={[
-            styles.teamItem,
-            isSelected && styles.selectedTeamItem,
-            {
-              borderColor: isSelected ? team.primaryColor : colors.border,
-              backgroundColor: isSelected ? teamColorBackground : colors.card,
-            },
-          ]}
-          onPress={onPress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
-        >
-          {/* Team Logo at the top */}
-          <View style={styles.logoContainer}>
-            <Image source={{ uri: team.logo }} style={styles.teamLogo} resizeMode="cover" />
-          </View>
+          <Pressable
+            style={[
+              styles.teamItem,
+              isSelected && styles.selectedTeamItem,
+              {
+                borderColor: borderColor,
+                backgroundColor: baseBackgroundColor, // Use baseBackgroundColor
+              },
+            ]}
+            onPress={onPress}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
+          >
+            {/* Team Logo at the top */}
+            <View style={styles.logoContainer}>
+              <Image source={{ uri: team.logo }} style={styles.teamLogo} resizeMode="cover" />
+            </View>
 
-          {/* Team info section with vertical color line */}
-          <View style={styles.bottomSection}>
-            <View style={styles.teamInfoContainer}>
+            {/* Team info section with vertical color line */}
+            <View style={styles.bottomSection}>
+              <View style={styles.teamInfoContainer}>
               {/* Vertical color line */}
               <View style={[styles.colorLine, { backgroundColor: team.primaryColor }]} />
 
               {/* Team info */}
               <View style={styles.teamInfo}>
-                <Text style={[styles.teamName, { color: isSelected ? team.primaryColor : colors.text }]}>
-                  {team.shortName} {/* Show full name instead of shortName */}
-                </Text>
-                <Text style={styles.teamSport}>
-                  {team.gender}
-                </Text>
-                <Text style={styles.teamSport}>
-                  {team.sport}
-                </Text>
+                <Text
+                    style={[styles.teamName, { color: isSelected ? team.primaryColor : colors.text }]}>
+                    {team.shortName}
+                  </Text>
+
+                  <Text style={styles.teamSport}> {/* Changed from 2 to 1 here */}
+                    {team.gender}
+                  </Text>
+
+                  <Text style={styles.teamSport}> {/* Changed from 2 to 1 here */}
+                    {team.sport}
+                  </Text>
               </View>
             </View>
-
-            {showFavorites && (
-              <Pressable
-                style={styles.favoriteButton}
-                onPress={onFavoriteToggle}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <AntDesign
-                  name={isFavorite ? "heart" : "hearto"}
-                  size={16}
-                  color={isFavorite ? "#EF4444" : colors.textSecondary}
-                />
-              </Pressable>
-            )}
-          </View>
-
-          {isSelected && (
-            <View style={[styles.selectedIndicator, { backgroundColor: team.primaryColor }]}>
-              <Feather name="check" size={12} color="white" />
+              {showFavorites && (
+                <Pressable
+                  style={styles.favoriteButton}
+                  onPress={onFavoriteToggle}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <AntDesign
+                    name={isFavorite ? "heart" : "hearto"}
+                    size={16}
+                    color={isFavorite ? "#EF4444" : colors.textSecondary}
+                  />
+                </Pressable>
+              )}
             </View>
-          )}
-        </Pressable>
+
+            {isSelected && !overlayOnSelect && ( // Only show checkmark if overlay is NOT active
+              <View style={[styles.selectedIndicator, { backgroundColor: team.primaryColor }]}>
+                <Feather name="check" size={12} color="white" />
+              </View>
+            )}
+          </Pressable>
         </View>
       </Animated.View>
     )
@@ -213,6 +221,7 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
   filterByGender = "all",
   maxSelections = 5,
   layoutStyle = "grid",
+  overlayOnSelect = false, // Default to false
 }) => {
   const { preferences, toggleFavoriteTeam } = useUserStore()
 
@@ -315,6 +324,7 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
         onFavoriteToggle={() => handleToggleFavorite(item.id)}
         showFavorites={showFavorites}
         layoutStyle={layoutStyle}
+        overlayOnSelect={overlayOnSelect} // Pass the new prop down
       />
     )
   }

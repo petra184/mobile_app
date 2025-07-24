@@ -4,8 +4,8 @@ import { StyleSheet, View, Text, TouchableOpacity } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { colors } from "@/constants/colors"
 import type { FormData } from "@/app/(auth)/signup"
-import { SwipeableTeamSelector } from "@/components/teams/SwipingCard"
-import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
+import { SwipeableTeamSelector } from "@/components/teams/SwipingCard" // Assuming this path is correct
+import { TeamSelector } from "@/components/teams/TeamSelector" // Assuming this path is correct
 import type { Team } from "@/types/updated_types"
 
 interface TeamSelectionStepProps {
@@ -17,7 +17,13 @@ interface TeamSelectionStepProps {
 export default function TeamSelectionStep({ formData, updateFormData, onNext }: TeamSelectionStepProps) {
   const [viewMode, setViewMode] = useState<"swipe" | "grid">("swipe")
 
-  const handleTeamSelect = (team: Team) => {
+  // This function now acts as the single source of truth for updating favoriteTeams
+  const handleTeamSelect = (team: Team | null) => { // Accept null for deselection in single-select
+    if (!team) { // Handle deselection in single-select mode
+      updateFormData({ favoriteTeams: [] });
+      return;
+    }
+
     const currentFavorites = formData.favoriteTeams
     const isCurrentlyFavorite = currentFavorites.includes(team.id)
     let newFavorites: string[]
@@ -25,6 +31,8 @@ export default function TeamSelectionStep({ formData, updateFormData, onNext }: 
     if (isCurrentlyFavorite) {
       newFavorites = currentFavorites.filter((id) => id !== team.id)
     } else {
+      // Add logic here if you want to enforce maxSelections at the parent level
+      // if (newFavorites.length >= MAX_SELECTIONS_ALLOWED) { return; }
       newFavorites = [...currentFavorites, team.id]
     }
 
@@ -82,6 +90,8 @@ export default function TeamSelectionStep({ formData, updateFormData, onNext }: 
             maxSelections={10}
             layoutStyle="grid"
             filterByGender="all"
+            overlayOnSelect={true}
+            selectedTeamIds={formData.favoriteTeams} // Pass the formData.favoriteTeams here
           />
         )}
       </View>

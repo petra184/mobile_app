@@ -11,21 +11,25 @@ import TeamSelector from "@/components/teams/SwipingCard"
 import { GameCard } from "@/components/games/new_game_card"
 import Feather from "@expo/vector-icons/Feather"
 import type { Team, Game, UserStatusWithLevel, GameFilterOptions } from "@/types/updated_types"
-import { getUpcomingGames, getPastGames, getLiveGames } from "@/app/actions/games"
+import { getUpcomingGames, getPastGames, getLiveGames, getGamesCount } from "@/app/actions/games"
 import { fetchUserStatus } from "@/app/actions/points"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 import { sortGamesByPriority } from "@/utils/sortGame"
 import { StatusBar } from "expo-status-bar"
+import { RefreshControl } from "react-native-gesture-handler"
+import { LinearGradient } from "expo-linear-gradient"
 
-export default function HomeScreen () {
+export default function HomeScreen() {
   const router = useRouter()
   const { points, preferences, getUserFirstName, userId } = useUserStore()
   const { showSuccess, showInfo } = useNotifications()
 
+  const [game_count, setGamesCount] = useState<number>(0)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [allGames, setAllGames] = useState<Game[]>([])
   const [userStatus, setUserStatus] = useState<UserStatusWithLevel | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [gameFilters, setGameFilters] = useState<GameFilterOptions>({
     status: "all",
     sport: undefined,
@@ -33,64 +37,100 @@ export default function HomeScreen () {
     teamId: undefined,
   })
 
-  const fetchAllGames = useCallback(async () => {
+  // Helper function to parse 12-hour time to 24-hour format (same as game details)
+  const parse12HourTime = useCallback((timeStr: string): string => {
     try {
-      setLoading(true)
-      // Fetch all types of games in parallel
-      const [upcoming, past, live] = await Promise.all([
-        getUpcomingGames(20), // Get more upcoming games
-        getPastGames(10), // Get recent past games
-        getLiveGames(5), // Get live games
-      ])
+      const [time, modifier] = timeStr.toUpperCase().split(" ")
+      let [hours, minutes] = time.split(":").map(Number)
 
-      // Combine all games and remove duplicates
+      if (modifier === "PM" && hours < 12) {
+        hours += 12
+      }
+      if (modifier === "AM" && hours === 12) {
+        hours = 0
+      }
+
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+    } catch (e) {
+      console.error("Error parsing 12-hour time:", timeStr, e)
+      return "00:00:00"
+    }
+  }, [])
+
+  // Calculate game start and end times (same as game details)
+  const getGameTimings = useCallback(
+    (gameData: Game) => {
+      const gameDate = new Date(gameData.date)
+      let gameStartTime = new Date(gameDate)
+
+      if (gameData.time) {
+        const time24h = parse12HourTime(gameData.time)
+        gameStartTime = new Date(`${gameDate.toISOString().split("T")[0]}T${time24h}`)
+      } else {
+        gameStartTime.setHours(0, 0, 0, 0)
+      }
+
+      const gameEndTime = new Date(gameStartTime.getTime() + 60 * 60 * 1000) // 1 hour after game start
+      return { gameStartTime, gameEndTime }
+    },
+    [parse12HourTime],
+  )
+
+  // Function to determine if a game is actually live
+  const isGameLive = useCallback(
+    (game: Game): boolean => {
+      // Skip completed, postponed, or canceled games
+      if (game.status === "completed" || game.status === "postponed" || game.status === "canceled") {
+        return false
+      }
+
+      try {
+        const now = new Date()
+        const { gameStartTime, gameEndTime } = getGameTimings(game)
+
+        // Game is live if current time is between start and end time
+        return now >= gameStartTime && now <= gameEndTime
+      } catch (error) {
+        console.error("Error calculating game timings for game:", game.id, error)
+        return false
+      }
+    },
+    [getGameTimings],
+  )
+
+  // Consolidated data fetching function
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const games_count = await getGamesCount()
+      setGamesCount(games_count)
+
+      const [upcoming, past, live] = await Promise.all([getUpcomingGames(20), getPastGames(10), getLiveGames(5)])
+
       const combinedGames = [...live, ...upcoming, ...past]
-
-      // Remove duplicates by creating a Map with game.id as key
       const gameMap = new Map<string, Game>()
       combinedGames.forEach((game) => gameMap.set(game.id, game))
       const uniqueGames = Array.from(gameMap.values())
-
-      // Use the sorting utility: Live -> Today -> Upcoming
       const sortedGames = sortGamesByPriority(uniqueGames)
+
       setAllGames(sortedGames)
+
+      if (userId) {
+        const statusData = await fetchUserStatus(userId)
+        setUserStatus(statusData)
+      }
     } catch (error) {
-      console.error("Error fetching games:", error)
-      showInfo("Error", "Failed to load games. Please try again.")
+      console.error("Error fetching data:", error)
+      showInfo("Error", "Failed to load data. Please try again.")
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [showInfo])
-
-  const handleGameUpdate = useCallback(
-    (event: "INSERT" | "UPDATE" | "DELETE", payload: any) => {
-      console.log(`Game ${event.toLowerCase()}:`, payload)
-      if (event === "UPDATE") {
-        showInfo("Game Update", "A game has been updated with new information")
-      } else if (event === "INSERT") {
-        showInfo("New Game", "A new game has been scheduled")
-      }
-      fetchAllGames()
-    },
-    [showInfo, fetchAllGames],
-  )
+  }, [userId, showInfo, isGameLive])
 
   useEffect(() => {
-    fetchAllGames()
-    if (userId) {
-      fetchUserData()
-    }
-  }, [userId, fetchAllGames])
-
-  const fetchUserData = async () => {
-    if (!userId) return
-    try {
-      const statusData = await fetchUserStatus(userId)
-      setUserStatus(statusData)
-    } catch (error) {
-      console.error("Error fetching user status:", error)
-    }
-  }
+    loadData()
+  }, [loadData])
 
   const handleTeamSelect = (team: Team) => {
     setSelectedTeam(team)
@@ -144,9 +184,8 @@ export default function HomeScreen () {
       return "Hope you're having a great day! Check out today's updates."
     } else if (currentHour >= 17 && currentHour < 22) {
       return "Perfect time to catch up on your favorite teams!"
-    } else {
-      return "Late night sports fan? We've got you covered."
     }
+    return "Late night sports fan? We've got you covered."
   }
 
   const getTimeIcon = () => {
@@ -157,9 +196,8 @@ export default function HomeScreen () {
       return "sun"
     } else if (currentHour >= 17 && currentHour < 22) {
       return "sunset"
-    } else {
-      return "moon"
     }
+    return "moon"
   }
 
   const filteredGames = allGames.filter((game) => {
@@ -178,7 +216,7 @@ export default function HomeScreen () {
     if (gameFilters.status && gameFilters.status !== "all") {
       if (gameFilters.status === "upcoming" && game.status !== "scheduled") return false
       if (gameFilters.status === "past" && game.status !== "completed") return false
-      if (gameFilters.status === "live" && game.status !== "live") return false
+      if (gameFilters.status === "live" && !isGameLive(game)) return false // Use time-based logic
     }
     return true
   })
@@ -186,6 +224,7 @@ export default function HomeScreen () {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  // Updated categorization function using time-based logic
   const categorizeGamesByDate = (games: Game[]) => {
     const live: Game[] = []
     const upcoming: Game[] = []
@@ -195,9 +234,10 @@ export default function HomeScreen () {
       const gameDate = new Date(game.date)
       gameDate.setHours(0, 0, 0, 0)
 
-      if (game.status === "live") {
+      // Use time-based logic to determine if game is live
+      if (isGameLive(game)) {
         live.push(game)
-      } else if (gameDate < today) {
+      } else if (gameDate < today || game.status === "completed") {
         past.push(game)
       } else {
         upcoming.push(game)
@@ -208,6 +248,19 @@ export default function HomeScreen () {
   }
 
   const { live: liveGames, upcoming: upcomingGames, past: pastGames } = categorizeGamesByDate(filteredGames)
+
+  // Get live games status message
+  const getLiveGamesMessage = () => {
+    if (loading) return "Checking for live games..."
+
+    if (liveGames.length === 0) {
+      return "No live games right now"
+    } else if (liveGames.length === 1) {
+      return "1 game is live right now!"
+    } else {
+      return `${liveGames.length} games are live right now!`
+    }
+  }
 
   const scale = useSharedValue(1)
   const opacity = useSharedValue(1)
@@ -227,10 +280,19 @@ export default function HomeScreen () {
     opacity.value = withTiming(1, { duration: 150 })
   }
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true)
+    loadData()
+  }, [loadData])
+
   return (
     <SafeAreaView style={styles.container} edges={["left"]}>
       <StatusBar style="dark" />
-      <ScrollView style={styles.scrollC} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollC}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+      >
         {/* Enhanced Welcome Card */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeHeader}>
@@ -238,6 +300,21 @@ export default function HomeScreen () {
               <Text style={styles.greetingText}>{getTimeBasedGreeting()},</Text>
               <Text style={styles.nameText}>{getUserFirstName()}</Text>
               <Text style={styles.personalizedMessage}>{getPersonalizedMessage()}</Text>
+
+             {/* Live Games Status */}
+              {liveGames.length > 0 && (
+                <View style={styles.liveStatusContainer}>
+                  <LinearGradient
+                    colors={["#EF4444", "#DC2626"]}
+                    style={styles.liveStatusBadge}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <View style={styles.livePulse} />
+                    <Text style={styles.liveStatusText}>{getLiveGamesMessage()}</Text>
+                  </LinearGradient>
+                </View>
+              )}
             </View>
             <View style={styles.timeIcon}>
               <Feather name={getTimeIcon()} size={24} color={colors.primary} />
@@ -287,7 +364,9 @@ export default function HomeScreen () {
               <View style={[styles.sectionTitleAccent, { backgroundColor: colors.primary }]} />
               <View>
                 <Text style={styles.sectionTitle}>Games</Text>
-                <Text style={styles.sectionSubtitle}>{loading ? "Loading..." : `${filteredGames.length} games`}</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {loading ? "Loading..." : `Showing ${filteredGames.length}/${game_count} games`}
+                </Text>
               </View>
             </View>
             <View style={styles.headerActions}>
@@ -304,7 +383,7 @@ export default function HomeScreen () {
             </View>
           ) : filteredGames.length > 0 ? (
             <View>
-              {/* Live Games - Status Based */}
+              {/* Live Games - Time Based Logic */}
               {liveGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -319,7 +398,7 @@ export default function HomeScreen () {
                 </View>
               )}
 
-              {/* Upcoming Games - Date Based (Today + Future) */}
+              {/* Upcoming Games */}
               {upcomingGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -332,7 +411,7 @@ export default function HomeScreen () {
                 </View>
               )}
 
-              {/* Past Games - Date Based */}
+              {/* Past Games */}
               {pastGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -532,6 +611,55 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(59, 130, 246, 0.1)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  // New Live Status Styles
+  liveStatusContainer: {
+    marginTop: 4,
+    marginBottom:10,
+  },
+  liveStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+    shadowColor: "#EF4444",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  livePulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FFFFFF",
+    marginRight: 8,
+    opacity: 0.9,
+  },
+  liveStatusText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  noLiveStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: "flex-start",
+  },
+  noLiveStatusText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "500",
+    marginLeft: 6,
   },
   connectionStatus: {
     flexDirection: "row",

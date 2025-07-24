@@ -25,11 +25,7 @@ import Ionicons from "@expo/vector-icons/Ionicons"
 import { LinearGradient } from "expo-linear-gradient"
 import QRCode from "react-native-qrcode-svg"
 import { sortGamesByPriority } from "@/utils/sortGame"
-import {
-  loadGamesAction,
-  generateOrGetQRCodeAction,
-  checkIfAlreadyScannedAction
-} from "@/app/actions/qr_scanning"
+import { loadGamesAction, generateOrGetQRCodeAction, checkIfAlreadyScannedAction } from "@/app/actions/qr_scanning"
 import type { Game, QRCodeData } from "@/types/updated_types"
 
 interface GameSelectionModalProps {
@@ -110,11 +106,9 @@ const GameSelectionModal = ({ visible, onClose, games, selectedGame, onSelect }:
 export default function QRCodeScreen() {
   const { userId, isLoading: userLoading } = useUserStore()
   const { id: gameIdFromParams } = useLocalSearchParams<{ id?: string }>()
-
   const [games, setGames] = useState<Game[]>([])
   const [selectedGame, setSelectedGame] = useState<Game | null>(null)
   const [qrCodeData, setQrCodeData] = useState<QRCodeData | null>(null)
-
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [isQRAvailable, setIsQRAvailable] = useState(false)
@@ -129,21 +123,19 @@ export default function QRCodeScreen() {
         return
       }
       if (!isRefresh) setLoading(true)
-
       try {
         const result = await loadGamesAction(gameIdFromParams, isRefresh)
-
         if (!result.success) {
           Alert.alert("Error", result.error)
           return
         }
-
-        let sortedGames: Game[] = [];
+        let sortedGames: Game[] = []
         if (result.data !== undefined) {
-          sortedGames = sortGamesByPriority(result.data);
+          sortedGames = sortGamesByPriority(result.data)
+          const availableGames = result.data.filter((game) => game.status !== "canceled")
+          sortedGames = sortGamesByPriority(availableGames)
         }
         setGames(sortedGames)
-
         if (sortedGames.length > 0) {
           const gameToSelect = gameIdFromParams ? sortedGames.find((g) => g.id === gameIdFromParams) : sortedGames[0]
           handleSelectGame(gameToSelect || sortedGames[0], true)
@@ -165,66 +157,52 @@ export default function QRCodeScreen() {
   }, [loadData])
 
   const checkQRAvailability = useCallback((game: Game) => {
-  if (!game?.date || !game?.time) return
-
-  const parse12HourTime = (timeStr: string): string => {
-    const [time, modifier] = timeStr.split(' ')
-    let [hours, minutes] = time.split(':').map(Number)
-
-    if (modifier === 'PM' && hours < 12) hours += 12
-    if (modifier === 'AM' && hours === 12) hours = 0
-
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`
-  }
-
-  const time24h = parse12HourTime(game.time)
-  const gameDateTime = new Date(`${game.date}T${time24h}`)
-
-  if (isNaN(gameDateTime.getTime())) {
-    console.error("Invalid parsed date:", `${game.date}T${time24h}`)
-    return
-  }
-
-  const now = new Date()
-  const oneHourBefore = new Date(gameDateTime.getTime() - 60 * 60 * 1000)
-
-  if (now >= oneHourBefore) {
-    setIsQRAvailable(true)
-    setTimeUntilAvailable("")
-  } else {
-    const diff = oneHourBefore.getTime() - now.getTime()
-    const days = Math.floor(diff / (24 * 60 * 60 * 1000))
-    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
-    const minutes = Math.floor((diff % (60 * 60 * 1000)) / 60000)
-
-    let timeParts: string[] = []
-
-    if (days > 0) timeParts.push(`${days}d`)
-    if (hours > 0) timeParts.push(`${hours}h`)
-    if (minutes > 0) timeParts.push(`${minutes}m`)
-    if (timeParts.length === 0) timeParts.push("less than a minute")
-
-    setTimeUntilAvailable(timeParts.join(" "))
-    setIsQRAvailable(false)
-  }
-}, [])
+    if (!game?.date || !game?.time) return
+    const parse12HourTime = (timeStr: string): string => {
+      const [time, modifier] = timeStr.split(" ")
+      let [hours, minutes] = time.split(":").map(Number)
+      if (modifier === "PM" && hours < 12) hours += 12
+      if (modifier === "AM" && hours === 12) hours = 0
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+    }
+    const time24h = parse12HourTime(game.time)
+    const gameDateTime = new Date(`${game.date}T${time24h}`)
+    if (isNaN(gameDateTime.getTime())) {
+      console.error("Invalid parsed date:", `${game.date}T${time24h}`)
+      return
+    }
+    const now = new Date()
+    const oneHourBefore = new Date(gameDateTime.getTime() - 60 * 60 * 1000)
+    if (now >= oneHourBefore) {
+      setIsQRAvailable(true)
+      setTimeUntilAvailable("")
+    } else {
+      const diff = oneHourBefore.getTime() - now.getTime()
+      const days = Math.floor(diff / (24 * 60 * 60 * 1000))
+      const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
+      const minutes = Math.floor((diff % (60 * 60 * 1000)) / 60000)
+      const timeParts: string[] = []
+      if (days > 0) timeParts.push(`${days}d`)
+      if (hours > 0) timeParts.push(`${hours}h`)
+      if (minutes > 0) timeParts.push(`${minutes}m`)
+      if (timeParts.length === 0) timeParts.push("less than a minute")
+      setTimeUntilAvailable(timeParts.join(" "))
+      setIsQRAvailable(false)
+    }
+  }, [])
 
   const handleSelectGame = async (game: Game, isInitialLoad = false) => {
     if (!userId) return
-
     setSelectedGame(game)
     checkQRAvailability(game)
-
     // Generate or get QR code for this game
     const qrCode = await generateOrGetQRCodeAction(userId, game.id)
     if (qrCode) {
       setQrCodeData(qrCode)
     }
-
     // Check if already scanned
     const alreadyScanned = await checkIfAlreadyScannedAction(userId, game.id)
     setHasAlreadyScanned(alreadyScanned)
-
     if (!isInitialLoad) setIsModalVisible(false)
   }
 
@@ -255,7 +233,6 @@ export default function QRCodeScreen() {
         selectedGame={selectedGame}
         onSelect={handleSelectGame}
       />
-
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -264,14 +241,13 @@ export default function QRCodeScreen() {
         <Text style={styles.instructions}>
           Show this QR code at games, events, and merchandise stores to earn points and unlock rewards!
         </Text>
-
         {selectedGame ? (
           <View style={styles.mainCard}>
             <TouchableOpacity style={styles.cardHeader} onPress={() => setIsModalVisible(true)}>
               <View style={styles.cardHeaderContent}>
                 <View style={styles.gameHeaderContainer}>
                   <View style={styles.teamsRow}>
-                    <Image source={require('@/IMAGES/MAIN_LOGO.png')} style={styles.headerTeamLogo} />
+                    <Image source={require("@/IMAGES/MAIN_LOGO.png")} style={styles.headerTeamLogo} />
                     <Text style={styles.cardTitle}>
                       {selectedGame.homeTeam?.name || "Home"} vs {selectedGame.awayTeam?.name || "Away"}
                     </Text>
@@ -281,7 +257,6 @@ export default function QRCodeScreen() {
                   </View>
                   <Text style={styles.sportText}>{selectedGame.game_type.toUpperCase()}</Text>
                 </View>
-
                 {/* Wrap location/time and icon in a row */}
                 <View style={styles.detailsRow}>
                   <Text style={styles.cardDetails}>
@@ -291,21 +266,46 @@ export default function QRCodeScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-            <View style={[styles.qrWrapper, { opacity: isQRAvailable && !hasAlreadyScanned ? 1 : 0.4 }]}>
+            <View style={styles.qrWrapper}>
               <LinearGradient
                 colors={[selectedGame.homeTeam?.primaryColor || colors.primary, colors.accent]}
                 style={styles.qrGradient}
               >
                 <View style={styles.qrBackground}>
-                  {qrCodeData ? (
-                    <QRCode value={qrCodeData.qr_code_data} size={Dimensions.get("window").width * 0.55} />
+                  {hasAlreadyScanned ? (
+                    // Show faded QR code if already scanned
+                    <View style={styles.scannedQRContainer}>
+                      {qrCodeData ? (
+                        <QRCode value={qrCodeData.qr_code_data} size={Dimensions.get("window").width * 0.55} />
+                      ) : (
+                        <ActivityIndicator size="large" color={colors.primary} />
+                      )}
+                      <View style={styles.scannedOverlay}>
+                        <Ionicons name="checkmark-circle" size={60} color="#10B981" />
+                        <Text style={styles.scannedText}>Already Scanned</Text>
+                      </View>
+                    </View>
+                  ) : isQRAvailable ? (
+                    // Show QR code if available and not scanned
+                    qrCodeData ? (
+                      <QRCode value={qrCodeData.qr_code_data} size={Dimensions.get("window").width * 0.55} />
+                    ) : (
+                      <ActivityIndicator size="large" color={colors.primary} />
+                    )
                   ) : (
-                    <ActivityIndicator size="large" color={colors.primary} />
+                    // Show clock icon if not available yet
+                    <View style={styles.clockContainer}>
+                      <Ionicons
+                        name="time-outline"
+                        size={Dimensions.get("window").width * 0.25}
+                        color={colors.textSecondary}
+                      />
+                      <Text style={[styles.clockText, { color: colors.textSecondary }]}>Not Available Yet</Text>
+                    </View>
                   )}
                 </View>
               </LinearGradient>
             </View>
-
             <View style={styles.statusContainer}>
               {hasAlreadyScanned ? (
                 <View style={[styles.statusBadge, { backgroundColor: "#10B981" }]}>
@@ -331,7 +331,6 @@ export default function QRCodeScreen() {
             <Text style={styles.noGamesText}>No upcoming games found</Text>
           </View>
         )}
-
         <View style={styles.infoContainer}>
           <Text style={styles.infoTitle}>How It Works</Text>
           <Text style={styles.infoText}>1. Show your QR code at participating locations</Text>
@@ -352,7 +351,6 @@ const styles = StyleSheet.create({
   },
   content: { padding: 16, paddingBottom: 40 },
   instructions: { fontSize: 16, color: colors.textSecondary, textAlign: "center", marginBottom: 24, lineHeight: 24 },
-
   mainCard: {
     backgroundColor: colors.card,
     borderRadius: 24,
@@ -392,7 +390,47 @@ const styles = StyleSheet.create({
   locationText: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   qrWrapper: { alignItems: "center", marginVertical: 24 },
   qrGradient: { padding: 12, borderRadius: 20 },
-  qrBackground: { backgroundColor: "#FFFFFF", padding: 16, borderRadius: 12 },
+  qrBackground: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clockContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: Dimensions.get("window").width * 0.55,
+    width: Dimensions.get("window").width * 0.55,
+  },
+  clockText: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 12,
+    textAlign: "center",
+  },
+  scannedQRContainer: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scannedOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scannedText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#10B981",
+    marginTop: 8,
+    textAlign: "center",
+  },
   statusContainer: {
     alignItems: "center",
     paddingTop: 16,
@@ -426,7 +464,6 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: "bold", color: colors.text },
   closeButton: { padding: 8 },
-
   modalGameItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -444,11 +481,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginHorizontal: 6,
   },
-  modalGameItemTitle: { fontSize: 16, fontWeight: "600", color: colors.text, flex: 1, textAlign:"left" },
+  modalGameItemTitle: { fontSize: 16, fontWeight: "600", color: colors.text, flex: 1, textAlign: "left" },
   modalGameItemSubtitle: { fontSize: 14, color: colors.textSecondary },
   gameLocationText: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   separator: { height: 1, backgroundColor: colors.border },
-
   noGamesContainer: { alignItems: "center", paddingVertical: 80 },
   noGamesText: { fontSize: 16, color: colors.textSecondary, marginTop: 16 },
   infoContainer: {
@@ -473,12 +509,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   detailsRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginTop: 4,
-},
-chevronIcon: {
-  marginLeft: 8,
-},
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  chevronIcon: {
+    marginLeft: 8,
+  },
 })

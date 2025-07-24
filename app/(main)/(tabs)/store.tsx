@@ -1,4 +1,5 @@
 "use client"
+
 import type React from "react"
 import { useState, useEffect } from "react"
 import {
@@ -12,8 +13,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
-  Alert,
-  Dimensions,
+  Image,
 } from "react-native"
 import { Feather } from "@expo/vector-icons"
 import { SafeAreaView } from "react-native-safe-area-context"
@@ -24,14 +24,32 @@ import { useRouter } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import { useCart } from "@/context/cart-context"
-import { fetchRewards, fetchSpecialOffers, fetchUserAchievements, fetchUserStatus } from "@/app/actions/points"
-import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel } from "@/types/updated_types"
+import {
+  fetchRewards,
+  fetchSpecialOffers,
+  fetchScanHistory,
+  fetchUserStatus,
+  fetchUserAchievements,
+  checkUserAchievements,
+} from "@/app/actions/points"
+import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, ScanHistory } from "@/types/updated_types"
 import OfferCard from "@/components/rewards/OfferCard"
-import RedeemModal from "@/components/rewards/RedeemModal" // Import the unified modal
-
-const { width } = Dimensions.get("window")
+import RedeemModal from "@/components/rewards/RedeemModal"
+import { supabase } from "@/lib/supabase"
 
 type SortOption = "none" | "points_low_high" | "points_high_low" | "newest" | "popular"
+
+type PurchaseHistory = {
+  id: string
+  item_id: string
+  item_title: string
+  item_type: "reward" | "special_offer"
+  points_used: number
+  quantity: number
+  purchase_date: string
+  status: string
+}
+
 type RewardOrSpecial = Reward | SpecialOffer
 
 // Helper function to check if an item is a SpecialOffer
@@ -39,29 +57,275 @@ const isSpecialOffer = (item: RewardOrSpecial): item is SpecialOffer => {
   return "end_date" in item && "start_date" in item
 }
 
+// Reward Image Component
+type RewardImageProps = {
+  imageUrl?: string
+  containerStyle?: any
+}
+
+const RewardImage: React.FC<RewardImageProps> = ({ imageUrl, containerStyle }) => {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  if (!imageUrl || imageError) {
+    return (
+      <View style={[styles.fallbackIconContainer, containerStyle]}>
+        <Feather name="gift" size={32} color={colors.primary} />
+      </View>
+    )
+  }
+
+  return (
+    <View style={[styles.fullImageContainer, containerStyle]}>
+      {imageLoading && (
+        <View style={styles.imageLoadingOverlay}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      )}
+      <Image
+        source={{ uri: imageUrl }}
+        style={styles.fullImage}
+        onError={() => {
+          setImageError(true)
+          setImageLoading(false)
+        }}
+        onLoad={() => setImageLoading(false)}
+        onLoadEnd={() => setImageLoading(false)}
+        resizeMode="cover"
+      />
+    </View>
+  )
+}
+
 const RewardsStoreScreen: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState<string>("")
-  const [sortOption, setSortOption] = useState<SortOption>("none")
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("")
-  const [refreshing, setRefreshing] = useState(false)
-
-  // Unified modal state
-  const [selectedItem, setSelectedItem] = useState<RewardOrSpecial | null>(null)
-  const [modalVisible, setModalVisible] = useState(false)
-
+  // Cart and user hooks
+  const { addToCart, totalItems, isInCart, getItemQuantity, removeOneFromCart } = useCart()
+  const { showSuccess, showError, showInfo } = useNotifications()
+  const { points, userId, getUserFirstName } = useUserStore()
   const router = useRouter()
-  const { points, userId } = useUserStore()
-  const { showSuccess, showInfo } = useNotifications()
-  const { addToCart, removeOneFromCart, totalItems, isInCart, getItemQuantity } = useCart()
 
   // State for data
   const [rewards, setRewards] = useState<Reward[]>([])
   const [specialOffers, setSpecialOffers] = useState<SpecialOffer[]>([])
-  const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([])
+  const [scanHistory, setScanHistory] = useState<ScanHistory[]>([])
+  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistory[]>([])
   const [userStatus, setUserStatus] = useState<UserStatusWithLevel | null>(null)
+  const [userAchievements, setUserAchievements] = useState<UserAchievement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState<string>("")
+  const [sortOption, setSortOption] = useState<SortOption>("none")
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("")
+
+  // Modal states
+  const [selectedItem, setSelectedItem] = useState<RewardOrSpecial | null>(null)
+  const [modalVisible, setModalVisible] = useState(false)
+
+  // Fetch purchase history
+  const fetchPurchaseHistory = async (userId: string): Promise<PurchaseHistory[]> => {
+    try {
+      const { data, error } = await supabase.rpc("get_user_purchase_history", {
+        p_user_id: userId,
+      })
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error("Error fetching purchase history:", error)
+      return []
+    }
+  }
+
+  // Main data fetching function
+  const fetchData = async () => {
+    if (!userId) {
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const [rewardsData, offersData, historyData, purchaseHistoryData, statusData, achievementsData] =
+        await Promise.all([
+          fetchRewards(),
+          fetchSpecialOffers(),
+          fetchScanHistory(userId),
+          fetchPurchaseHistory(userId),
+          fetchUserStatus(userId),
+          fetchUserAchievements(userId),
+        ])
+
+      // Filter out sold rewards and rewards with no stock
+      const availableRewards = rewardsData.filter((reward) => {
+        if (reward.is_sold) return false
+        const stockQuantity = Number(reward.stock_quantity)
+        return isNaN(stockQuantity) || stockQuantity > 0
+      })
+
+      // Filter out expired and inactive special offers
+      const availableOffers = offersData.filter((offer) => {
+        if (!offer.is_active) return false
+
+        // Check if offer is expired
+        const isExpired = new Date() > new Date(offer.end_date)
+        if (isExpired) return false
+
+        // Check if offer hasn't started yet
+        const isNotStarted = new Date() < new Date(offer.start_date)
+        if (isNotStarted) return false
+
+        // Check limited quantity
+        if (offer.limited_quantity) {
+          const remainingQuantity = offer.limited_quantity - (offer.claimed_count || 0)
+          return remainingQuantity > 0
+        }
+
+        return true
+      })
+
+      setRewards(availableRewards)
+      setSpecialOffers(availableOffers)
+      setScanHistory(historyData)
+      setPurchaseHistory(purchaseHistoryData)
+      setUserStatus(statusData)
+      setUserAchievements(achievementsData)
+
+      // Check for new achievements after loading data
+      if (statusData) {
+        const newAchievements = await checkUserAchievements(userId)
+        if (newAchievements.length > 0) {
+          showSuccess(
+            "🎉 Achievement Unlocked!",
+            `You earned: ${newAchievements.map((a) => a.achievement_name).join(", ")}`,
+          )
+
+          // Refresh achievements
+          const updatedAchievements = await fetchUserAchievements(userId)
+          setUserAchievements(updatedAchievements)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error)
+      setError("Failed to load data. Please try again.")
+      showError("Error", "Failed to load data. Please try again.")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  // Refresh handler
+  const onRefresh = () => {
+    setRefreshing(true)
+    fetchData()
+  }
+
+  // Modal handlers
+  const handleCloseModal = () => {
+    setModalVisible(false)
+    setSelectedItem(null)
+  }
+
+  const handleItemPress = (item: RewardOrSpecial) => {
+    setSelectedItem(item)
+    setModalVisible(true)
+  }
+
+  // Cart handlers
+  const handleAddToCart = (reward: Reward) => {
+    console.log("🛒 Adding reward to cart:", reward.title)
+
+    if (!userId) {
+      showError("Login Required", "Please log in to add rewards to cart.")
+      return
+    }
+
+    if (points < reward.points_required) {
+      showError("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
+      return
+    }
+
+    // Create cart item
+    const cartItem = {
+      id: reward.id,
+      title: reward.title,
+      description: reward.description || "",
+      points_required: reward.points_required,
+      category: reward.category || undefined,
+      image_url: reward.image_url || undefined,
+      item_type: "reward" as const,
+    }
+
+    // Add to cart
+    addToCart(cartItem)
+
+    // Show success notification
+    showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
+
+    console.log("🛒 Cart updated, total items:", totalItems + 1)
+  }
+
+  const handleRemoveFromCart = (reward: Reward) => {
+    try {
+      console.log("🛒 Removing reward from cart:", reward.id, reward.title)
+      const currentQuantity = getItemQuantity(reward.id)
+
+      if (currentQuantity > 0) {
+        removeOneFromCart(reward.id)
+        showInfo("Removed from Cart", `One ${reward.title} has been removed from your cart.`)
+        console.log("🛒 Item removed, new total items:", totalItems - 1)
+      } else {
+        console.warn("Attempted to remove item not in cart:", reward.id)
+      }
+    } catch (error) {
+      console.error("Error removing reward from cart:", error)
+      showError("Error", "Failed to remove item from cart. Please try again.")
+    }
+  }
+
+  // Unified redeem handler for modal
+  const handleItemRedeem = (item: RewardOrSpecial) => {
+    console.log("🛒 Redeeming item:", item.title)
+
+    if (!userId) {
+      showError("Login Required", "Please log in to redeem items.")
+      return
+    }
+
+    if (points < item.points_required) {
+      showError("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
+      return
+    }
+
+    // Create cart item object that works for both rewards and special offers
+    const cartItem = {
+      id: item.id,
+      title: item.title,
+      description: item.description || "",
+      points_required: item.points_required,
+      category: item.category || undefined,
+      image_url: item.image_url || undefined,
+      item_type: (isSpecialOffer(item) ? "special_offer" : "reward") as "special_offer" | "reward",
+    }
+
+    // Add to cart
+    addToCart(cartItem)
+
+    // Show success message
+    const itemType = isSpecialOffer(item) ? "Special Offer" : "Reward"
+    showSuccess("Added to Cart!", `${itemType} "${item.title}" has been added to your cart.`)
+
+    // Close modal
+    setModalVisible(false)
+
+    console.log("🛒 Item redeemed and added to cart, total items:", totalItems + 1)
+  }
+
+  // Search debounce effect
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery)
@@ -69,42 +333,13 @@ const RewardsStoreScreen: React.FC = () => {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  // Initial data fetch
   useEffect(() => {
+    console.log("🛒 Current cart total items:", totalItems)
     if (userId) {
       fetchData()
     }
   }, [userId])
-
-  const fetchData = async () => {
-    if (!userId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const [rewardsData, offersData, achievementsData, statusData] = await Promise.all([
-        fetchRewards(),
-        fetchSpecialOffers(),
-        fetchUserAchievements(userId),
-        fetchUserStatus(userId),
-      ])
-
-      const availableRewards = rewardsData.filter((reward) => !reward.is_sold && (reward.stock_quantity ?? 0) > 0)
-      setRewards(availableRewards)
-      setSpecialOffers(offersData)
-      setUserAchievements(achievementsData)
-      setUserStatus(statusData)
-    } catch (err) {
-      console.error("Error fetching data:", err)
-      setError("Failed to load rewards. Please try again.")
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
-
-  const onRefresh = () => {
-    setRefreshing(true)
-    fetchData()
-  }
 
   // Filter and sort rewards
   const filteredRewards = rewards
@@ -134,96 +369,13 @@ const RewardsStoreScreen: React.FC = () => {
       }
     })
 
-  // Unified handler for both rewards and special offers
-  const handleItemPress = (item: RewardOrSpecial) => {
-    setSelectedItem(item)
-    setModalVisible(true)
-  }
-
-  // Unified redeem handler
-  const handleItemRedeem = (item: RewardOrSpecial) => {
-    if (!userId) {
-      Alert.alert("Login Required", "Please log in to redeem items.")
-      return
-    }
-
-    if (points < item.points_required) {
-      Alert.alert("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
-      return
-    }
-
-    if (isSpecialOffer(item)) {
-      // Handle special offer redemption
-      showSuccess("Offer Redeemed!", `${item.title} has been redeemed successfully!`)
-      setModalVisible(false)
-      fetchData() // Refresh data to update points and offers
-    } else {
-      // Handle reward - add to cart
-      addToCart({
-        id: item.id,
-        title: item.title,
-        description: item.description || "",
-        points_required: item.points_required,
-        category: item.category || undefined,
-        image_url: item.image_url || undefined,
-      })
-      showSuccess("Added to Cart!", `${item.title} has been added to your cart.`)
-      setModalVisible(false)
-      setTimeout(() => {
-        router.push("../store/Checkout")
-      }, 1000)
-    }
-  }
-
-  const handleAddToCart = (reward: Reward) => {
-    if (!userId) {
-      Alert.alert("Login Required", "Please log in to add rewards to cart.")
-      return
-    }
-    if (points < reward.points_required) {
-      Alert.alert("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
-      return
-    }
-    addToCart({
-      id: reward.id,
-      title: reward.title,
-      description: reward.description || "",
-      points_required: reward.points_required,
-      category: reward.category || undefined,
-      image_url: reward.image_url || undefined,
-    })
-    showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
-    setTimeout(() => {
-      router.push("../store/Checkout")
-    }, 1000)
-  }
-
-  const handleRemoveFromCart = (reward: Reward) => {
-    removeOneFromCart(reward.id)
-    showInfo("Removed from Cart", `One ${reward.title} has been removed from your cart.`)
-  }
-
+  // Reset filters
   const resetFilters = () => {
     setSortOption("none")
     setSearchQuery("")
   }
 
-  const handleCheckoutPress = () => {
-    router.push({
-      pathname: "../store/Checkout",
-      params: {
-        totalItems: totalItems.toString(),
-        userPoints: points.toString(),
-        timestamp: Date.now().toString(),
-      },
-    })
-  }
-
-  const handleCloseModal = () => {
-    setModalVisible(false)
-    setSelectedItem(null)
-  }
-
+  // Loading state
   if (loading && rewards.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -235,6 +387,7 @@ const RewardsStoreScreen: React.FC = () => {
     )
   }
 
+  // Error state
   if (error && rewards.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -249,6 +402,7 @@ const RewardsStoreScreen: React.FC = () => {
     )
   }
 
+  // Filter active special offers
   const activeSpecialOffers = specialOffers.filter((offer) => {
     const isExpired = new Date() > new Date(offer.end_date)
     return !isExpired && offer.is_active
@@ -257,13 +411,17 @@ const RewardsStoreScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* Birthday Banner */}
         <BirthdayBanner />
+        <View style={{ marginBottom: 20 }} />
 
+        {/* Special Offers Section */}
         {activeSpecialOffers.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -281,43 +439,47 @@ const RewardsStoreScreen: React.FC = () => {
               contentContainerStyle={styles.featuredContainer}
             >
               {activeSpecialOffers.map((offer) => (
-                <OfferCard
-                  key={offer.id}
-                  offer={offer}
-                  userPoints={points}
-                  onPress={() => handleItemPress(offer)} // Use unified handler
-                />
+                <OfferCard key={offer.id} offer={offer} userPoints={points} onPress={() => handleItemPress(offer)} />
               ))}
             </ScrollView>
           </View>
         )}
 
+        {/* Rewards Section Header */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle2}>Rewards</Text>
-          <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => {
-              const sortOptions: SortOption[] = ["none", "points_low_high", "points_high_low", "newest", "popular"]
-              const currentIndex = sortOptions.indexOf(sortOption)
-              const nextIndex = (currentIndex + 1) % sortOptions.length
-              setSortOption(sortOptions[nextIndex])
-            }}
-          >
-            <Feather name="sliders" size={18} color="#555" />
-            <Text style={styles.filterText}>
-              {sortOption === "none"
-                ? "Sort"
-                : sortOption === "points_low_high"
-                  ? "Price ↑"
-                  : sortOption === "points_high_low"
-                    ? "Price ↓"
-                    : sortOption === "newest"
-                      ? "Newest"
-                      : "Popular"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: "../all_cards/points", params: { tab: "rewards" } })}
+            >
+              <Text style={styles.seeAllText2}>See All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => {
+                const sortOptions: SortOption[] = ["none", "points_low_high", "points_high_low", "newest", "popular"]
+                const currentIndex = sortOptions.indexOf(sortOption)
+                const nextIndex = (currentIndex + 1) % sortOptions.length
+                setSortOption(sortOptions[nextIndex])
+              }}
+            >
+              <Feather name="sliders" size={18} color="#555" />
+              <Text style={styles.filterText}>
+                {sortOption === "none"
+                  ? "Sort"
+                  : sortOption === "points_low_high"
+                    ? "Price ↑"
+                    : sortOption === "points_high_low"
+                      ? "Price ↓"
+                      : sortOption === "newest"
+                        ? "Newest"
+                        : "Popular"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
+        {/* Search Bar */}
         <View style={styles.searchBar}>
           <Feather name="search" size={20} color="#777" />
           <TextInput
@@ -329,6 +491,7 @@ const RewardsStoreScreen: React.FC = () => {
           />
         </View>
 
+        {/* Active Filters */}
         {(sortOption !== "none" || searchQuery.trim()) && (
           <View style={styles.activeFiltersContainer}>
             <Text style={styles.activeFiltersTitle}>Active Filters:</Text>
@@ -358,6 +521,7 @@ const RewardsStoreScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Loading Overlay */}
         {loading && rewards.length > 0 && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -365,6 +529,7 @@ const RewardsStoreScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Rewards List */}
         <View style={styles.rewardsList}>
           {filteredRewards.length > 0 ? (
             filteredRewards.map((reward) => (
@@ -374,8 +539,8 @@ const RewardsStoreScreen: React.FC = () => {
                 userPoints={points}
                 isInCart={isInCart(reward.id)}
                 cartQuantity={getItemQuantity(reward.id)}
-                onPress={() => handleItemPress(reward)} // Use unified handler
-                onAddToCart={handleAddToCart}
+                onPress={() => handleItemPress(reward)}
+                onAddToCart={handleItemRedeem}
                 onRemoveFromCart={handleRemoveFromCart}
               />
             ))
@@ -391,7 +556,8 @@ const RewardsStoreScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={styles.cartButton} onPress={handleCheckoutPress}>
+      {/* Floating Cart Button */}
+      <TouchableOpacity style={styles.cartButton} onPress={() => router.push("../store/Checkout")}>
         <Feather name="shopping-cart" size={24} color="#FFFFFF" />
         {totalItems > 0 && (
           <View style={styles.cartBadge}>
@@ -400,7 +566,7 @@ const RewardsStoreScreen: React.FC = () => {
         )}
       </TouchableOpacity>
 
-      {/* Unified Modal for both rewards and special offers */}
+      {/* Redeem Modal */}
       <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} />
     </SafeAreaView>
   )
@@ -414,10 +580,11 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     ...Platform.select({
       android: { paddingTop: 20 },
+      ios: { paddingTop: 40 },
     }),
   },
   scrollView: {
-    paddingTop: 60,
+    paddingTop: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -482,8 +649,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 12,
     paddingHorizontal: 16,
-    marginBottom: 16,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   sectionTitle: {
     fontSize: 20,
@@ -500,6 +672,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: colors.primary,
+  },
+  seeAllText2: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primary,
+    marginTop: 10,
   },
   featuredScrollView: {
     marginBottom: 8,
@@ -636,6 +814,37 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "bold",
+  },
+  // Additional styles for RewardImage component
+  fallbackIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: "#F5F5F5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  imageLoadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    zIndex: 1,
+  },
+  fullImage: {
+    width: "100%",
+    height: "100%",
   },
 })
 

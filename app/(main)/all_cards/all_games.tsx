@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { View, Text, StyleSheet, Image, Pressable, FlatList, Modal, TouchableOpacity } from "react-native"
+import { View, Text, StyleSheet, Image, Pressable, ScrollView, Modal, TouchableOpacity } from "react-native"
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
@@ -17,6 +17,7 @@ import { sortGamesByPriority } from "@/utils/sortGame"
 export default function AllGamesScreen() {
   const router = useRouter()
   const { showSuccess, showInfo } = useNotifications()
+
   const [allGames, setAllGames] = useState<Game[]>([])
   const [allTeams, setAllTeams] = useState<Team[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,6 +25,72 @@ export default function AllGamesScreen() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [locationType, setLocationType] = useState<string | null>(null)
   const [filterModalVisible, setFilterModalVisible] = useState(false)
+
+  // Helper function to parse 12-hour time to 24-hour format (same as other components)
+  const parse12HourTime = useCallback((timeStr: string): string => {
+    try {
+      const [time, modifier] = timeStr.toUpperCase().split(" ")
+      let [hours, minutes] = time.split(":").map(Number)
+
+      if (modifier === "PM" && hours < 12) {
+        hours += 12
+      }
+      if (modifier === "AM" && hours === 12) {
+        hours = 0
+      }
+
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+    } catch (e) {
+      console.error("Error parsing 12-hour time:", timeStr, e)
+      return "00:00:00"
+    }
+  }, [])
+
+  // Calculate game start and end times (same as other components)
+  const getGameTimings = useCallback(
+    (gameData: Game) => {
+      const gameDate = new Date(gameData.date)
+      let gameStartTime = new Date(gameDate)
+
+      if (gameData.time) {
+        const time24h = parse12HourTime(gameData.time)
+        gameStartTime = new Date(`${gameDate.toISOString().split("T")[0]}T${time24h}`)
+      } else {
+        gameStartTime.setHours(0, 0, 0, 0)
+      }
+
+      const gameEndTime = new Date(gameStartTime.getTime() + 60 * 60 * 1000) // 1 hour after game start
+      return { gameStartTime, gameEndTime }
+    },
+    [parse12HourTime],
+  )
+
+  // Function to determine if a game is actually live using time-based logic
+  const isGameLive = useCallback(
+    (game: Game): boolean => {
+      // Skip completed, postponed, or canceled games
+      if (
+        game.status === "completed" ||
+        game.status === "final" ||
+        game.status === "postponed" ||
+        game.status === "canceled"
+      ) {
+        return false
+      }
+
+      try {
+        const now = new Date()
+        const { gameStartTime, gameEndTime } = getGameTimings(game)
+
+        // Game is live if current time is between start and end time
+        return now >= gameStartTime && now <= gameEndTime
+      } catch (error) {
+        console.error("Error calculating game timings for game:", game.id, error)
+        return false
+      }
+    },
+    [getGameTimings],
+  )
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,9 +110,15 @@ export default function AllGamesScreen() {
 
   const fetchAllGames = async () => {
     try {
-      const [upcoming, past, live] = await Promise.all([getUpcomingGames(50), getPastGames(20), getLiveGames(10)])
+      const [upcoming, past, live] = await Promise.all([getUpcomingGames(500), getPastGames(200), getLiveGames(100)])
       const combinedGames = [...live, ...upcoming, ...past]
-      return sortGamesByPriority(combinedGames)
+
+      // Remove duplicates by creating a Map with game IDs as keys
+      const gameMap = new Map<string, Game>()
+      combinedGames.forEach((game) => gameMap.set(game.id, game))
+      const uniqueGames = Array.from(gameMap.values())
+
+      return sortGamesByPriority(uniqueGames)
     } catch (error) {
       console.error("Error fetching games:", error)
       showInfo("Error", "Failed to load games. Please try again.")
@@ -98,35 +171,38 @@ export default function AllGamesScreen() {
     setActiveFilter("all")
   }, [])
 
-  // Helper function to categorize games by DATE (same as home screen)
-  const categorizeGamesByDate = (games: Game[]) => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+  // UPDATED: Helper function to categorize games using time-based logic
+  const categorizeGamesByDate = useCallback(
+    (games: Game[]) => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
 
-    const live: Game[] = []
-    const upcoming: Game[] = []
-    const past: Game[] = []
+      const live: Game[] = []
+      const upcoming: Game[] = []
+      const past: Game[] = []
 
-    games.forEach((game) => {
-      const gameDate = new Date(game.date)
-      gameDate.setHours(0, 0, 0, 0)
+      games.forEach((game) => {
+        // Use time-based logic to determine if game is live
+        if (isGameLive(game)) {
+          live.push(game)
+        } else {
+          const gameDate = new Date(game.date)
+          gameDate.setHours(0, 0, 0, 0)
 
-      // Live games (status-based)
-      if (game.status === "live") {
-        live.push(game)
-      }
-      // Past games (date-based)
-      else if (gameDate < today) {
-        past.push(game)
-      }
-      // Upcoming games (date-based) - includes today and future
-      else {
-        upcoming.push(game)
-      }
-    })
+          // Check if game is completed or in the past
+          if (gameDate < today || game.status === "completed" || game.status === "final") {
+            past.push(game)
+          } else {
+            // Game is in the future (upcoming)
+            upcoming.push(game)
+          }
+        }
+      })
 
-    return { live, upcoming, past }
-  }
+      return { live, upcoming, past }
+    },
+    [isGameLive],
+  )
 
   // Apply team and location filters first, then categorize by date
   const teamAndLocationFilteredGames = useMemo(() => {
@@ -149,14 +225,14 @@ export default function AllGamesScreen() {
     })
   }, [allGames, selectedTeam, locationType])
 
-  // Categorize games by date
+  // Categorize games by date using time-based logic
   const {
     live: liveGames,
     upcoming: upcomingGames,
     past: pastGames,
   } = useMemo(() => {
     return categorizeGamesByDate(teamAndLocationFilteredGames)
-  }, [teamAndLocationFilteredGames])
+  }, [teamAndLocationFilteredGames, categorizeGamesByDate])
 
   // Apply active filter to get final filtered games
   const filteredGames = useMemo(() => {
@@ -270,8 +346,8 @@ export default function AllGamesScreen() {
       {/* Header with Title and Filter Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={router.back} activeOpacity={0.7}>
-            <Feather name="chevron-left" size={24} color="BLACK" />
-          </TouchableOpacity>
+          <Feather name="chevron-left" size={24} color="BLACK" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>All Games</Text>
         <Pressable onPress={() => setFilterModalVisible(true)} style={styles.filterButton}>
           <Feather name="filter" size={20} color={colors.primary} />
@@ -319,62 +395,78 @@ export default function AllGamesScreen() {
           <Text style={styles.loadingText}>Loading games...</Text>
         </View>
       ) : filteredGames.length > 0 ? (
-        <FlatList
-          data={[{ key: "games" }]}
-          keyExtractor={(item) => item.key}
-          renderItem={() => (
-            <View>
-              {/* Live Games - Status Based */}
-              {activeFilter === "all" && liveGames.length > 0 && (
-                <View style={styles.gameGroup}>
-                  <View style={styles.gameGroupHeader}>
-                    <View style={styles.liveIndicator}>
-                      <View style={styles.liveDot} />
-                      <Text style={styles.gameGroupTitle}>Live Now ({liveGames.length})</Text>
-                    </View>
-                  </View>
-                  {sortGamesByPriority(liveGames).map((game) => (
-                    <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
-                  ))}
-                </View>
-              )}
-
-              {/* Upcoming Games - Date Based (Today + Future) */}
-              {activeFilter === "all" && upcomingGames.length > 0 && (
-                <View style={styles.gameGroup}>
-                  <View style={styles.gameGroupHeader}>
-                    <Feather name="clock" size={18} color={colors.primary} />
-                    <Text style={styles.gameGroupTitle}>Upcoming ({upcomingGames.length})</Text>
-                  </View>
-                  {sortGamesByPriority(upcomingGames).map((game) => (
-                    <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
-                  ))}
-                </View>
-              )}
-
-              {/* Past Games - Date Based */}
-              {activeFilter === "all" && pastGames.length > 0 && (
-                <View style={styles.gameGroup}>
-                  <View style={styles.gameGroupHeader}>
-                    <Feather name="check-circle" size={18} color={colors.primary} />
-                    <Text style={styles.gameGroupTitle}>Recent ({pastGames.length})</Text>
-                  </View>
-                  {sortGamesByPriority(pastGames).map((game) => (
-                    <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
-                  ))}
-                </View>
-              )}
-
-              {/* Filtered Games - When a specific filter is active */}
-              {activeFilter !== "all" &&
-                filteredGames.map((game) => (
-                  <GameCard key={game.id} game={game} onPress={handleGamePress} onNotifyPress={handleNotifyPress} />
-                ))}
-            </View>
-          )}
+        <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={styles.gamesContent}
           showsVerticalScrollIndicator={false}
-        />
+        >
+          {/* Live Games - Time Based Logic */}
+          {activeFilter === "all" && liveGames.length > 0 && (
+            <View style={styles.gameGroup}>
+              <View style={styles.gameGroupHeader}>
+                <View style={styles.liveIndicator}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.gameGroupTitle}>Live Now ({liveGames.length})</Text>
+                </View>
+              </View>
+              {sortGamesByPriority(liveGames).map((game) => (
+                <GameCard
+                  key={`live-${game.id}`}
+                  game={game}
+                  onPress={handleGamePress}
+                  onNotifyPress={handleNotifyPress}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Upcoming Games - Date Based (Today + Future) */}
+          {activeFilter === "all" && upcomingGames.length > 0 && (
+            <View style={styles.gameGroup}>
+              <View style={styles.gameGroupHeader}>
+                <Feather name="clock" size={18} color={colors.primary} />
+                <Text style={styles.gameGroupTitle}>Upcoming ({upcomingGames.length})</Text>
+              </View>
+              {sortGamesByPriority(upcomingGames).map((game) => (
+                <GameCard
+                  key={`upcoming-${game.id}`}
+                  game={game}
+                  onPress={handleGamePress}
+                  onNotifyPress={handleNotifyPress}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Past Games - Date Based */}
+          {activeFilter === "all" && pastGames.length > 0 && (
+            <View style={styles.gameGroup}>
+              <View style={styles.gameGroupHeader}>
+                <Feather name="check-circle" size={18} color={colors.primary} />
+                <Text style={styles.gameGroupTitle}>Recent ({pastGames.length})</Text>
+              </View>
+              {sortGamesByPriority(pastGames).map((game) => (
+                <GameCard
+                  key={`past-${game.id}`}
+                  game={game}
+                  onPress={handleGamePress}
+                  onNotifyPress={handleNotifyPress}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Filtered Games - When a specific filter is active */}
+          {activeFilter !== "all" &&
+            filteredGames.map((game) => (
+              <GameCard
+                key={`filtered-${activeFilter}-${game.id}`}
+                game={game}
+                onPress={handleGamePress}
+                onNotifyPress={handleNotifyPress}
+              />
+            ))}
+        </ScrollView>
       ) : (
         <Animated.View entering={FadeIn} style={styles.emptyContainer}>
           <Feather name="search" size={48} color="#D1D5DB" />
@@ -518,10 +610,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textSecondary + "1A",
     borderRadius: 16,
   },
-  clearAllText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: "500",
+  scrollView: {
+    flex: 1,
   },
   gamesContent: {
     paddingBottom: 20,
@@ -640,8 +730,8 @@ const styles = StyleSheet.create({
   },
   activeFilterTab: {
     backgroundColor: colors.primary + "1A",
-    borderRadius:12,
-    padding:5
+    borderRadius: 12,
+    padding: 5,
   },
   filterTabText: {
     fontSize: 14,
@@ -657,7 +747,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    paddingBottom:30,
+    paddingBottom: 30,
     borderTopColor: colors.border,
     gap: 12,
   },

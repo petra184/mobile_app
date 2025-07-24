@@ -5,7 +5,7 @@ import { colors } from "@/constants/colors"
 import type { Game } from "@/types/updated_types"
 import Feather from "@expo/vector-icons/Feather"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getStoryByGameId } from "@/app/actions/news"
 import { router } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
@@ -20,34 +20,127 @@ interface GameCardProps {
   onGameDetailsPress?: (game: Game) => void
 }
 
-export const GameCard: React.FC<GameCardProps> = ({
-  game,
-  onPress,
-  onNotifyPress,
-  onNewsPress,
-}) => {
+export const GameCard: React.FC<GameCardProps> = ({ game, onPress, onNotifyPress, onNewsPress }) => {
   const [gameStory, setGameStory] = useState<{ id: string; title: string; headline: string } | null>(null)
   const [isLoadingStory, setIsLoadingStory] = useState(false)
   const scale = useSharedValue(1)
   const opacity = useSharedValue(1)
 
-  // SIMPLE DATE COMPARISON - ONLY BASED ON DATE
-  const gameDate = new Date(game.date)
-  const today = new Date()
-  // Reset time to 00:00:00 for both dates to compare only the date part
-  gameDate.setHours(0, 0, 0, 0)
-  today.setHours(0, 0, 0, 0)
+  // Helper function to parse 12-hour time to 24-hour format (same as game details and home screen)
+  const parse12HourTime = useCallback((timeStr: string): string => {
+    try {
+      const [time, modifier] = timeStr.toUpperCase().split(" ")
+      let [hours, minutes] = time.split(":").map(Number)
 
-  // Simple comparison: is game date before today?
-  const isPastGame = gameDate < today
-  const isToday = gameDate.getTime() === today.getTime()
-  const isFutureGame = gameDate > today
+      if (modifier === "PM" && hours < 12) {
+        hours += 12
+      }
+      if (modifier === "AM" && hours === 12) {
+        hours = 0
+      }
 
-  // Status checks (only for display purposes, not for filtering)
-  const isCompleted = game.status === "completed" || game.status === "final"
-  const isLive = game.status === "live"
-  const isPostponed = game.status === "postponed"
-  const isCanceled = game.status === "canceled"
+      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`
+    } catch (e) {
+      console.error("Error parsing 12-hour time:", timeStr, e)
+      return "00:00:00"
+    }
+  }, [])
+
+  // Calculate game start and end times (same as game details and home screen)
+  const getGameTimings = useCallback(
+    (gameData: Game) => {
+      const gameDate = new Date(gameData.date)
+      let gameStartTime = new Date(gameDate)
+
+      if (gameData.time) {
+        const time24h = parse12HourTime(gameData.time)
+        gameStartTime = new Date(`${gameDate.toISOString().split("T")[0]}T${time24h}`)
+      } else {
+        gameStartTime.setHours(0, 0, 0, 0)
+      }
+
+      const gameEndTime = new Date(gameStartTime.getTime() + 60 * 60 * 1000) // 1 hour after game start
+      return { gameStartTime, gameEndTime }
+    },
+    [parse12HourTime],
+  )
+
+  // UPDATED: Use time-based logic to determine if game is live
+  const isGameLive = useCallback((): boolean => {
+    // Skip completed, postponed, or canceled games
+    if (
+      game.status === "completed" ||
+      game.status === "final" ||
+      game.status === "postponed" ||
+      game.status === "canceled"
+    ) {
+      return false
+    }
+
+    try {
+      const now = new Date()
+      const { gameStartTime, gameEndTime } = getGameTimings(game)
+
+      // Game is live if current time is between start and end time
+      return now >= gameStartTime && now <= gameEndTime
+    } catch (error) {
+      console.error("Error calculating game timings for game:", game.id, error)
+      return false
+    }
+  }, [game, getGameTimings])
+
+  // UPDATED: Use time-based logic for date comparisons
+  const getGameDateInfo = useCallback(() => {
+    const now = new Date()
+    const { gameStartTime, gameEndTime } = getGameTimings(game)
+
+    const isCompleted = game.status === "completed" || game.status === "final"
+    const isPostponed = game.status === "postponed"
+    const isCanceled = game.status === "canceled"
+    const isLive = isGameLive()
+
+    // Check if game is in the past (ended and not completed status)
+    const gameDateStr = gameStartTime.toISOString().split("T")[0]
+    const nowDateStr = now.toISOString().split("T")[0]
+    const isGameInPast = gameDateStr < nowDateStr || (gameDateStr === nowDateStr && now > gameEndTime && !isCompleted)
+
+    // Check if game is today
+    const isToday = now.toDateString() === gameStartTime.toDateString()
+
+    // Determine if it's truly upcoming (scheduled AND in the future)
+    const isUpcoming = !isCompleted && !isLive && !isPostponed && !isCanceled && !isGameInPast
+
+    return {
+      isLive,
+      isCompleted,
+      isPostponed,
+      isCanceled,
+      isToday,
+      isUpcoming,
+      isPastGame: isGameInPast || isCompleted,
+      gameStartTime,
+      gameEndTime,
+    }
+  }, [game, getGameTimings, isGameLive])
+
+  const gameInfo = getGameDateInfo()
+
+  // UPDATED: Check if game is within an hour from now using proper time logic
+  const isWithinOneHour = useCallback((): boolean => {
+    if (!game.date || !game.time) return false
+
+    try {
+      const now = new Date()
+      const { gameStartTime } = getGameTimings(game)
+      const timeDiff = gameStartTime.getTime() - now.getTime()
+      const oneHourInMs = 60 * 60 * 1000
+
+      return timeDiff <= oneHourInMs && timeDiff >= 0
+    } catch (error) {
+      console.error("Error in isWithinOneHour:", error)
+      return false
+    }
+  }, [game, getGameTimings])
 
   // Function to count special events
   const getSpecialEventsCount = () => {
@@ -68,7 +161,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   // Check for story when component mounts or game changes
   useEffect(() => {
     const checkForStory = async () => {
-      if (game.id && isPastGame) {
+      if (game.id && gameInfo.isPastGame) {
         setIsLoadingStory(true)
         try {
           const story = await getStoryByGameId(game.id)
@@ -83,7 +176,7 @@ export const GameCard: React.FC<GameCardProps> = ({
     }
 
     checkForStory()
-  }, [game.id, isPastGame])
+  }, [game.id, gameInfo.isPastGame])
 
   // Format date properly - different for completed vs upcoming
   const formatGameDate = (dateString: string, isCompleted = false) => {
@@ -107,36 +200,18 @@ export const GameCard: React.FC<GameCardProps> = ({
     opacity: opacity.value,
   }))
 
-  // Check if game is within an hour from now
-  const isWithinOneHour = () => {
-    if (!game.date || !game.time) return false
-    try {
-      const gameDateTime = new Date(game.date)
-      if (game.time.includes(":")) {
-        const [hours, minutes] = game.time.split(":")
-        gameDateTime.setHours(Number.parseInt(hours, 10), Number.parseInt(minutes, 10), 0, 0)
-      }
-      const now = new Date()
-      const timeDiff = gameDateTime.getTime() - now.getTime()
-      const oneHourInMs = 60 * 60 * 1000
-      return timeDiff <= oneHourInMs && timeDiff >= 0
-    } catch (error) {
-      return false
-    }
-  }
-
   // Get game photo from database or fallback
   const getGamePhoto = () => {
     return game.photo_url || game.homeTeam?.logo || "/placeholder.svg?height=200&width=400"
   }
 
-  // Get status display info
+  // UPDATED: Get status display info using time-based logic
   const getStatusInfo = () => {
-    if (isLive) return { text: "LIVE NOW", gradient: ["#EF4444", "#DC2626"] as const }
-    if (isPastGame || isCompleted) return { text: "FINAL", gradient: ["#3B82F6", "#2563EB"] as const }
-    if (isPostponed) return { text: "POSTPONED", gradient: ["#F59E0B", "#D97706"] as const }
-    if (isCanceled) return { text: "CANCELED", gradient: ["#EF4444", "#DC2626"] as const }
-    if (isToday) return { text: "TODAY", gradient: ["#3B82F6", "#2563EB"] as const }
+    if (gameInfo.isLive) return { text: "LIVE NOW", gradient: ["#EF4444", "#DC2626"] as const }
+    if (gameInfo.isPastGame || gameInfo.isCompleted) return { text: "FINAL", gradient: ["#3B82F6", "#2563EB"] as const }
+    if (gameInfo.isPostponed) return { text: "POSTPONED", gradient: ["#F59E0B", "#D97706"] as const }
+    if (gameInfo.isCanceled) return { text: "CANCELED", gradient: ["#EF4444", "#DC2626"] as const }
+    if (gameInfo.isToday) return { text: "TODAY", gradient: ["#3B82F6", "#2563EB"] as const }
     return { text: "UPCOMING", gradient: ["#10B981", "#059669"] as const }
   }
 
@@ -150,6 +225,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   }
 
   const handleQRScanPress = (e: any) => {
+    e.stopPropagation()
     router.push({ pathname: "../(tabs)/qr_code", params: { id: game.id } })
   }
 
@@ -173,7 +249,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   }
 
   // RENDER PAST GAME LAYOUT - ONLY IF DATE IS IN THE PAST
-  if (isPastGame) {
+  if (gameInfo.isPastGame) {
     const getColor = () => {
       if (game.score) {
         if (game.score?.away < game.score?.home) {
@@ -258,7 +334,7 @@ export const GameCard: React.FC<GameCardProps> = ({
       <View style={styles.shadowWrapper}>
         <Pressable
           onPress={handlePress}
-          style={[styles.container, isCanceled && styles.canceledContainer]}
+          style={[styles.container, gameInfo.isCanceled && styles.canceledContainer]}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
@@ -272,7 +348,9 @@ export const GameCard: React.FC<GameCardProps> = ({
               resizeMode="cover"
             >
               <LinearGradient
-                colors={isCanceled ? ["rgba(0,0,0,0.5)", "rgba(0,0,0,0.8)"] : ["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]}
+                colors={
+                  gameInfo.isCanceled ? ["rgba(0,0,0,0.5)", "rgba(0,0,0,0.8)"] : ["rgba(0,0,0,0.3)", "rgba(0,0,0,0.7)"]
+                }
                 style={styles.heroOverlay}
               >
                 {/* Points Banner - Top Right */}
@@ -317,7 +395,7 @@ export const GameCard: React.FC<GameCardProps> = ({
           </View>
           {/* Content Section */}
           <View style={styles.contentSection}>
-            {isCanceled && (
+            {gameInfo.isCanceled && (
               <View style={styles.canceledBanner}>
                 <LinearGradient colors={["#EF4444", "#DC2626"]} style={styles.canceledBannerGradient}>
                   <MaterialCommunityIcons name="cancel" size={18} color="white" />
@@ -325,8 +403,8 @@ export const GameCard: React.FC<GameCardProps> = ({
                 </LinearGradient>
               </View>
             )}
-            {!isCanceled &&
-              (isPostponed ? (
+            {!gameInfo.isCanceled &&
+              (gameInfo.isPostponed ? (
                 <View style={styles.postponedInfoRow}>
                   <View style={styles.dateLocationContainer}>
                     <View style={styles.dateTimeRow}>
@@ -375,17 +453,17 @@ export const GameCard: React.FC<GameCardProps> = ({
                     </Text>
                   </View>
                   <View style={styles.locationContainer2}>
-                      <MaterialCommunityIcons name="trophy-award" size={20} color={colors.primary} />
-                      <Text style={styles.locationText}>
-                        {game.seasonType
-                          ?.split("-")
-                          .map((word) => word.toUpperCase())
-                          .join(" ")}
-                      </Text>
+                    <MaterialCommunityIcons name="trophy-award" size={20} color={colors.primary} />
+                    <Text style={styles.locationText}>
+                      {game.seasonType
+                        ?.split("-")
+                        .map((word) => word.toUpperCase())
+                        .join(" ")}
+                    </Text>
                   </View>
                 </>
               ))}
-            {getSpecialEventsCount() > 0 && !isCanceled && (
+            {getSpecialEventsCount() > 0 && !gameInfo.isCanceled && (
               <View style={styles.alertsSection}>
                 <View style={styles.specialEventCard}>
                   <View style={styles.specialEventHeader}>
@@ -397,15 +475,16 @@ export const GameCard: React.FC<GameCardProps> = ({
                 </View>
               </View>
             )}
-            {!isCanceled && (
+            {!gameInfo.isCanceled && (
               <View style={styles.actionsContainer}>
-                {onNotifyPress && !isPostponed && !isCompleted && !isLive && (
+                {onNotifyPress && (
                   <Pressable style={styles.notifyButton} onPress={handleNotifyPress}>
                     <Feather name="bell" size={16} color="#6366F1" />
                     <Text style={styles.notifyButtonText}>Notify Me</Text>
                   </Pressable>
                 )}
-                {(isWithinOneHour() || isLive) && (
+                {/* UPDATED: Use time-based logic for QR code button */}
+                {(isWithinOneHour() || gameInfo.isLive) && (
                   <Pressable style={styles.qrScanButton} onPress={handleQRScanPress}>
                     <MaterialCommunityIcons name="qrcode" size={20} color="white" />
                     <Text style={styles.qrScanButtonText}>Scan QR Code</Text>
@@ -420,6 +499,7 @@ export const GameCard: React.FC<GameCardProps> = ({
   )
 }
 
+// Keep all your existing styles
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "white",
@@ -747,10 +827,12 @@ const styles = StyleSheet.create({
   qrScanButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#6366F1",
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#6366F1",
   },
   qrScanButtonText: {
     fontSize: 16,

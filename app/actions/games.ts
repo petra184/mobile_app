@@ -2,12 +2,24 @@ import { supabase } from "@/lib/supabase"
 import { formatTimeString } from "@/utils/dateUtils"
 import { colors } from "@/constants/colors"
 import type {GameScheduleRow, OpposingTeamRow, TeamsRow, Game, Team} from "@/types/updated_types"
-
+import { getGameTimings } from "@/utils/time"
 
 // Query result type with relationships
 type GameScheduleWithRelations = GameScheduleRow & {
   sport_id: TeamsRow | null
   opponent_id: OpposingTeamRow | null
+}
+
+export async function getGamesCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("game_schedule")
+    .select('*', { count: 'exact' })
+
+  if (error) {
+    console.error("Error getting game count:", error)
+    return 0 // Always return a number
+  }
+  return count ?? 0
 }
 
 /**
@@ -276,16 +288,31 @@ export async function getLiveGames(limit = 100): Promise<Game[]> {
     }
 
     const now = new Date()
-    const currentHour = now.getHours()
-    const potentiallyLiveGames =
+
+    // Filter games that are actually live using the same logic
+    const actuallyLiveGames =
       gameSchedules?.filter((game) => {
         if (!game.game_time) return false
-        const [hourStr] = game.game_time.split(":")
-        const gameHour = Number.parseInt(hourStr, 10)
-        return gameHour <= currentHour && gameHour >= currentHour - 3
+
+        // Skip completed, postponed, or canceled games
+        if (game.status === "completed" || game.status === "postponed" || game.status === "canceled") {
+          return false
+        }
+
+        try {
+          const { gameStartTime, gameEndTime } = getGameTimings(game)
+
+          // Determine if the game is currently "live" (started and within 1 hour duration)
+          const isLive = now >= gameStartTime && now <= gameEndTime
+
+          return isLive
+        } catch (error) {
+          console.error("Error calculating game timings for game:", game.game_id, error)
+          return false
+        }
       }) || []
 
-    const games = await transformGameSchedules(potentiallyLiveGames)
+    const games = await transformGameSchedules(actuallyLiveGames)
     return games
   } catch (error) {
     console.error("Failed to fetch live games:", error)

@@ -5,7 +5,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
@@ -30,10 +29,62 @@ import {
 } from "@/app/actions/qr_scanning"
 import type { Game, ScanHistoryItem } from "@/types/updated_types"
 
+// Custom notification component
+const ScanNotification = ({
+  visible,
+  message,
+  type,
+  onDismiss,
+}: {
+  visible: boolean
+  message: string
+  type: "success" | "error" | "warning"
+  onDismiss: () => void
+}) => {
+  const getBackgroundColor = () => {
+    switch (type) {
+      case "success":
+        return "#10B981"
+      case "error":
+        return "#EF4444"
+      case "warning":
+        return "#F59E0B"
+      default:
+        return "#6B7280"
+    }
+  }
+
+  const getIcon = () => {
+    switch (type) {
+      case "success":
+        return "checkmark-circle"
+      case "error":
+        return "close-circle"
+      case "warning":
+        return "warning"
+      default:
+        return "information-circle"
+    }
+  }
+
+  if (!visible) return null
+
+  return (
+    <View style={styles.notificationOverlay}>
+      <View style={[styles.notificationContainer, { backgroundColor: getBackgroundColor() }]}>
+        <Ionicons name={getIcon()} size={24} color="white" />
+        <Text style={styles.notificationText}>{message}</Text>
+        <TouchableOpacity onPress={onDismiss} style={styles.notificationCloseButton}>
+          <Ionicons name="close" size={20} color="white" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
 export default function AdminQRScanner() {
   const { userId, isLoading: userLoading } = useUserStore()
   const router = useRouter()
-
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [scanned, setScanned] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -45,30 +96,39 @@ export default function AdminQRScanner() {
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([])
   const [isScanning, setIsScanning] = useState(false)
 
+  // Notification state
+  const [notification, setNotification] = useState<{
+    visible: boolean
+    message: string
+    type: "success" | "error" | "warning"
+  }>({
+    visible: false,
+    message: "",
+    type: "success",
+  })
+
   useEffect(() => {
     const initialize = async () => {
       setLoading(true)
       const adminStatus = await checkAdminStatusAction()
       setIsAdmin(adminStatus)
-
       if (adminStatus) {
         const { status } = await Camera.requestCameraPermissionsAsync()
         setHasPermission(status === "granted")
         await loadGames()
       }
-
       setLoading(false)
     }
-
     if (userId) initialize()
   }, [userId])
 
   const loadGames = useCallback(async () => {
     const result = await loadAdminGamesAction()
     if (!result.success) {
-      Alert.alert("Error", result.error)
-      return
+        showNotification(result.error || "An unknown error occurred", "error")
+        return
     }
+
     setGames(result.data)
     if (result.data.length > 0 && !selectedGame) {
       setSelectedGame(result.data[0])
@@ -92,43 +152,85 @@ export default function AdminQRScanner() {
     setRefreshing(false)
   }, [loadGames, loadScanHistory])
 
+  // Show notification function
+  const showNotification = (message: string, type: "success" | "error" | "warning") => {
+    setNotification({
+      visible: true,
+      message,
+      type,
+    })
+
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+      setNotification((prev) => ({ ...prev, visible: false }))
+    }, 4000)
+  }
+
+  // Dismiss notification function
+  const dismissNotification = () => {
+    setNotification((prev) => ({ ...prev, visible: false }))
+  }
+
+  // Reset scanner state
+  const resetScanner = () => {
+    setScanned(false)
+    setIsScanning(false)
+  }
+
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (scanned || !selectedGame || !userId) return
+    if (scanned || !selectedGame || !userId || isScanning) return
+
+    console.log("📱 QR Code scanned:", data)
     setScanned(true)
     setIsScanning(true)
 
     try {
+      // Validate QR code format first
       if (!validateQRCodeFormatAction(data)) {
-        Alert.alert("Invalid QR Code", "The scanned QR code format is not valid.")
-        setScanned(false)
-        setIsScanning(false)
+        console.log("❌ Invalid QR code format")
+        showNotification("Invalid QR code format. Please scan a valid game QR code.", "error")
+        resetScanner()
         return
       }
 
+      // Process the QR code scan
       const result = await processQRCodeScanAction(data, selectedGame, userId)
 
       if (!result.success) {
-        Alert.alert("Scan Failed", result.message)
-        setScanned(false)
-        setIsScanning(false)
+        console.log("❌ Scan failed:", result.message)
+
+        // Handle different types of scan failures with appropriate messages
+        if (
+          result.message.toLowerCase().includes("already scanned") ||
+          result.message.toLowerCase().includes("duplicate")
+        ) {
+          showNotification("This QR code has already been scanned for this game.", "warning")
+        } else if (
+          result.message.toLowerCase().includes("not found") ||
+          result.message.toLowerCase().includes("invalid")
+        ) {
+          showNotification("QR code not found or invalid for this game.", "error")
+        } else if (result.message.toLowerCase().includes("expired")) {
+          showNotification("This QR code has expired and is no longer valid.", "warning")
+        } else {
+          showNotification(result.message || "Scan failed. Please try again.", "error")
+        }
+
+        resetScanner()
         return
       }
 
-      Alert.alert("Success!", result.message, [
-        {
-          text: "OK",
-          onPress: () => {
-            setScanned(false)
-            loadScanHistory()
-          },
-        },
-      ])
+      // Success case
+      console.log("✅ Scan successful:", result.message)
+      showNotification(result.message || "QR code scanned successfully!", "success")
+
+      // Refresh scan history after successful scan
+      await loadScanHistory()
+      resetScanner()
     } catch (error) {
-      console.error("Error processing scan:", error)
-      Alert.alert("Error", "Failed to process QR code scan.")
-      setScanned(false)
-    } finally {
-      setIsScanning(false)
+      console.error("❌ Error processing scan:", error)
+      showNotification("Failed to process QR code scan. Please try again.", "error")
+      resetScanner()
     }
   }
 
@@ -201,64 +303,103 @@ export default function AdminQRScanner() {
     <SafeAreaView style={styles.container} edges={["left"]}>
       <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
-      <Modal visible={isGameModalVisible} transparent animationType="slide" onRequestClose={() => setIsGameModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Game</Text>
-              <TouchableOpacity onPress={() => setIsGameModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={games}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.gameItem, selectedGame?.id === item.id && styles.selectedGameItem]}
-                  onPress={() => {
-                    setSelectedGame(item)
-                    setIsGameModalVisible(false)
-                  }}
-                >
-                  <Text style={styles.gameItemTitle}>
-                    {item.homeTeam?.name || "Home"} vs {item.awayTeam?.name || "Away"}
-                  </Text>
-                  <Text style={styles.gameItemSubtitle}>
-                    {formatDate(item.date)} at {formatTime(item.time)}
-                  </Text>
-                  <Text style={styles.gameItemPoints}>Points: {item.points || 10}</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
+      {/* Custom Notification */}
+      <ScanNotification
+        visible={notification.visible}
+        message={notification.message}
+        type={notification.type}
+        onDismiss={dismissNotification}
+      />
 
-      <ScrollView style={styles.scrollView} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      {/* Only show modal if there are games available */}
+      {games.length > 0 && (
+        <Modal
+          visible={isGameModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setIsGameModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Game</Text>
+                <TouchableOpacity onPress={() => setIsGameModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={games}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.gameItem, selectedGame?.id === item.id && styles.selectedGameItem]}
+                    onPress={() => {
+                      setSelectedGame(item)
+                      setIsGameModalVisible(false)
+                    }}
+                  >
+                    <Text style={styles.gameItemTitle}>
+                      {item.homeTeam?.name || "Home"} vs {item.awayTeam?.name || "Away"}
+                    </Text>
+                    <Text style={styles.gameItemSubtitle}>
+                      {formatDate(item.date)} at {formatTime(item.time)}
+                    </Text>
+                    <Text style={styles.gameItemPoints}>Points: {item.points || 10}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <View style={styles.header}>
-          <Text style={styles.subtitle}>Scan user's QR codes to award them the game points. Select a game to continue
+          <Text style={styles.subtitle}>
+            {games.length > 0 ? "Scan user's QR codes to award them the game points. Select a game to continue." : ""}
           </Text>
         </View>
-        <TouchableOpacity style={styles.gameSelector} onPress={() => setIsGameModalVisible(true)}>
-          <View style={styles.gameSelectorContent}>
-            <Text style={styles.gameSelectorLabel}>Selected Game</Text>
-            {selectedGame ? (
-              <>
-                <Text style={styles.gameSelectorTitle}>
-                  {selectedGame.homeTeam?.name || "Home"} vs {selectedGame.awayTeam?.name || "Away"}
-                </Text>
-                <Text style={styles.gameSelectorSubtitle}>
-                  {formatDate(selectedGame.date)} • Points: {selectedGame.points || 10}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.gameSelectorTitle}>No game selected</Text>
-            )}
-          </View>
-          <Ionicons name="chevron-down" size={24} color={colors.primary} />
-        </TouchableOpacity>
 
+        {/* Show game selector only if games are available */}
+        {games.length > 0 ? (
+          <TouchableOpacity style={styles.gameSelector} onPress={() => setIsGameModalVisible(true)}>
+            <View style={styles.gameSelectorContent}>
+              <Text style={styles.gameSelectorLabel}>Selected Game</Text>
+              {selectedGame ? (
+                <>
+                  <Text style={styles.gameSelectorTitle}>
+                    {selectedGame.homeTeam?.name || "Home"} vs {selectedGame.awayTeam?.name || "Away"}
+                  </Text>
+                  <Text style={styles.gameSelectorSubtitle}>
+                    {formatDate(selectedGame.date)} • Points: {selectedGame.points || 10}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.gameSelectorTitle}>No game selected</Text>
+              )}
+            </View>
+            <Ionicons name="chevron-down" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        ) : (
+          /* No games available message */
+          <View style={styles.noGamesContainer}>
+            <Ionicons name="calendar-outline" size={48} color={colors.textSecondary} />
+            <Text style={styles.noGamesTitle}>No Upcoming Games</Text>
+            <Text style={styles.noGamesSubtitle}>
+              There are currently no games scheduled for QR code scanning. Check back later or contact your
+              administrator.
+            </Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+              <Ionicons name="refresh-outline" size={20} color={colors.primary} />
+              <Text style={styles.refreshButtonText}>Refresh Games</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Scanner - only show if game is selected */}
         {selectedGame && (
           <View style={styles.scannerContainer}>
             <LinearGradient colors={[colors.primary, colors.accent]} style={styles.scannerGradient}>
@@ -277,11 +418,10 @@ export default function AdminQRScanner() {
                 )}
               </View>
             </LinearGradient>
-
             <View style={styles.scannerControls}>
               <TouchableOpacity
                 style={[styles.scanButton, scanned && styles.scanButtonActive]}
-                onPress={() => setScanned(false)}
+                onPress={resetScanner}
                 disabled={isScanning}
               >
                 <Ionicons name={scanned ? "refresh" : "scan"} size={20} color="white" />
@@ -291,9 +431,13 @@ export default function AdminQRScanner() {
           </View>
         )}
 
+        {/* Recent scans history */}
         {scanHistory.length > 0 && (
           <View style={styles.historyContainer}>
-            <Text style={styles.historyTitle}>Recent Scans</Text>
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyTitle}>Recent Scans</Text>
+              <Text style={styles.historySubtitle}>Last 10 scans for this game</Text>
+            </View>
             {scanHistory.slice(0, 10).map((scan, index) => (
               <View key={scan.id + index} style={styles.historyItem}>
                 <View style={styles.historyItemContent}>
@@ -322,11 +466,6 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  backButton: {
-    borderRadius: 20,
-    alignItems: "center",
-    marginBottom: 3
-  },
   backgroundImage: {
     position: "absolute",
     bottom: 0,
@@ -344,16 +483,11 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: "center",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: colors.text,
-    marginBottom: 8,
-  },
   subtitle: {
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: "center",
+    lineHeight: 22,
   },
   gameSelector: {
     flexDirection: "row",
@@ -382,6 +516,41 @@ const styles = StyleSheet.create({
   gameSelectorSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  noGamesContainer: {
+    alignItems: "center",
+    margin: 16,
+    padding: 32,
+  },
+  noGamesTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noGamesSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  refreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary + "10",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.primary + "30",
+  },
+  refreshButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primary,
+    marginLeft: 6,
   },
   scannerContainer: {
     margin: 16,
@@ -441,11 +610,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
+  historyHeader: {
+    marginBottom: 16,
+  },
   historyTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: colors.text,
-    marginBottom: 16,
+    marginBottom: 4,
+  },
+  historySubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   historyItem: {
     flexDirection: "row",
@@ -477,7 +653,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: "80%",
-    paddingBottom:20
+    paddingBottom: 20,
   },
   modalHeader: {
     flexDirection: "row",
@@ -533,5 +709,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
     marginTop: 16,
+  },
+  // Notification styles
+  notificationOverlay: {
+    position: "absolute",
+    top: 60,
+    left: 16,
+    right: 16,
+    zIndex: 1000,
+  },
+  notificationContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  notificationText: {
+    flex: 1,
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  notificationCloseButton: {
+    padding: 4,
   },
 })

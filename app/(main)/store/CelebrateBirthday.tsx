@@ -20,13 +20,14 @@ import { Image } from "expo-image"
 import { useNavigation } from "expo-router"
 import { Feather } from "@expo/vector-icons"
 import { getBirthdayPackages } from "@/app/actions/birthdays"
-import { getFAQsForMobile, type FAQ } from "@/app/actions/birthdays"
+import { getFAQsForMobile, submitBirthdayContactMessage, type FAQ } from "@/app/actions/birthdays"
 import PackageCard from "@/components/rewards/PackageCard"
 import ReservationForm from "@/components/rewards/ReservationForm"
 import { colors } from "@/constants/colors"
 import { LinearGradient } from "expo-linear-gradient"
 import { useRouter } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
+import { useNotifications } from "@/context/notification-context"
 import { getSchoolById } from "@/app/actions/school_info"
 import type { SchoolInfo, BirthdayPackage } from "@/types/updated_types"
 
@@ -36,13 +37,13 @@ const HERO_HEIGHT = 260
 const TABS = [
   { id: "packages", label: "Packages", iconName: "gift" },
   { id: "contact", label: "Contact", iconName: "mail" },
-  { id: "testimonials", label: "Reviews", iconName: "star" },
   { id: "faq", label: "FAQ", iconName: "help-circle" },
 ]
 
 export default function BirthdaysScreen() {
   const router = useRouter()
-  const { getUserName, userEmail, first_name, last_name } = useUserStore()
+  const { getUserName, userEmail, first_name, last_name, userId } = useUserStore()
+  const { showSuccess, showError, showInfo } = useNotifications()
   const [school, setSchool] = useState<SchoolInfo | null>(null)
 
   useEffect(() => {
@@ -51,7 +52,6 @@ export default function BirthdaysScreen() {
       const result = await getSchoolById(schoolId)
       setSchool(result)
     }
-
     fetchSchool()
   }, [])
 
@@ -77,6 +77,7 @@ export default function BirthdaysScreen() {
     phone: "",
     message: "",
   })
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false)
 
   const navigation = useNavigation()
   const scrollViewRef = useRef<ScrollView>(null)
@@ -97,7 +98,6 @@ export default function BirthdaysScreen() {
   useEffect(() => {
     const userName = getUserName()
     const email = userEmail || ""
-
     if (userName !== "User" || email) {
       setContactForm((prev) => ({
         ...prev,
@@ -108,31 +108,23 @@ export default function BirthdaysScreen() {
   }, [getUserName, userEmail, first_name, last_name])
 
   const fetchPackages = async (isRefresh = false) => {
-    console.log("📱 Fetching packages for mobile app...")
-
     if (isRefresh) {
       setRefreshing(true)
     } else {
       setLoading(true)
     }
     setError(null)
-
     try {
       // Fetch all active birthday packages from ALL teams
       const result = await getBirthdayPackages({ is_active: true })
-
-      console.log("📦 Packages fetch result:", result)
-
       if (result.error) {
         console.error("❌ Error from getBirthdayPackages:", result.error)
         setError(result.error)
       } else {
-        console.log(`✅ Successfully fetched ${result.data.length} packages`)
         setPackages(result.data)
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load packages"
-      console.error("❌ Exception in fetchPackages:", errorMessage)
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -141,20 +133,14 @@ export default function BirthdaysScreen() {
   }
 
   const fetchFAQs = async () => {
-    console.log("❓ Fetching FAQs for mobile app...")
     setFaqsLoading(true)
     setFaqsError(null)
-
     try {
       const result = await getFAQsForMobile()
-
-      console.log("❓ FAQs fetch result:", result)
-
       if (result.error) {
         console.error("❌ Error from getFAQsForMobile:", result.error)
         setFaqsError(result.error)
       } else {
-        console.log(`✅ Successfully fetched ${result.data.length} FAQs`)
         setFaqs(result.data)
       }
     } catch (err) {
@@ -173,7 +159,6 @@ export default function BirthdaysScreen() {
   }, [navigation])
 
   const handlePackageSelect = (packageId: string) => {
-    console.log("🎯 Package selected:", packageId)
     setSelectedPackageId(packageId)
     setModalVisible(true)
   }
@@ -196,31 +181,69 @@ export default function BirthdaysScreen() {
       friction: 30,
       useNativeDriver: true,
     }).start()
-
     setActiveTab(tab)
-
     // Scroll to top when changing tabs
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollTo({ y: 0, animated: true })
     }
   }
 
-  const handleContactSubmit = () => {
-    // In a real app, this would send the form data to a server
-    console.log("Contact form submitted:", contactForm)
-    // Reset form but keep user info prefilled
-    const userName = getUserName()
-    const email = userEmail || ""
+  const handleContactSubmit = async () => {
+    // Validate form
+    if (!contactForm.name.trim()) {
+      showError("Validation Error", "Please enter your name.")
+      return
+    }
 
-    setContactForm({
-      name: userName !== "User" ? userName : "",
-      email: email,
-      phone: "",
-      message: "",
-    })
+    if (!contactForm.email.trim()) {
+      showError("Validation Error", "Please enter your email address.")
+      return
+    }
 
-    // Show success message (in a real app)
-    alert("Thank you! Your message has been sent. We will contact you shortly.")
+    if (!contactForm.message.trim()) {
+      showError("Validation Error", "Please enter a message.")
+      return
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(contactForm.email)) {
+      showError("Validation Error", "Please enter a valid email address.")
+      return
+    }
+
+    setIsSubmittingContact(true)
+
+    try {
+      const result = await submitBirthdayContactMessage({
+        name: contactForm.name.trim(),
+        email: contactForm.email.trim(),
+        phone: contactForm.phone.trim() || undefined,
+        message: contactForm.message.trim(),
+        user_id: userId || undefined,
+      })
+
+      if (result.success) {
+        showSuccess("Message Sent!", "Thank you for your message! Our team will get back to you within 24 hours.")
+
+        // Reset form but keep user info prefilled
+        const userName = getUserName()
+        const email = userEmail || ""
+        setContactForm({
+          name: userName !== "User" ? userName : "",
+          email: email,
+          phone: "",
+          message: "",
+        })
+      } else {
+        showError("Failed to Send", result.error || "Something went wrong. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error submitting contact form:", error)
+      showError("Network Error", "Unable to send message. Please check your connection and try again.")
+    } finally {
+      setIsSubmittingContact(false)
+    }
   }
 
   const toggleFaqExpansion = (faqId: string) => {
@@ -234,7 +257,6 @@ export default function BirthdaysScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} contentFit="cover" />
-
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Hero Section */}
         <View style={styles.hero}>
@@ -258,7 +280,6 @@ export default function BirthdaysScreen() {
           <TouchableOpacity style={styles.backButton} onPress={navigateToStore} activeOpacity={0.7}>
             <Feather name="chevron-left" size={20} color={colors.primary} />
           </TouchableOpacity>
-
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>Celebrate your Birthday with us!</Text>
             <Text style={styles.heroSubtitle}>
@@ -307,10 +328,9 @@ export default function BirthdaysScreen() {
               <View style={styles.tabContentContainer2}>
                 <Text style={styles.sectionTitle}>Birthday Packages</Text>
                 <Text style={styles.sectionSubtitle}>
-                  {packages.length > 0 ? `${packages.length} packages available from all teams` : "Loading packages..."}
+                  {packages.length > 0 ? `${packages.length} packages available` : "Loading packages..."}
                 </Text>
               </View>
-
               {loading && !refreshing ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={colors.primary} />
@@ -343,52 +363,6 @@ export default function BirthdaysScreen() {
             </View>
           )}
 
-          {activeTab === "testimonials" && (
-            <View style={styles.tabContentContainer}>
-              <Text style={styles.sectionTitle}>What People Are Saying</Text>
-              {[
-                {
-                  initials: "JD",
-                  name: "John Doe",
-                  rating: 5,
-                  text: "My son had the best birthday ever! The All-Star package was perfect - the kids loved meeting the mascot and getting photos on the court. Highly recommend!",
-                },
-                {
-                  initials: "AS",
-                  name: "Amanda Smith",
-                  rating: 4,
-                  text: "The Champion's Celebration was worth every penny! The personalized jersey was a huge hit, and the staff made sure everything was perfect. My daughter felt like a VIP!",
-                },
-                {
-                  initials: "MJ",
-                  name: "Mike Johnson",
-                  rating: 5,
-                  text: "We booked the Game Day Experience for my son's 12th birthday. Seeing his name on the scoreboard was amazing! The team went above and beyond to make it special.",
-                },
-              ].map((testimonial, index) => (
-                <View key={index} style={styles.testimonialCard}>
-                  <View style={styles.testimonialHeader}>
-                    <View style={styles.testimonialAvatar}>
-                      <Text style={styles.testimonialInitials}>{testimonial.initials}</Text>
-                    </View>
-                    <View>
-                      <Text style={styles.testimonialName}>{testimonial.name}</Text>
-                      <View style={styles.ratingContainer}>
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <Feather name="star" key={star} size={16} color={colors.secondary} />
-                        ))}
-                      </View>
-                    </View>
-                    <View style={styles.testimonialIconContainer}>
-                      <Feather name="heart" size={20} color={colors.primary} />
-                    </View>
-                  </View>
-                  <Text style={styles.testimonialText}>{testimonial.text}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
           {activeTab === "contact" && (
             <View style={styles.tabContentContainer}>
               <Text style={styles.sectionTitle}>Contact Us</Text>
@@ -397,7 +371,6 @@ export default function BirthdaysScreen() {
                 <Text style={styles.contactCardSubtitle}>
                   Fill out the form below and our team will get back to you within 24 hours.
                 </Text>
-
                 <View style={styles.formGroup}>
                   <View style={styles.inputIcon}>
                     <Feather name="user" size={18} color={colors.primary} />
@@ -405,11 +378,12 @@ export default function BirthdaysScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Your Name"
+                    placeholderTextColor="grey"
                     value={contactForm.name}
                     onChangeText={(text) => setContactForm({ ...contactForm, name: text })}
+                    editable={!isSubmittingContact}
                   />
                 </View>
-
                 <View style={styles.formGroup}>
                   <View style={styles.inputIcon}>
                     <Feather name="mail" size={18} color={colors.primary} />
@@ -417,50 +391,67 @@ export default function BirthdaysScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Email Address"
+                    placeholderTextColor="grey"
                     keyboardType="email-address"
+                    autoCapitalize="none"
                     value={contactForm.email}
                     onChangeText={(text) => setContactForm({ ...contactForm, email: text })}
+                    editable={!isSubmittingContact}
                   />
                 </View>
-
                 <View style={styles.formGroup}>
                   <View style={styles.inputIcon}>
                     <Feather name="phone" size={18} color={colors.primary} />
                   </View>
                   <TextInput
                     style={styles.input}
-                    placeholder="Phone Number"
+                    placeholder="Phone Number (Optional)"
+                    placeholderTextColor="grey"
                     keyboardType="phone-pad"
                     value={contactForm.phone}
                     onChangeText={(text) => setContactForm({ ...contactForm, phone: text })}
+                    editable={!isSubmittingContact}
                   />
                 </View>
-
                 <View style={styles.formGroup}>
                   <TextInput
                     style={styles.textArea}
                     placeholder="Your Message"
+                    placeholderTextColor="grey"
                     multiline
                     numberOfLines={4}
                     value={contactForm.message}
                     onChangeText={(text) => setContactForm({ ...contactForm, message: text })}
+                    editable={!isSubmittingContact}
                   />
                 </View>
-
-                <TouchableOpacity style={styles.submitButton} onPress={handleContactSubmit} activeOpacity={0.8}>
-                  <Feather name="send" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.submitButtonText}>Send Message</Text>
+                <TouchableOpacity
+                  style={[styles.submitButton, isSubmittingContact && styles.submitButtonDisabled]}
+                  onPress={handleContactSubmit}
+                  activeOpacity={0.8}
+                  disabled={isSubmittingContact}
+                >
+                  {isSubmittingContact ? (
+                    <>
+                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.submitButtonText}>Sending...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Feather name="send" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                      <Text style={styles.submitButtonText}>Send Message</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
-
                 <View style={styles.contactInfoContainer}>
                   <Text style={styles.contactInfoTitle}>Or reach us directly:</Text>
                   <View style={styles.contactInfoItem}>
                     <Feather name="phone" size={16} color={colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.contactInfoText}>{school?.contactPhone}</Text>
+                    <Text style={styles.contactInfoText}>{school?.contactPhone || "Contact phone not available"}</Text>
                   </View>
                   <View style={styles.contactInfoItem}>
                     <Feather name="mail" size={16} color={colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.contactInfoText}>{school?.contactEmail}</Text>
+                    <Text style={styles.contactInfoText}>{school?.contactEmail || "Contact email not available"}</Text>
                   </View>
                 </View>
               </View>
@@ -470,7 +461,6 @@ export default function BirthdaysScreen() {
           {activeTab === "faq" && (
             <View style={styles.tabContentContainer}>
               <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
-
               {faqsLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={colors.primary} />
@@ -520,7 +510,6 @@ export default function BirthdaysScreen() {
                             color={colors.textSecondary}
                           />
                         </View>
-
                         {isExpanded && (
                           <View style={styles.faqAnswerContainer}>
                             <Text style={styles.faqAnswer}>{faq.faq_response}</Text>
@@ -645,6 +634,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
+    marginBottom: 20,
   },
   newTab: {
     flex: 1,
@@ -692,7 +682,6 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
-    lineHeight: 20,
   },
   // Loading, error, and empty states
   loadingContainer: {
@@ -932,13 +921,17 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     backgroundColor: colors.primary,
-    borderRadius: 18,
+    borderRadius: 38,
     padding: 16,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     marginTop: 8,
     marginBottom: 24,
+  },
+  submitButtonDisabled: {
+    backgroundColor: colors.textSecondary,
+    opacity: 0.6,
   },
   submitButtonText: {
     color: "#FFFFFF",

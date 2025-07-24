@@ -406,8 +406,6 @@ export interface FAQ {
  */
 export async function getFAQsForMobile(): Promise<{ data: FAQ[]; error: string | null }> {
   try {
-    console.log("📱 Fetching FAQs for mobile app...")
-
     const { data, error } = await supabase
       .from("birthday_faqs")
       .select("*")
@@ -420,13 +418,6 @@ export async function getFAQsForMobile(): Promise<{ data: FAQ[]; error: string |
         error: `Failed to fetch FAQs: ${error.message}`,
       }
     }
-
-    console.log(`✅ Fetched ${data?.length || 0} FAQs for mobile`)
-
-    // Log each FAQ for debugging
-    data?.forEach((faq, index) => {
-      console.log(`❓ FAQ ${index + 1}: ${faq.faq_title}`)
-    })
 
     return {
       data: data || [],
@@ -446,7 +437,6 @@ export async function getFAQsForMobile(): Promise<{ data: FAQ[]; error: string |
  */
 export async function getFAQById(id: string): Promise<{ data: FAQ | null; error: string | null }> {
   try {
-    console.log("🔍 Fetching FAQ by ID:", id)
 
     const { data, error } = await supabase
       .from("birthday_faqs")
@@ -462,7 +452,6 @@ export async function getFAQById(id: string): Promise<{ data: FAQ | null; error:
       }
     }
 
-    console.log("✅ Fetched FAQ:", data?.faq_title)
     return {
       data: data,
       error: null,
@@ -481,7 +470,6 @@ export async function getFAQById(id: string): Promise<{ data: FAQ | null; error:
  */
 export async function searchFAQs(searchTerm: string): Promise<{ data: FAQ[]; error: string | null }> {
   try {
-    console.log("🔍 Searching FAQs with term:", searchTerm)
 
     if (!searchTerm.trim()) {
       // If no search term, return all FAQs
@@ -502,7 +490,6 @@ export async function searchFAQs(searchTerm: string): Promise<{ data: FAQ[]; err
       }
     }
 
-    console.log(`✅ Found ${data?.length || 0} FAQs matching "${searchTerm}"`)
     return {
       data: data || [],
       error: null,
@@ -521,7 +508,6 @@ export async function searchFAQs(searchTerm: string): Promise<{ data: FAQ[]; err
  */
 export async function getRecentFAQs(): Promise<{ data: FAQ[]; error: string | null }> {
   try {
-    console.log("📅 Fetching recently updated FAQs...")
 
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -540,7 +526,6 @@ export async function getRecentFAQs(): Promise<{ data: FAQ[]; error: string | nu
       }
     }
 
-    console.log(`✅ Fetched ${data?.length || 0} recently updated FAQs`)
     return {
       data: data || [],
       error: null,
@@ -605,6 +590,92 @@ export async function getFAQStats(): Promise<{
     return {
       data: null,
       error: error instanceof Error ? error.message : "Unknown error occurred",
+    }
+  }
+}
+
+
+export interface BirthdayContactMessage {
+  id?: string
+  name: string
+  email: string
+  phone?: string
+  message: string
+  created_at?: string
+  user_id?: string
+}
+
+export async function submitBirthdayContactMessage(data: {
+  name: string
+  email: string
+  phone?: string
+  message: string
+  user_id?: string
+}) {
+  try {
+    const { data: result, error } = await supabase
+      .from("birthday_contact")
+      .insert([
+        {
+          name: data.name,
+          email: data.email,
+          phone: data.phone || null,
+          message: data.message,
+          user_id: data.user_id || null,
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      console.error("Error submitting birthday contact message:", error)
+      return {
+        success: false,
+        error: error.message || "Failed to submit message",
+      }
+    }
+
+    return {
+      success: true,
+      data: result,
+    }
+  } catch (error) {
+    console.error("Exception in submitBirthdayContactMessage:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "An unexpected error occurred",
+    }
+  }
+}
+
+export async function getBirthdayContactMessages(limit = 50) {
+  try {
+    const { data, error } = await supabase
+      .from("birthday_contact")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error("Error fetching birthday contact messages:", error)
+      return {
+        success: false,
+        error: error.message,
+        data: [],
+      }
+    }
+
+    return {
+      success: true,
+      data: data || [],
+    }
+  } catch (error) {
+    console.error("Exception in getBirthdayContactMessages:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "An unexpected error occurred",
+      data: [],
     }
   }
 }

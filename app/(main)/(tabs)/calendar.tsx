@@ -14,6 +14,7 @@ import { Feather } from "@expo/vector-icons"
 import { getTeams } from "@/app/actions/teams"
 import { useNotifications } from "@/context/notification-context"
 import { convertUiTeamToDbTeam } from "@/app/actions/games"
+import { RefreshControl } from "react-native-gesture-handler"
 
 // Enable LayoutAnimation for smooth transitions on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -197,6 +198,23 @@ export default function EnhancedCalendarScreen() {
     return "There are no games on this date with your current filters."
   }, [selectedTeam, locationType, getLocationDisplayName])
 
+    const [refreshing, setRefreshing] = useState(false)
+    const onRefresh = useCallback(async () => {
+      setRefreshing(true)
+      try {
+        await loadTeams()
+        setSelectedTeam(null)
+        setLocationType(null)
+        setSelectedDate(null)
+        setGamesOnSelectedDate([])
+      } catch (error) {
+        console.error("Error refreshing teams:", error)
+      } finally {
+        setRefreshing(false)
+      }
+    }, [loadTeams])
+
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView
@@ -204,6 +222,8 @@ export default function EnhancedCalendarScreen() {
         showsVerticalScrollIndicator={false}
         removeClippedSubviews={true}
         keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        
       >
         {/* Header */}
         <LinearGradient colors={[colors.primary, colors.accent]} style={styles.header}>

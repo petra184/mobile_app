@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect } from "react"
 import {
   View,
@@ -7,20 +6,29 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  Alert,
   Image,
   ScrollView,
   Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  TouchableOpacity,
 } from "react-native"
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import * as ImagePicker from "expo-image-picker"
 import Feather from "@expo/vector-icons/Feather"
+import { Ionicons } from "@expo/vector-icons"
+import DateTimePicker from "@react-native-community/datetimepicker"
 import { useUserStore } from "@/hooks/userStore"
 import { getCurrentUser } from "@/app/actions/main_actions"
-import { updateProfileWithImage, updateUserProfileData, checkUsernameAvailability, getUserById } from "@/app/actions/users"
+import {
+  updateProfileWithImage,
+  updateUserProfileData,
+  checkUsernameAvailability,
+  getUserById,
+} from "@/app/actions/users"
+import { useNotifications } from "@/context/notification-context"
 
 function capitalize(name: string) {
   return name.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
@@ -29,6 +37,7 @@ function capitalize(name: string) {
 export default function EditProfileScreen() {
   const router = useRouter()
   const { userId, first_name: storeFirstName, last_name: storeLastName, userEmail, refreshUserData } = useUserStore()
+  const { showSuccess, showError, showInfo } = useNotifications()
 
   const [first_name, setFirstName] = useState("")
   const [last_name, setLastName] = useState("")
@@ -43,17 +52,19 @@ export default function EditProfileScreen() {
   const [usernameError, setUsernameError] = useState("")
   const [originalUsername, setOriginalUsername] = useState("")
 
+  // Date picker states
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+
   useEffect(() => {
     async function fetchData() {
       try {
         setIsLoading(true)
-
         if (!userId) {
-          Alert.alert("Error", "User not found")
+          showError("Error", "User not found")
           router.back()
           return
         }
-
         // Get data from both auth metadata and database
         const [authData, userData] = await Promise.all([getCurrentUser(), getUserById(userId)])
 
@@ -75,7 +86,7 @@ export default function EditProfileScreen() {
         })
       } catch (error) {
         console.error("Error fetching user data:", error)
-        Alert.alert("Error", "Failed to load profile data")
+        showError("Error", "Failed to load profile data")
       } finally {
         setIsLoading(false)
       }
@@ -91,7 +102,6 @@ export default function EditProfileScreen() {
         setUsernameError("")
         return
       }
-
       try {
         const result = await checkUsernameAvailability(username)
         setUsernameError(result.available ? "" : result.message)
@@ -104,14 +114,57 @@ export default function EditProfileScreen() {
     return () => clearTimeout(timeoutId)
   }, [username, originalUsername])
 
+  // Date picker functions
+  const formatDateForDisplay = (date: Date) => {
+    const month = (date.getMonth() + 1).toString().padStart(2, "0")
+    const day = date.getDate().toString().padStart(2, "0")
+    const year = date.getFullYear()
+    return `${month}/${day}/${year}`
+  }
+
+  const handleDateChange = (event: any, date?: Date) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false)
+    }
+    if (date) {
+      setSelectedDate(date)
+      const formattedDate = formatDateForDisplay(date)
+      setBirthday(formattedDate)
+    }
+  }
+
+  const openDatePicker = () => {
+    // If there's already a birthday, parse it to set the initial date
+    if (birthday) {
+      const parts = birthday.split("/")
+      if (parts.length === 3) {
+        const month = Number.parseInt(parts[0]) - 1 // Month is 0-indexed
+        const day = Number.parseInt(parts[1])
+        const year = Number.parseInt(parts[2])
+        if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
+          setSelectedDate(new Date(year, month, day))
+        }
+      }
+    } else {
+      // If no birthday is set, default to a reasonable date
+      const defaultDate = new Date()
+      defaultDate.setFullYear(defaultDate.getFullYear() - 25) // Default to 25 years ago
+      setSelectedDate(defaultDate)
+    }
+    setShowDatePicker(true)
+  }
+
+  const closeDatePicker = () => {
+    setShowDatePicker(false)
+  }
+
   // Function to handle image selection
   const pickImage = async () => {
     try {
       // Request permission
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync()
-
       if (permissionResult.granted === false) {
-        Alert.alert("Permission Required", "Please allow access to your photo library to update your profile picture.")
+        showError("Permission Required", "Please allow access to your photo library to update your profile picture.")
         return
       }
 
@@ -127,29 +180,29 @@ export default function EditProfileScreen() {
       }
     } catch (error) {
       console.error("Error picking image:", error)
-      Alert.alert("Error", "Failed to select image. Please try again.")
+      showError("Error", "Failed to select image. Please try again.")
     }
   }
 
   const handleSave = async () => {
     // Validate inputs
     if (!first_name.trim() || !last_name.trim()) {
-      Alert.alert("Error", "First and Last name cannot be empty")
+      showError("Error", "First and Last name cannot be empty")
       return
     }
 
     if (!username.trim()) {
-      Alert.alert("Error", "Username cannot be empty")
+      showError("Error", "Username cannot be empty")
       return
     }
 
     if (usernameError) {
-      Alert.alert("Error", "Please fix the username error before saving")
+      showError("Error", "Please fix the username error before saving")
       return
     }
 
     if (!userId) {
-      Alert.alert("Error", "User ID not found")
+      showError("Error", "User ID not found")
       return
     }
 
@@ -170,7 +223,6 @@ export default function EditProfileScreen() {
       const newImageUri = imageChanged && profileImage && !profileImage.startsWith("http") ? profileImage : undefined
 
       let success = false
-
       if (newImageUri) {
         // Update profile with new image
         success = await updateProfileWithImage(userId, profileData, newImageUri, originalProfileImage || undefined)
@@ -182,14 +234,14 @@ export default function EditProfileScreen() {
       if (success) {
         // Refresh user data in store
         await refreshUserData()
-
-        Alert.alert("Success", "Profile updated successfully", [{ text: "OK", onPress: () => router.back() }])
+        showSuccess("Success", "Profile updated successfully")
+        setTimeout(() => router.back(), 1500) // Auto navigate back after showing success
       } else {
         throw new Error("Profile update failed")
       }
     } catch (error) {
       console.error("Error saving profile:", error)
-      Alert.alert("Error", "Failed to update profile. Please try again.")
+      showError("Error", "Failed to update profile. Please try again.")
     } finally {
       setIsSaving(false)
       setIsImageUploading(false)
@@ -209,46 +261,51 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <>
-      <SafeAreaView style={styles.container} edges={["right"]}>
-        {/* Back Button */}
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Feather name="chevron-left" size={24} color={colors.primary} />
-        </Pressable>
+    <SafeAreaView style={styles.container} edges={["right"]}>
+      {/* Back Button */}
+      <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Feather name="chevron-left" size={24} color={colors.primary} />
+      </Pressable>
+      <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
 
-        <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
-
-       
-          {/* Profile Image Section */}
-          <View style={styles.profileImageSection}>
-            <View style={styles.profileImageContainer}>
-              {profileImage ? (
-                <Image source={{ uri: profileImage }} style={styles.profileImage} />
-              ) : (
-                <Feather name="user" size={60} color={colors.primary} />
-              )}
-
-              {/* Circular Edit (Pencil) Button */}
-              <Pressable
-                style={[styles.editPhotoButton, isImageUploading && styles.editPhotoButtonDisabled]}
-                onPress={pickImage}
-                disabled={isImageUploading}
-              >
-                {isImageUploading ? (
-                  <ActivityIndicator size={12} color="white" />
-                ) : (
-                  <Feather name="edit-2" size={16} color="white" />
-                )}
-              </Pressable>
-            </View>
-
-            {profileImage && (
-              <Text style={styles.imageHint}>
-                {profileImage.startsWith("http") ? "Current profile photo" : "New photo selected"}
-              </Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        {/* Profile Image Section */}
+        <View style={styles.profileImageSection}>
+          <View style={styles.profileImageContainer}>
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.profileImage} />
+            ) : (
+              <Feather name="user" size={60} color={colors.primary} />
             )}
+            {/* Circular Edit (Pencil) Button */}
+            <Pressable
+              style={[styles.editPhotoButton, isImageUploading && styles.editPhotoButtonDisabled]}
+              onPress={pickImage}
+              disabled={isImageUploading}
+            >
+              {isImageUploading ? (
+                <ActivityIndicator size={12} color="white" />
+              ) : (
+                <Feather name="edit-2" size={16} color="white" />
+              )}
+            </Pressable>
           </View>
-        <ScrollView showsVerticalScrollIndicator={false}>
+          {profileImage && (
+            <Text style={styles.imageHint}>
+              {profileImage.startsWith("http") ? "Current profile photo" : "New photo selected"}
+            </Text>
+          )}
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Form */}
           <View style={styles.formContainer}>
             {/* First & Last Name in One Row */}
@@ -263,7 +320,6 @@ export default function EditProfileScreen() {
                   placeholderTextColor={colors.textSecondary}
                 />
               </View>
-
               <View style={[styles.inputGroup, styles.halfWidth]}>
                 <Text style={styles.label}>Last Name</Text>
                 <TextInput
@@ -313,16 +369,40 @@ export default function EditProfileScreen() {
               />
             </View>
 
+            {/* Birthday Picker */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Birthday</Text>
-              <TextInput
-                style={styles.input}
-                value={birthday}
-                onChangeText={(text) => setBirthday(text)}
-                placeholder="MM/DD/YYYY"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-              />
+              <TouchableOpacity style={styles.datePickerButton} onPress={openDatePicker}>
+                <View style={styles.datePickerContent}>
+                  <Text style={[styles.datePickerText, !birthday && styles.placeholderText]}>
+                    {birthday || "Select Birthday (Optional)"}
+                  </Text>
+                  <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+                </View>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <View style={styles.datePickerContainer}>
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display= "spinner"
+                    onChange={handleDateChange}
+                    maximumDate={new Date()} // Can't select future dates
+                    minimumDate={new Date(1900, 0, 1)} // Reasonable minimum date
+                  />
+                  {Platform.OS === "ios" && (
+                    <View style={styles.datePickerButtons}>
+                      <TouchableOpacity style={styles.datePickerCancelButton} onPress={closeDatePicker}>
+                        <Text style={styles.datePickerCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.datePickerConfirmButton} onPress={closeDatePicker}>
+                        <Text style={styles.datePickerConfirmText}>Done</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           </View>
 
@@ -342,8 +422,8 @@ export default function EditProfileScreen() {
             )}
           </Pressable>
         </ScrollView>
-      </SafeAreaView>
-    </>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   )
 }
 
@@ -352,6 +432,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     top: 0,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   backButton: {
     position: "absolute",
@@ -439,6 +522,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
   },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 100, // Extra padding for keyboard
+  },
   formContainer: {
     padding: 16,
   },
@@ -484,6 +571,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#ef4444",
     marginTop: 4,
+  },
+  // Date picker styles
+  datePickerButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  datePickerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  datePickerText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  placeholderText: {
+    color: colors.textSecondary,
+  },
+  datePickerContainer: {
+    backgroundColor: colors.success,
+    borderRadius: 12,
+    marginTop: 8,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  datePickerButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  datePickerCancelButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  datePickerConfirmButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  datePickerCancelText: {
+    color: colors.errorBackground,
+    fontSize: 16,
+  },
+  datePickerConfirmText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
   saveButton: {
     flexDirection: "row",

@@ -300,28 +300,50 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
   }
 }
 
-// Update user preferences - now fully typed
-export async function updateUserPreferences(userId: string, preferences: UserPreferences): Promise<void> {
-  const { error } = await supabase.from("user_preferences").upsert(
-    {
-      user_id: userId,
-      favorite_teams: preferences.favoriteTeams,
-      notifications_enabled: preferences.notificationsEnabled,
-      push_notifications: preferences.pushNotifications,
-      email_notifications: preferences.emailNotifications,
-      game_notifications: preferences.gameNotifications,
-      news_notifications: preferences.newsNotifications,
-      special_offers: preferences.specialOffers,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      onConflict: "user_id", // conflict key
-    },
-  )
 
-  if (error) {
-    console.error("Error updating user preferences:", error)
-    throw new Error(`Failed to update preferences: ${error.message}`)
+// Updated preferences function with better error handling
+export async function updateUserPreferences(userId: string, preferences: UserPreferences): Promise<void> {
+  try {
+    console.log("📋 Updating user preferences for:", userId)
+
+    // First check if user exists in users table
+    const { data: userExists, error: userCheckError } = await supabase
+      .from("users")
+      .select("user_id")
+      .eq("user_id", userId)
+      .single()
+
+    if (userCheckError || !userExists) {
+      console.error("❌ User not found in users table:", userCheckError)
+      throw new Error("User profile not found. Please contact support.")
+    }
+
+    const { error } = await supabase.from("user_preferences").upsert(
+      {
+        user_id: userId,
+        favorite_teams: preferences.favoriteTeams,
+        notifications_enabled: preferences.notificationsEnabled,
+        push_notifications: preferences.pushNotifications,
+        email_notifications: preferences.emailNotifications,
+        game_notifications: preferences.gameNotifications,
+        news_notifications: preferences.newsNotifications,
+        special_offers: preferences.specialOffers,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "user_id",
+      },
+    )
+
+    if (error) {
+      console.error("❌ Error updating user preferences:", error)
+      throw new Error(`Failed to update preferences: ${error.message}`)
+    }
+
+    console.log("✅ User preferences updated successfully")
+  } catch (err: any) {
+    console.error("💥 Error in updateUserPreferences:", err)
+    throw err
   }
 }
 

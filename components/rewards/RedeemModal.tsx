@@ -93,7 +93,7 @@ export default function RewardModal({ visible, item, onClose, onRedeem }: Reward
                 onPress={() => onRedeem(item)}
                 android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
               >
-                <Text style={styles.redeemButtonText}>Redeem Now</Text>
+                <Text style={styles.redeemButtonText}>Add to Cart</Text>
               </Pressable>
             </View>
           </ScrollView>
