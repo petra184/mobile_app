@@ -1,7 +1,6 @@
 "use client"
-
 import type React from "react"
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { Feather } from "@expo/vector-icons"
@@ -16,92 +15,61 @@ import Animated, { FadeInUp } from "react-native-reanimated"
 const RewardsCheckoutScreen: React.FC = () => {
   const router = useRouter()
   const params = useLocalSearchParams()
-  const { items, totalItems, totalPoints, updateQuantity, removeFromCart, clearCart, isLoading, refreshCart } =
-    useCart()
+  const {
+    items,
+    totalItems,
+    totalPoints,
+    updateQuantity,
+    removeFromCart,
+    removeOneFromCart,
+    clearCart,
+    isLoading,
+    refreshCart,
+  } = useCart()
   const { points, userId, userEmail, redeemPoints } = useUserStore()
   const { showSuccess, showError } = useNotifications()
   const [processing, setProcessing] = useState(false)
-  const [screenLoading, setScreenLoading] = useState(true)
 
   const canAfford = points >= totalPoints
   const hasItems = items.length > 0
 
+  // Refresh cart when screen is focused
   useFocusEffect(
     useCallback(() => {
-      console.log("🔄 Checkout screen focused, ensuring cart is loaded...")
-      const loadCart = async () => {
-        setScreenLoading(true)
-        await refreshCart()
-        setTimeout(() => {
-          setScreenLoading(false)
-        }, 100)
-      }
-      loadCart()
+      console.log("🔄 Checkout screen focused")
+      refreshCart()
     }, [refreshCart]),
   )
 
-  useEffect(() => {
-    if (params.timestamp) {
-      console.log("🔄 Checkout screen refreshed with new params:", params)
-      refreshCart()
-    }
-  }, [params, refreshCart])
-
-  useEffect(() => {
-    console.log("🛒 Checkout screen - Detailed cart state:", {
-      items: items.length,
-      itemsArray: items,
-      totalItems,
-      totalPoints,
-      isLoading,
-      screenLoading,
-      userPoints: points,
-      canAfford,
-      hasItems,
-      userId,
-    })
-  }, [items, totalItems, totalPoints, isLoading, screenLoading, points, canAfford, hasItems, userId])
-
-  useEffect(() => {
-    console.log(
-      "🛒 Cart items detailed:",
-      items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        quantity: item.quantity,
-      })),
-    )
-  }, [items])
-
-  // --- MODIFIED handleQuantityChange ---
+  // Handle quantity changes
   const handleQuantityChange = useCallback(
     (id: string, change: number) => {
-      console.log("🔄 Quantity change requested:", { id, change })
-
       const item = items.find((item) => item.id === id)
       if (item) {
         const newQuantity = item.quantity + change
-        console.log("📊 Quantity calculation:", { currentQuantity: item.quantity, change, newQuantity })
-
-        // The key is to pass the 'newQuantity' to updateQuantity.
-        // Your CartProvider's updateQuantity correctly handles quantity <= 0 by calling removeFromCart.
         updateQuantity(id, newQuantity)
-      } else {
-        console.log("❌ Item not found in cart:", id)
       }
     },
-    [items, updateQuantity], // Dependencies for useCallback
+    [items, updateQuantity],
   )
 
+  // Handle removing one item
+  const handleRemoveOne = useCallback(
+    (id: string) => {
+      removeOneFromCart(id)
+    },
+    [removeOneFromCart],
+  )
+
+  // Handle removing entire item
   const handleRemoveItem = useCallback(
     (id: string) => {
-      console.log("REMOVE THE ITEM VHDVSJKXNC SGVDNK🗑️ Remove item requested (trash icon):", id)
       removeFromCart(id)
     },
     [removeFromCart],
   )
-  // --- END handleRemoveItem ---
 
+  // Process checkout
   const processCheckout = useCallback(async () => {
     setProcessing(true)
     try {
@@ -122,7 +90,6 @@ const RewardsCheckoutScreen: React.FC = () => {
       console.log("🛒 Processing checkout with items:", cartSnapshot)
 
       const CHECKOUT_URL = process.env.EXPO_PUBLIC_SUPABASE_CHECKOUT_FUNCTION_URL
-
       if (!CHECKOUT_URL) {
         throw new Error("Checkout service not configured. Please contact support.")
       }
@@ -181,17 +148,19 @@ const RewardsCheckoutScreen: React.FC = () => {
     } finally {
       setProcessing(false)
     }
-  }, [items, totalItems, totalPoints, userEmail, redeemPoints, clearCart, showSuccess, showError, router])
+  }, [items, totalItems, totalPoints, redeemPoints, clearCart, showSuccess, showError, router])
 
   const handleCheckout = useCallback(async () => {
     if (!userId) {
       Alert.alert("Login Required", "Please log in to complete your order.")
       return
     }
+
     if (!canAfford) {
       Alert.alert("Insufficient Points", `You need ${totalPoints - points} more points to place this order.`)
       return
     }
+
     if (!hasItems) {
       Alert.alert("Empty Cart", "Please add some items to your cart before placing the order.")
       return
@@ -207,7 +176,7 @@ const RewardsCheckoutScreen: React.FC = () => {
     )
   }, [userId, canAfford, hasItems, totalItems, totalPoints, points, processCheckout])
 
-  if (isLoading || screenLoading) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -237,6 +206,7 @@ const RewardsCheckoutScreen: React.FC = () => {
             </View>
           )}
         </View>
+
         <View style={styles.itemInfo}>
           <View style={styles.itemTitleRow}>
             <Text style={styles.itemTitle}>{item.title}</Text>
@@ -260,27 +230,18 @@ const RewardsCheckoutScreen: React.FC = () => {
             </View>
           )}
         </View>
+
         <View style={styles.itemActions}>
           <View style={styles.quantityContainer}>
-            <TouchableOpacity
-              style={[styles.quantityButton, item.quantity <= 1 && styles.quantityButtonDisabled]}
-              onPress={() => handleQuantityChange(item.id, -1)}
-              disabled={item.quantity <= 1} // Disable minus button if quantity is 1
-            >
-              <Feather name="minus" size={16} color={item.quantity <= 1 ? "#999" : colors.primary} />
+            <TouchableOpacity style={styles.quantityButton} onPress={() => handleRemoveOne(item.id)}>
+              <Feather name="minus" size={16} color={colors.primary} />
             </TouchableOpacity>
             <Text style={styles.quantityText}>{item.quantity}</Text>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => handleQuantityChange(item.id, 1)}
-            >
+            <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(item.id, 1)}>
               <Feather name="plus" size={16} color={colors.primary} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.removeButton}
-            onPress={() => handleRemoveItem(item.id)} // This calls removeFromCart directly
-          >
+          <TouchableOpacity style={styles.removeButton} onPress={() => handleRemoveItem(item.id)}>
             <Feather name="trash-2" size={16} color="#EF4444" />
           </TouchableOpacity>
           <Text style={[styles.itemTotal, !itemCanAfford && styles.itemTotalWarning]}>
@@ -366,7 +327,7 @@ const RewardsCheckoutScreen: React.FC = () => {
   )
 }
 
-// Styles remain the same
+// Keep your existing styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -645,12 +606,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
-  },
-  quantityButtonDisabled: {
-    opacity: 0.5,
-  },
-  removeButtonDisabled: {
-    opacity: 0.5,
   },
 })
 
