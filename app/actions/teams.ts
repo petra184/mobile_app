@@ -95,12 +95,6 @@ async function checkAuth(): Promise<boolean> {
 // Get all teams with full type safety
 export async function getTeams(): Promise<Team[]> {
   try {
-    // Check authentication first
-    const isAuthenticated = await checkAuth()
-    if (!isAuthenticated) {
-      console.warn("User not authenticated, returning empty teams array")
-      return []
-    }
 
     const { data, error } = await supabase
       .from("teams")

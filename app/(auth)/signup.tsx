@@ -199,7 +199,7 @@ export default function SignupScreen() {
       case 1:
         return "Welcome!"
       case 2:
-        return "Create Account"
+        return "Create an Account"
       case 3:
         return "Choose Your Teams"
       case 4:

@@ -1,7 +1,6 @@
 "use client"
-
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   View,
   Text,
@@ -20,7 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import BirthdayBanner from "@/components/rewards/BirthdayBanner"
 import { HorizontalRewardItem } from "@/components/rewards/HorizontalReward"
 import { colors } from "@/constants/colors"
-import { useRouter } from "expo-router"
+import { useRouter, useFocusEffect } from "expo-router"
 import { useUserStore } from "@/hooks/userStore"
 import { useNotifications } from "@/context/notification-context"
 import { useCart } from "@/context/cart-context"
@@ -98,8 +97,19 @@ const RewardImage: React.FC<RewardImageProps> = ({ imageUrl, containerStyle }) =
 }
 
 const RewardsStoreScreen: React.FC = () => {
-  // Cart and user hooks
-  const { addToCart, totalItems, isInCart, getItemQuantity, removeOneFromCart } = useCart()
+  // Cart and user hooks - destructure ALL cart functions like checkout screen
+  const {
+    addToCart,
+    totalItems,
+    isInCart,
+    getItemQuantity,
+    removeOneFromCart,
+    removeFromCart,
+    updateQuantity,
+    refreshCart,
+    refreshTrigger, // Add this to force re-renders
+  } = useCart()
+
   const { showSuccess, showError, showInfo } = useNotifications()
   const { points, userId, getUserFirstName } = useUserStore()
   const router = useRouter()
@@ -139,7 +149,7 @@ const RewardsStoreScreen: React.FC = () => {
   }
 
   // Main data fetching function
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!userId) {
       setLoading(false)
       return
@@ -169,21 +179,17 @@ const RewardsStoreScreen: React.FC = () => {
       // Filter out expired and inactive special offers
       const availableOffers = offersData.filter((offer) => {
         if (!offer.is_active) return false
-
         // Check if offer is expired
         const isExpired = new Date() > new Date(offer.end_date)
         if (isExpired) return false
-
         // Check if offer hasn't started yet
         const isNotStarted = new Date() < new Date(offer.start_date)
         if (isNotStarted) return false
-
         // Check limited quantity
         if (offer.limited_quantity) {
           const remainingQuantity = offer.limited_quantity - (offer.claimed_count || 0)
           return remainingQuantity > 0
         }
-
         return true
       })
 
@@ -202,7 +208,6 @@ const RewardsStoreScreen: React.FC = () => {
             "🎉 Achievement Unlocked!",
             `You earned: ${newAchievements.map((a) => a.achievement_name).join(", ")}`,
           )
-
           // Refresh achievements
           const updatedAchievements = await fetchUserAchievements(userId)
           setUserAchievements(updatedAchievements)
@@ -216,114 +221,176 @@ const RewardsStoreScreen: React.FC = () => {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [userId, showSuccess, showError])
 
-  // Refresh handler
-  const onRefresh = () => {
-    setRefreshing(true)
-    fetchData()
-  }
+  // SAME CART HANDLERS AS CHECKOUT SCREEN
+  // Handle quantity changes with better state management (same as checkout)
+  const handleQuantityChange = useCallback(
+    (id: string, change: number) => {
+      console.log(`🔄 Store - Changing quantity for item ${id} by ${change}`)
+      const currentQuantity = getItemQuantity(id)
+      const newQuantity = Math.max(0, currentQuantity + change)
 
-  // Modal handlers
-  const handleCloseModal = () => {
-    setModalVisible(false)
-    setSelectedItem(null)
-  }
+      if (newQuantity === 0) {
+        removeFromCart(id)
+        console.log(`🗑️ Store - Removed item ${id} from cart (quantity reached 0)`)
+      } else {
+        updateQuantity(id, newQuantity)
+        console.log(`🔄 Store - Updated item ${id} quantity to ${newQuantity}`)
+      }
+    },
+    [getItemQuantity, updateQuantity, removeFromCart],
+  )
 
-  const handleItemPress = (item: RewardOrSpecial) => {
-    setSelectedItem(item)
-    setModalVisible(true)
-  }
-
-  // Cart handlers
-  const handleAddToCart = (reward: Reward) => {
-    console.log("🛒 Adding reward to cart:", reward.title)
-
-    if (!userId) {
-      showError("Login Required", "Please log in to add rewards to cart.")
-      return
-    }
-
-    if (points < reward.points_required) {
-      showError("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
-      return
-    }
-
-    // Create cart item
-    const cartItem = {
-      id: reward.id,
-      title: reward.title,
-      description: reward.description || "",
-      points_required: reward.points_required,
-      category: reward.category || undefined,
-      image_url: reward.image_url || undefined,
-      item_type: "reward" as const,
-    }
-
-    // Add to cart
-    addToCart(cartItem)
-
-    // Show success notification
-    showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
-
-    console.log("🛒 Cart updated, total items:", totalItems + 1)
-  }
-
-  const handleRemoveFromCart = (reward: Reward) => {
-    try {
-      console.log("🛒 Removing reward from cart:", reward.id, reward.title)
-      const currentQuantity = getItemQuantity(reward.id)
+  // Handle removing one item with logging (same as checkout)
+  const handleRemoveOne = useCallback(
+    (id: string) => {
+      console.log(`➖ Store - Removing one item: ${id}`)
+      const currentQuantity = getItemQuantity(id)
+      console.log(`Current quantity: ${currentQuantity}`)
 
       if (currentQuantity > 0) {
-        removeOneFromCart(reward.id)
-        showInfo("Removed from Cart", `One ${reward.title} has been removed from your cart.`)
-        console.log("🛒 Item removed, new total items:", totalItems - 1)
+        removeOneFromCart(id)
+        console.log(`✅ Store - Successfully removed one ${id}`)
       } else {
-        console.warn("Attempted to remove item not in cart:", reward.id)
+        console.warn(`⚠️ Store - Attempted to remove item not in cart: ${id}`)
       }
-    } catch (error) {
-      console.error("Error removing reward from cart:", error)
-      showError("Error", "Failed to remove item from cart. Please try again.")
-    }
-  }
+    },
+    [removeOneFromCart, getItemQuantity],
+  )
+
+  // Handle removing entire item with logging (same as checkout)
+  const handleRemoveItem = useCallback(
+    (id: string) => {
+      console.log(`🗑️ Store - Removing entire item: ${id}`)
+      removeFromCart(id)
+    },
+    [removeFromCart],
+  )
+
+  // Refresh handler
+  const onRefresh = useCallback(() => {
+    setRefreshing(true)
+    fetchData()
+  }, [fetchData])
+
+  // Modal handlers
+  const handleCloseModal = useCallback(() => {
+    setModalVisible(false)
+    setSelectedItem(null)
+  }, [])
+
+  const handleItemPress = useCallback((item: RewardOrSpecial) => {
+    setSelectedItem(item)
+    setModalVisible(true)
+  }, [])
+
+  // Cart handlers - use useCallback to prevent stale closures
+  const handleAddToCart = useCallback(
+    (reward: Reward) => {
+      console.log("🛒 Store - Adding reward to cart:", reward.title)
+      if (!userId) {
+        showError("Login Required", "Please log in to add rewards to cart.")
+        return
+      }
+
+      if (points < reward.points_required) {
+        showError("Insufficient Points", `You need ${reward.points_required - points} more points to get this reward.`)
+        return
+      }
+
+      // Create cart item
+      const cartItem = {
+        id: reward.id,
+        title: reward.title,
+        description: reward.description || "",
+        points_required: reward.points_required,
+        category: reward.category || undefined,
+        image_url: reward.image_url || undefined,
+        item_type: "reward" as const,
+      }
+
+      // Add to cart
+      addToCart(cartItem)
+
+      // Show success notification
+      showSuccess("Added to Cart!", `${reward.title} has been added to your cart.`)
+      console.log("🛒 Store - Cart updated successfully")
+    },
+    [userId, points, addToCart, showError, showSuccess],
+  )
+
+  const handleRemoveFromCart = useCallback(
+    (reward: Reward) => {
+      try {
+        console.log("🛒 Store - Removing reward from cart:", reward.id, reward.title)
+        handleRemoveOne(reward.id) // Use the same logic as checkout
+        showInfo("Removed from Cart", `One ${reward.title} has been removed from your cart.`)
+      } catch (error) {
+        console.error("Error removing reward from cart:", error)
+        showError("Error", "Failed to remove item from cart. Please try again.")
+      }
+    },
+    [handleRemoveOne, showInfo, showError],
+  )
 
   // Unified redeem handler for modal
-  const handleItemRedeem = (item: RewardOrSpecial) => {
-    console.log("🛒 Redeeming item:", item.title)
+  const handleItemRedeem = useCallback(
+    (item: RewardOrSpecial) => {
+      console.log("🛒 Store - Redeeming item:", item.title)
+      if (!userId) {
+        showError("Login Required", "Please log in to redeem items.")
+        return
+      }
 
-    if (!userId) {
-      showError("Login Required", "Please log in to redeem items.")
-      return
-    }
+      if (points < item.points_required) {
+        showError("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
+        return
+      }
 
-    if (points < item.points_required) {
-      showError("Insufficient Points", `You need ${item.points_required - points} more points to redeem this item.`)
-      return
-    }
+      // Create cart item object that works for both rewards and special offers
+      const cartItem = {
+        id: item.id,
+        title: item.title,
+        description: item.description || "",
+        points_required: item.points_required,
+        category: item.category || undefined,
+        image_url: item.image_url || undefined,
+        item_type: (isSpecialOffer(item) ? "special_offer" : "reward") as "special_offer" | "reward",
+      }
 
-    // Create cart item object that works for both rewards and special offers
-    const cartItem = {
-      id: item.id,
-      title: item.title,
-      description: item.description || "",
-      points_required: item.points_required,
-      category: item.category || undefined,
-      image_url: item.image_url || undefined,
-      item_type: (isSpecialOffer(item) ? "special_offer" : "reward") as "special_offer" | "reward",
-    }
+      // Add to cart
+      addToCart(cartItem)
 
-    // Add to cart
-    addToCart(cartItem)
+      // Show success message
+      const itemType = isSpecialOffer(item) ? "Special Offer" : "Reward"
+      showSuccess("Added to Cart!", `${itemType} "${item.title}" has been added to your cart.`)
 
-    // Show success message
-    const itemType = isSpecialOffer(item) ? "Special Offer" : "Reward"
-    showSuccess("Added to Cart!", `${itemType} "${item.title}" has been added to your cart.`)
+      // Close modal
+      setModalVisible(false)
+      console.log("🛒 Store - Item redeemed and added to cart successfully")
+    },
+    [userId, points, addToCart, showError, showSuccess],
+  )
 
-    // Close modal
-    setModalVisible(false)
+  // Reset filters
+  const resetFilters = useCallback(() => {
+    setSortOption("none")
+    setSearchQuery("")
+  }, [])
 
-    console.log("🛒 Item redeemed and added to cart, total items:", totalItems + 1)
-  }
+  // ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  // Focus effect to refresh when returning from checkout (SAME AS CHECKOUT)
+  useFocusEffect(
+    useCallback(() => {
+      console.log("🔄 Store screen focused, refreshing cart and data")
+      refreshCart() // Refresh cart state
+      // Also refresh the store data to ensure everything is in sync
+      if (userId) {
+        fetchData()
+      }
+    }, [refreshCart, userId, fetchData]),
+  )
 
   // Search debounce effect
   useEffect(() => {
@@ -335,11 +402,18 @@ const RewardsStoreScreen: React.FC = () => {
 
   // Initial data fetch
   useEffect(() => {
-    console.log("🛒 Current cart total items:", totalItems)
     if (userId) {
       fetchData()
     }
-  }, [userId])
+  }, [userId, fetchData])
+
+  // Add effect to log cart changes for debugging (SAME AS CHECKOUT)
+  useEffect(() => {
+    console.log("🛒 Store - Cart state updated:", {
+      totalItems,
+      refreshTrigger,
+    })
+  }, [totalItems, refreshTrigger, isInCart, getItemQuantity])
 
   // Filter and sort rewards
   const filteredRewards = rewards
@@ -369,12 +443,13 @@ const RewardsStoreScreen: React.FC = () => {
       }
     })
 
-  // Reset filters
-  const resetFilters = () => {
-    setSortOption("none")
-    setSearchQuery("")
-  }
+  // Filter active special offers
+  const activeSpecialOffers = specialOffers.filter((offer) => {
+    const isExpired = new Date() > new Date(offer.end_date)
+    return !isExpired && offer.is_active
+  })
 
+  // NOW SAFE TO HAVE EARLY RETURNS AFTER ALL HOOKS
   // Loading state
   if (loading && rewards.length === 0) {
     return (
@@ -402,16 +477,9 @@ const RewardsStoreScreen: React.FC = () => {
     )
   }
 
-  // Filter active special offers
-  const activeSpecialOffers = specialOffers.filter((offer) => {
-    const isExpired = new Date() > new Date(offer.end_date)
-    return !isExpired && offer.is_active
-  })
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar barStyle="dark-content" />
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
@@ -521,14 +589,6 @@ const RewardsStoreScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Loading Overlay */}
-        {loading && rewards.length > 0 && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingOverlayText}>Updating...</Text>
-          </View>
-        )}
-
         {/* Rewards List */}
         <View style={styles.rewardsList}>
           {filteredRewards.length > 0 ? (
@@ -540,8 +600,8 @@ const RewardsStoreScreen: React.FC = () => {
                 isInCart={isInCart(reward.id)}
                 cartQuantity={getItemQuantity(reward.id)}
                 onPress={() => handleItemPress(reward)}
-                onAddToCart={handleItemRedeem}
-                onRemoveFromCart={handleRemoveFromCart}
+                onAddToCart={() => handleAddToCart(reward)}
+                onRemoveFromCart={() => handleRemoveFromCart(reward)}
               />
             ))
           ) : (
@@ -567,7 +627,7 @@ const RewardsStoreScreen: React.FC = () => {
       </TouchableOpacity>
 
       {/* Redeem Modal */}
-      <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} />
+      <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} userPoints={points}/>
     </SafeAreaView>
   )
 }
@@ -739,21 +799,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#555",
     fontWeight: "600",
-  },
-  loadingOverlay: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    marginHorizontal: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  loadingOverlayText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: "#666",
   },
   rewardsList: {
     flexDirection: "column",

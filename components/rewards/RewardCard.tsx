@@ -139,8 +139,8 @@ const styles = StyleSheet.create({
   },
   stockBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: -5,
+    right: -5,
     backgroundColor: "#FEF3C7",
     borderColor: "#F59E0B",
     borderWidth: 1,

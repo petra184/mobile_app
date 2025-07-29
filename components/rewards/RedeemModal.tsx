@@ -11,11 +11,12 @@ interface RewardModalProps {
   item: RewardOrSpecial | null;
   onClose: () => void;
   onRedeem: (item: RewardOrSpecial) => void;
+  userPoints: number;
 }
 
 const isSpecialOffer = (i: RewardOrSpecial): i is SpecialOffer => 'end_date' in i;
 
-export default function RewardModal({ visible, item, onClose, onRedeem }: RewardModalProps) {
+export default function RewardModal({ visible, item, onClose, onRedeem, userPoints }: RewardModalProps) {
   if (!item) return null;
 
   const formatDate = (dateString?: string | null) => {
@@ -88,13 +89,24 @@ export default function RewardModal({ visible, item, onClose, onRedeem }: Reward
                 Redeem this {isSpecialOffer(item) ? 'offer' : 'reward'} using your accumulated points. Once you have enough points, it will be automatically saved to your account. You can then redeem it by attending the next game or picking it up in person at the venue.
                </Text>
 
-              <Pressable 
-                style={styles.redeemButton} 
-                onPress={() => onRedeem(item)}
-                android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
-              >
-                <Text style={styles.redeemButtonText}>Add to Cart</Text>
-              </Pressable>
+              {userPoints >= item.points_required ? (
+                <Pressable 
+                  style={styles.redeemButton} 
+                  onPress={() => onRedeem(item)}
+                  android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
+                >
+                  <Text style={styles.redeemButtonText}>Add to Cart</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.redeemButtonDisabled}>
+                  <View style={styles.redeemContent}>
+                    <Feather name="lock" size={24} color={colors.error} />
+                    <Text style={styles.redeemButtonTextDisabled}>
+                      Missing {item.points_required - userPoints} points
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
           </ScrollView>
         </View>
@@ -135,6 +147,30 @@ const styles = StyleSheet.create({
   },
   contentPadding: {
     padding: 20,
+  },
+  redeemButtonDisabled: {
+    flex:1,
+    flexDirection:"row",
+    backgroundColor: colors.errorBackground,
+    paddingVertical: 16,
+    borderRadius: 32,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: colors.error,
+    alignItems: 'center',        // horizontally center content (if row)
+    justifyContent: 'center',
+  },
+  redeemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  redeemButtonTextDisabled: {
+    color: colors.error,
+    marginLeft:8,
+    textAlign:"center",
+    fontSize: 16,
+    fontWeight: '600',
   },
   title: {
     fontSize: 24,

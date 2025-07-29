@@ -18,7 +18,6 @@ export default function TabLayout() {
   };
   
   return (
-    <GestureHandlerRootView>
     <CartProvider>
     <NotificationProvider>
     <Tabs
@@ -116,6 +115,5 @@ export default function TabLayout() {
     </Tabs>
     </NotificationProvider>
     </CartProvider>
-    </GestureHandlerRootView>
   );
 }

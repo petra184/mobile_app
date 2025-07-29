@@ -328,9 +328,7 @@ export default function RootLayout() {
   return (
     <NotificationProvider>
       <CartProvider>
-        <GestureHandlerRootView>
         <RootLayoutNav />
-        </GestureHandlerRootView>
       </CartProvider>
     </NotificationProvider>
   );

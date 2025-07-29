@@ -160,6 +160,7 @@ export default function TeamDetailsScreen() {
 
           <View style={styles.centeredTeamName}>
             <Text style={styles.teamName}>{team.name}</Text>
+           {/* <Text style={styles.teamName2}>{team.shortName}</Text> */}
           </View>
         </View>
       </Animated.View>
@@ -249,6 +250,11 @@ const styles = StyleSheet.create({
   },
   teamName: {
     fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  teamName2: {
     fontWeight: "700",
     color: "#FFFFFF",
     marginBottom: 4,

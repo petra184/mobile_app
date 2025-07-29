@@ -40,6 +40,20 @@ export default function AuthLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="reset_password"
+        options={{
+          title: "Reset Password",
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="confirm_signup"
+        options={{
+          title: "Manhattan University",
+          headerShown: false,
+        }}
+      />
     </Stack>
     </NotificationProvider>
   );

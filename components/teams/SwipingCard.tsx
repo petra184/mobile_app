@@ -32,6 +32,7 @@ interface SwipeableTeamSelectorProps {
   filterByGender?: "men" | "women" | "all"
   autoAdvance?: boolean
   autoAdvanceDelay?: number
+  overlayOnSelect?: boolean;
 }
 
 const SwipeableCard = React.memo(
@@ -47,6 +48,7 @@ const SwipeableCard = React.memo(
     onSwipePrevious,
     showFavorites,
     totalCards,
+    overlayOnSelect = false, // Destructure and default here
   }: {
     team: Team
     index: number
@@ -59,6 +61,7 @@ const SwipeableCard = React.memo(
     onSwipePrevious: () => void
     showFavorites: boolean
     totalCards: number
+    overlayOnSelect?: boolean // Mark as optional
   }) => {
     const translateX = useSharedValue(0)
     const translateY = useSharedValue(0)
@@ -89,7 +92,7 @@ const SwipeableCard = React.memo(
         translateX.value = withSpring(cardOffset < 0 ? -screenWidth : screenWidth)
         opacity.value = withTiming(0)
       }
-    }, [currentIndex, index])
+    }, [currentIndex, index, translateX, translateY, rotate, scale, opacity]) // Added dependencies
 
     // Create the pan gesture with bidirectional support
     const panGesture = Gesture.Pan()
@@ -147,69 +150,77 @@ const SwipeableCard = React.memo(
 
     if (!isVisible) return null
 
-    const teamColorBackground = `${team.primaryColor}15`
+    // Determine background color based on selection and overlay setting
+    const baseBackgroundColor =
+        isSelected && overlayOnSelect ? `${team.primaryColor}20` : colors.card;
+
+    const borderColor = isSelected ? team.primaryColor : colors.border;
 
     return (
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.cardContainer, animatedStyle]}>
+          {/* Ensure Pressable has only ONE direct child, which is a View */}
           <Pressable
-            style={[
-              styles.teamCard,
-              isSelected && styles.selectedTeamCard,
-              {
-                borderColor: isSelected ? team.primaryColor : colors.border,
-                backgroundColor: isSelected ? teamColorBackground : colors.card,
-              },
-            ]}
+            style={styles.teamCard}
             onPress={onPress}
             android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
           >
-            {/* Team Logo Section - Keep Original */}
-            <View style={styles.logoSection}>
-              <Image source={{ uri: team.logo }} style={styles.teamLogo} resizeMode="cover" />
+            {/* All content inside the Pressable should be wrapped in a single View */}
+            <View style={{ flex: 1 }}>
+              {/* Team Logo Section */}
+              <View style={styles.logoSection}>
+                <Image source={{ uri: team.logo }} style={styles.teamLogo} resizeMode="cover" />
 
-              {/* Selection Indicator */}
-              {isSelected && (
-                <View style={[styles.selectedIndicator, { backgroundColor: team.primaryColor }]}>
-                  <Feather name="check" size={16} color="white" />
-                </View>
-              )}
-            </View>
-
-            {/* Team Info Section - Keep Original Structure */}
-            <View style={styles.infoSection}>
-              <View style={styles.teamHeader}>
-                <View style={[styles.colorAccent, { backgroundColor: team.primaryColor }]} />
-                <View style={styles.teamDetails}>
-                  {/* Team Name Row with Heart - Keep Original */}
-                  <View style={styles.teamNameRow}>
-                    <Text style={[styles.teamName, { color: isSelected ? team.primaryColor : colors.text }]}>
-                      {team.name}
-                    </Text>
-                    {showFavorites && (
-                      <Pressable
-                        style={styles.inlineFavoriteButton}
-                        onPress={onFavoriteToggle}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <AntDesign
-                          name={isFavorite ? "heart" : "hearto"}
-                          size={22}
-                          color={isFavorite ? "#EF4444" : colors.textSecondary}
-                        />
-                      </Pressable>
-                    )}
+                {/* Selection Indicator - Show ONLY when selected and overlay is enabled */}
+                {isSelected && overlayOnSelect && (
+                  <View style={[styles.selectedIndicator, { backgroundColor: team.primaryColor }]}>
+                    <Feather name="check" size={16} color="white" />
                   </View>
-                  <Text style={styles.teamShortName}>{team.shortName}</Text>
+                )}
+              </View>
+
+              <View style={[
+                    styles.infoSection,
+                    {
+                    backgroundColor: baseBackgroundColor,
+                    borderColor: borderColor,
+                    borderWidth: 1, // ensure the border shows
+                    borderRadius: 8 // optional, for visual polish
+                    }
+                ]}>
+                <View style={styles.teamHeader}>
+                  <View style={[styles.colorAccent, { backgroundColor: team.primaryColor }]} />
+                  <View style={styles.teamDetails}>
+                    {/* Team Name Row with Heart */}
+                    <View style={styles.teamNameRow}>
+                      <Text style={[styles.teamName, { color: isSelected ? team.primaryColor : colors.text }]}>
+                        {team.name}
+                      </Text>
+                      {showFavorites && (
+                        <Pressable
+                          style={styles.inlineFavoriteButton}
+                          onPress={onFavoriteToggle}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <AntDesign
+                            name={isFavorite ? "heart" : "hearto"}
+                            size={22}
+                            color={isFavorite ? "#EF4444" : colors.textSecondary}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+                    <Text style={styles.teamShortName}>{team.shortName}</Text>
+                  </View>
                 </View>
               </View>
             </View>
           </Pressable>
         </Animated.View>
       </GestureDetector>
-    )
+    );
   },
-)
+);
 
 export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
   onSelectTeam,
@@ -218,9 +229,10 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
   filterByGender = "all",
   autoAdvance = false,
   autoAdvanceDelay = 3000,
+  overlayOnSelect = false, // Default overlayOnSelect to false here
 }) => {
   const { preferences, toggleFavoriteTeam } = useUserStore()
-  const { showSuccess, showInfo } = useNotifications() // Add notifications hook
+  const { showSuccess, showInfo } = useNotifications()
 
   // State
   const [teams, setTeams] = useState<Team[]>([])
@@ -253,6 +265,7 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
 
   // Auto advance functionality
   useEffect(() => {
+    
     if (autoAdvance && teams.length > 1) {
       autoAdvanceRef.current = setInterval(() => {
         setCurrentIndex((prev) => (prev + 1) % teams.length)
@@ -280,6 +293,8 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
 
   // Handle team selection
   const handleSelectTeam = (team: Team) => {
+    // This logic ensures only one team can be selected at a time for this component's internal state
+    // If you need multi-select, you'd adjust this to add/remove from the array.
     setSelectedTeamIds([team.id])
     if (onSelectTeam) {
       onSelectTeam(team)
@@ -314,7 +329,7 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
       console.error("Error toggling favorite team:", error)
     }
   }
-
+  
   // Effects
   useEffect(() => {
     loadTeams()
@@ -366,6 +381,7 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
               onSwipePrevious={goToPrevious}
               showFavorites={showFavorites}
               totalCards={teams.length}
+              overlayOnSelect={overlayOnSelect} // Pass the prop here
             />
           )
         })}
@@ -424,20 +440,20 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     position: "relative",
+    alignItems:"center",
     marginBottom: 20,
   },
   cardContainer: {
     position: "absolute",
-    width: "100%",
+    width: screenWidth * 0.8,
     height: "100%",
   },
   teamCard: {
-    width: "100%",
+    width: screenWidth * 0.8,
     height: "100%",
-    backgroundColor: colors.card,
     borderRadius: 20,
-    borderWidth: 2,
-    borderColor: colors.border,
+    borderWidth: 1,
+    borderColor:colors.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
@@ -655,4 +671,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default SwipeableTeamSelector
+export default SwipeableTeamSelector;

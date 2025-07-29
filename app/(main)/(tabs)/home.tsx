@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
-import { View, StyleSheet, ScrollView, Pressable, Platform, Text } from "react-native"
+import { View, StyleSheet, ScrollView, Pressable, Platform, Text, RefreshControl } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useRouter } from "expo-router"
 import { colors } from "@/constants/colors"
@@ -16,7 +16,6 @@ import { fetchUserStatus } from "@/app/actions/points"
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
 import { sortGamesByPriority } from "@/utils/sortGame"
 import { StatusBar } from "expo-status-bar"
-import { RefreshControl } from "react-native-gesture-handler"
 import { LinearGradient } from "expo-linear-gradient"
 
 export default function HomeScreen() {
@@ -71,6 +70,7 @@ export default function HomeScreen() {
       }
 
       const gameEndTime = new Date(gameStartTime.getTime() + 60 * 60 * 1000) // 1 hour after game start
+
       return { gameStartTime, gameEndTime }
     },
     [parse12HourTime],
@@ -111,8 +111,8 @@ export default function HomeScreen() {
       const gameMap = new Map<string, Game>()
       combinedGames.forEach((game) => gameMap.set(game.id, game))
       const uniqueGames = Array.from(gameMap.values())
-      const sortedGames = sortGamesByPriority(uniqueGames)
 
+      const sortedGames = sortGamesByPriority(uniqueGames)
       setAllGames(sortedGames)
 
       if (userId) {
@@ -224,7 +224,7 @@ export default function HomeScreen() {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // Updated categorization function using time-based logic
+  // Updated categorization function with proper sorting for past games
   const categorizeGamesByDate = (games: Game[]) => {
     const live: Game[] = []
     const upcoming: Game[] = []
@@ -244,6 +244,52 @@ export default function HomeScreen() {
       }
     })
 
+    // Sort past games by most recent first (descending order)
+    past.sort((a, b) => {
+      const dateA = new Date(a.date)
+      const dateB = new Date(b.date)
+
+      // If dates are the same, sort by time if available
+      if (dateA.getTime() === dateB.getTime()) {
+        if (a.time && b.time) {
+          const timeA = parse12HourTime(a.time)
+          const timeB = parse12HourTime(b.time)
+          return timeB.localeCompare(timeA) // Most recent time first
+        }
+      }
+
+      return dateB.getTime() - dateA.getTime() // Most recent date first
+    })
+
+    // Sort upcoming games by soonest first (ascending order)
+    upcoming.sort((a, b) => {
+      const dateA = new Date(a.date)
+      const dateB = new Date(b.date)
+
+      // If dates are the same, sort by time if available
+      if (dateA.getTime() === dateB.getTime()) {
+        if (a.time && b.time) {
+          const timeA = parse12HourTime(a.time)
+          const timeB = parse12HourTime(b.time)
+          return timeA.localeCompare(timeB) // Earliest time first
+        }
+      }
+
+      return dateA.getTime() - dateB.getTime() // Earliest date first
+    })
+
+    // Sort live games by start time (most recently started first)
+    live.sort((a, b) => {
+      try {
+        const { gameStartTime: startA } = getGameTimings(a)
+        const { gameStartTime: startB } = getGameTimings(b)
+        return startB.getTime() - startA.getTime() // Most recently started first
+      } catch (error) {
+        console.error("Error sorting live games:", error)
+        return 0
+      }
+    })
+
     return { live, upcoming, past }
   }
 
@@ -252,7 +298,6 @@ export default function HomeScreen() {
   // Get live games status message
   const getLiveGamesMessage = () => {
     if (loading) return "Checking for live games..."
-
     if (liveGames.length === 0) {
       return "No live games right now"
     } else if (liveGames.length === 1) {
@@ -291,7 +336,13 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scrollC}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            colors={[colors.primary]} 
+          />
+        }
       >
         {/* Enhanced Welcome Card */}
         <View style={styles.welcomeCard}>
@@ -301,7 +352,7 @@ export default function HomeScreen() {
               <Text style={styles.nameText}>{getUserFirstName()}</Text>
               <Text style={styles.personalizedMessage}>{getPersonalizedMessage()}</Text>
 
-             {/* Live Games Status */}
+              {/* Live Games Status */}
               {liveGames.length > 0 && (
                 <View style={styles.liveStatusContainer}>
                   <LinearGradient
@@ -354,7 +405,7 @@ export default function HomeScreen() {
               <Text style={styles.viewAllText}>View All</Text>
             </Pressable>
           </View>
-          <TeamSelector onSelectTeam={handleTeamSelect} onTeamPress={handleTeamPress} showFavorites={true} />
+            <TeamSelector onSelectTeam={handleTeamSelect} onTeamPress={handleTeamPress} showFavorites={true} />
         </View>
 
         {/* All Games Section */}
@@ -411,7 +462,7 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Past Games */}
+              {/* Past Games - Now sorted by most recent first */}
               {pastGames.length > 0 && (
                 <View style={styles.gameGroup}>
                   <View style={styles.gameGroupHeader}>
@@ -435,6 +486,7 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+
         <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
@@ -615,7 +667,7 @@ const styles = StyleSheet.create({
   // New Live Status Styles
   liveStatusContainer: {
     marginTop: 4,
-    marginBottom:10,
+    marginBottom: 10,
   },
   liveStatusBadge: {
     flexDirection: "row",

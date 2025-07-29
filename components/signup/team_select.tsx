@@ -4,7 +4,7 @@ import { StyleSheet, View, Text, TouchableOpacity } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { colors } from "@/constants/colors"
 import type { FormData } from "@/app/(auth)/signup"
-import { SwipeableTeamSelector } from "@/components/teams/SwipingCard" // Assuming this path is correct
+import {SwipeableTeamSelector} from "@/components/teams/SwipingCard" // Assuming this path is correct
 import { TeamSelector } from "@/components/teams/TeamSelector" // Assuming this path is correct
 import type { Team } from "@/types/updated_types"
 
@@ -31,11 +31,8 @@ export default function TeamSelectionStep({ formData, updateFormData, onNext }: 
     if (isCurrentlyFavorite) {
       newFavorites = currentFavorites.filter((id) => id !== team.id)
     } else {
-      // Add logic here if you want to enforce maxSelections at the parent level
-      // if (newFavorites.length >= MAX_SELECTIONS_ALLOWED) { return; }
       newFavorites = [...currentFavorites, team.id]
     }
-
     updateFormData({ favoriteTeams: newFavorites })
   }
 
@@ -80,6 +77,7 @@ export default function TeamSelectionStep({ formData, updateFormData, onNext }: 
             onTeamPress={handleTeamSelect}
             showFavorites={false}
             filterByGender="all"
+            overlayOnSelect={true}
           />
         ) : (
           <TeamSelector
@@ -175,7 +173,7 @@ const styles = StyleSheet.create({
   },
   continueButton: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 32,
     padding: 16,
     alignItems: "center",
     shadowColor: colors.primary,

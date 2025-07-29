@@ -98,7 +98,7 @@ export const HorizontalRewardItem: React.FC<HorizontalRewardItemProps> = ({
             </Pressable>
           </View>
         ) : (
-          <View style={[styles.addButton, !canAfford && styles.disabledButton, !isAvailable && styles.disabledButton]}>
+          <View style={[styles.addButton]}>
             <Text style={styles.addButtonText}>View</Text>
           </View>
         )}

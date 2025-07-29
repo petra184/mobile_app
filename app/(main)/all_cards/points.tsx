@@ -824,7 +824,7 @@ const handleItemRedeem = useCallback(
       </View>
 
       {/* Unified Modal for both rewards and special offers */}
-      <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} />
+      <RedeemModal visible={modalVisible} item={selectedItem} onClose={handleCloseModal} onRedeem={handleItemRedeem} userPoints={points}/>
     </SafeAreaView>
   )
 }

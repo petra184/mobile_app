@@ -1,6 +1,5 @@
 "use client"
-
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { colors } from "@/constants/colors"
@@ -39,6 +38,14 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
+  // Add refs to track the actual input values
+  const passwordInputRef = useRef<TextInput>(null)
+  const confirmPasswordInputRef = useRef<TextInput>(null)
+
+  // Track if user has interacted with password field
+  const [passwordTouched, setPasswordTouched] = useState(false)
+  const [confirmPasswordTouched, setConfirmPasswordTouched] = useState(false)
+
   // Password validation state
   const [validation, setValidation] = useState<PasswordValidation>({
     minLength: false,
@@ -53,27 +60,107 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
     available: null,
     message: "",
   })
+
   const [usernameStatus, setUsernameStatus] = useState<AvailabilityStatus>({
     checking: false,
     available: null,
     message: "",
   })
 
+  // Enhanced password validation that checks for actual content
+  const validatePassword = useCallback(
+    (password: string) => {
+      // Only validate if password is not empty and user has interacted
+      if (!password || !passwordTouched) {
+        return {
+          minLength: false,
+          hasNumber: false,
+          hasLetter: false,
+          hasSpecialChar: false,
+        }
+      }
+      return {
+        minLength: password.length >= 8,
+        hasNumber: /\d/.test(password),
+        hasLetter: /[a-zA-Z]/.test(password),
+        hasSpecialChar: /[^a-zA-Z0-9]/.test(password),
+      }
+    },
+    [passwordTouched],
+  )
+
   // Real-time password validation
   useEffect(() => {
-    setValidation({
-      minLength: formData.password.length >= 8,
-      hasNumber: /\d/.test(formData.password),
-      hasLetter: /[a-zA-Z]/.test(formData.password),
-      hasSpecialChar: /[!@#$%^&*(),.-;?":{}|<>]/.test(formData.password),
-    })
-  }, [formData.password])
+    setValidation(validatePassword(formData.password))
+  }, [formData.password, validatePassword])
 
-  const isPasswordValid = Object.values(validation).every(Boolean)
+  const isPasswordValid = Object.values(validation).every(Boolean) && passwordTouched
   const passwordsMatch =
+    passwordTouched &&
+    confirmPasswordTouched &&
     formData.password.length > 0 &&
     formData.confirmPassword.length > 0 &&
     formData.password === formData.confirmPassword
+
+  // Enhanced password change handler
+  const handlePasswordChange = useCallback(
+    (value: string) => {
+      setPasswordTouched(true)
+      updateFormData({ password: value })
+
+      // Clear confirm password if it doesn't match anymore
+      if (formData.confirmPassword && value !== formData.confirmPassword) {
+        // Don't auto-clear, but let validation handle it
+      }
+    },
+    [updateFormData, formData.confirmPassword],
+  )
+
+  // Enhanced confirm password change handler
+  const handleConfirmPasswordChange = useCallback(
+    (value: string) => {
+      setConfirmPasswordTouched(true)
+      updateFormData({ confirmPassword: value })
+    },
+    [updateFormData],
+  )
+
+  // Handle password input focus
+  const handlePasswordFocus = useCallback(() => {
+    setPasswordTouched(true)
+
+    // Check if there's a discrepancy between displayed and actual value
+    setTimeout(() => {
+      if (passwordInputRef.current) {
+        // Force a re-render to sync state
+        const currentValue = formData.password
+        updateFormData({ password: currentValue })
+      }
+    }, 100)
+  }, [formData.password, updateFormData])
+
+  // Handle confirm password input focus
+  const handleConfirmPasswordFocus = useCallback(() => {
+    setConfirmPasswordTouched(true)
+  }, [])
+
+  // Handle password input blur - validate actual content
+  const handlePasswordBlur = useCallback(() => {
+    // Double-check the actual input value on blur
+    setTimeout(() => {
+      if (passwordInputRef.current) {
+        // Get the actual text from the input
+        passwordInputRef.current.measure((x, y, width, height, pageX, pageY) => {
+          // This is a workaround to ensure we have the correct value
+          const currentPassword = formData.password
+          if (!currentPassword || currentPassword.trim() === "") {
+            setPasswordTouched(false)
+            updateFormData({ password: "" })
+          }
+        })
+      }
+    }, 50)
+  }, [formData.password, updateFormData])
 
   // Debounced email checking
   const checkEmailDebounced = useCallback(
@@ -83,7 +170,6 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         return
       }
       setEmailStatus({ checking: true, available: null, message: "Checking..." })
-
       const result = await checkEmailAvailability(email)
       setEmailStatus({
         checking: false,
@@ -102,7 +188,6 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         return
       }
       setUsernameStatus({ checking: true, available: null, message: "Checking..." })
-
       const result = await checkUsernameAvailability(username)
       setUsernameStatus({
         checking: false,
@@ -132,6 +217,9 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
   }, [formData.username, checkUsernameDebounced])
 
   const getPasswordStrength = () => {
+    if (!passwordTouched || !formData.password) {
+      return { text: "", color: "" }
+    }
     const validCount = Object.values(validation).filter(Boolean).length
     if (validCount === 0) return { text: "", color: "" }
     if (validCount <= 2) return { text: "Weak", color: "#ef4444" }
@@ -151,7 +239,9 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
       isPasswordValid &&
       passwordsMatch &&
       emailStatus.available === true &&
-      usernameStatus.available === true
+      usernameStatus.available === true &&
+      passwordTouched &&
+      confirmPasswordTouched
     )
   }
 
@@ -159,27 +249,22 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
     if (status.checking) {
       return <ActivityIndicator size="small" color={colors.primary} />
     }
-
     if (status.available === true) {
       return <Ionicons name="checkmark-circle" size={20} color="#10b981" />
     }
-
     if (status.available === false) {
       return <Ionicons name="close-circle" size={20} color="#ef4444" />
     }
-
     return null
   }
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-            
       <View style={styles.formContainer}>
-          <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeSubtext}>
-                Now let's help you set up your accont.
-            </Text>
+        <View style={styles.welcomeSection}>
+          <Text style={styles.welcomeSubtext}>Now let's help you set up your account.</Text>
         </View>
+
         {/* Username with availability check */}
         <View style={styles.inputWithIndicator}>
           <TextInput
@@ -230,14 +315,19 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         {/* Password */}
         <View style={styles.passwordContainer}>
           <TextInput
+            ref={passwordInputRef}
             style={[styles.input, styles.passwordInput]}
             placeholder="Password"
             value={formData.password}
-            onChangeText={(value) => updateFormData({ password: value })}
+            onChangeText={handlePasswordChange}
+            onFocus={handlePasswordFocus}
+            onBlur={handlePasswordBlur}
             secureTextEntry={!showPassword}
             placeholderTextColor="#A0A0A0"
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="newPassword" // This helps with iOS autofill
+            passwordRules="minlength: 8; required: lower; required: upper; required: digit; required: special;" // iOS password rules
           />
           <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
             <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#A0A0A0" />
@@ -245,7 +335,7 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         </View>
 
         {/* Password Strength Indicator */}
-        {formData.password.length > 0 && (
+        {passwordTouched && formData.password.length > 0 && (
           <View style={styles.strengthContainer}>
             <Text style={[styles.strengthText, { color: getPasswordStrength().color }]}>
               Password Strength: {getPasswordStrength().text}
@@ -265,10 +355,9 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         )}
 
         {/* Password Requirements */}
-        {formData.password.length > 0 && (
+        {passwordTouched && formData.password.length > 0 && (
           <View style={styles.requirementsContainer}>
             <Text style={styles.requirementsTitle}>Password Requirements:</Text>
-
             <View style={styles.requirement}>
               <Ionicons
                 name={validation.minLength ? "checkmark-circle" : "close-circle"}
@@ -279,7 +368,6 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
                 At least 8 characters
               </Text>
             </View>
-
             <View style={styles.requirement}>
               <Ionicons
                 name={validation.hasLetter ? "checkmark-circle" : "close-circle"}
@@ -290,7 +378,6 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
                 Contains letters
               </Text>
             </View>
-
             <View style={styles.requirement}>
               <Ionicons
                 name={validation.hasNumber ? "checkmark-circle" : "close-circle"}
@@ -301,7 +388,6 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
                 Contains numbers
               </Text>
             </View>
-
             <View style={styles.requirement}>
               <Ionicons
                 name={validation.hasSpecialChar ? "checkmark-circle" : "close-circle"}
@@ -319,18 +405,24 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         <View
           style={[
             styles.passwordContainer,
-            formData.confirmPassword.length > 0 && !passwordsMatch && styles.confirmPasswordError,
+            confirmPasswordTouched &&
+              formData.confirmPassword.length > 0 &&
+              !passwordsMatch &&
+              styles.confirmPasswordError,
           ]}
         >
           <TextInput
+            ref={confirmPasswordInputRef}
             style={[styles.input, styles.passwordInput, styles.confirmPasswordInput]}
             placeholder="Confirm Password"
             value={formData.confirmPassword}
-            onChangeText={(value) => updateFormData({ confirmPassword: value })}
+            onChangeText={handleConfirmPasswordChange}
+            onFocus={handleConfirmPasswordFocus}
             secureTextEntry={!showConfirmPassword}
             placeholderTextColor="#A0A0A0"
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="newPassword"
           />
           <TouchableOpacity style={styles.eyeIcon2} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
             <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={24} color="#A0A0A0" />
@@ -338,10 +430,10 @@ export default function AccountCreationStep({ formData, updateFormData, onNext }
         </View>
 
         {/* Password Match Feedback */}
-        {formData.confirmPassword.length > 0 && formData.password.length > 0 && !passwordsMatch && (
-          <Text style={styles.errorText}>Passwords do not match</Text>
-        )}
-
+        {confirmPasswordTouched &&
+          formData.confirmPassword.length > 0 &&
+          formData.password.length > 0 &&
+          !passwordsMatch && <Text style={styles.errorText}>Passwords do not match</Text>}
         {passwordsMatch && (
           <View style={styles.matchContainer}>
             <Ionicons name="checkmark-circle" size={16} color="#10b981" />
@@ -521,9 +613,9 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   continueButton: {
-    marginTop:50,
+    marginTop: 50,
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 32,
     padding: 16,
     alignItems: "center",
     shadowColor: colors.primary,

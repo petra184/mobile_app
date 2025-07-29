@@ -1,6 +1,6 @@
 "use client"
 import type React from "react"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { Feather } from "@expo/vector-icons"
@@ -25,7 +25,9 @@ const RewardsCheckoutScreen: React.FC = () => {
     clearCart,
     isLoading,
     refreshCart,
+    refreshTrigger, // Add this to force re-renders
   } = useCart()
+
   const { points, userId, userEmail, redeemPoints } = useUserStore()
   const { showSuccess, showError } = useNotifications()
   const [processing, setProcessing] = useState(false)
@@ -36,45 +38,102 @@ const RewardsCheckoutScreen: React.FC = () => {
   // Refresh cart when screen is focused
   useFocusEffect(
     useCallback(() => {
-      console.log("🔄 Checkout screen focused")
+      console.log("🔄 Checkout screen focused, refreshing cart")
       refreshCart()
     }, [refreshCart]),
   )
 
-  // Handle quantity changes
+  // Add effect to log cart changes for debugging
+  useEffect(() => {
+    console.log("🛒 Checkout - Cart state updated:", {
+      totalItems,
+      totalPoints,
+      itemCount: items.length,
+      refreshTrigger,
+    })
+  }, [totalItems, totalPoints, items.length, refreshTrigger])
+
+  // Handle quantity changes with better state management
   const handleQuantityChange = useCallback(
     (id: string, change: number) => {
+      console.log(`🔄 Changing quantity for item ${id} by ${change}`)
       const item = items.find((item) => item.id === id)
       if (item) {
-        const newQuantity = item.quantity + change
-        updateQuantity(id, newQuantity)
+        const newQuantity = Math.max(0, item.quantity + change)
+        if (newQuantity === 0) {
+          removeFromCart(id)
+        } else {
+          updateQuantity(id, newQuantity)
+        }
       }
     },
-    [items, updateQuantity],
+    [items, updateQuantity, removeFromCart],
   )
 
-  // Handle removing one item
+  // Handle removing one item with logging
   const handleRemoveOne = useCallback(
     (id: string) => {
-      removeOneFromCart(id)
+      console.log(`➖ Removing one item: ${id}`)
+      const item = items.find((item) => item.id === id)
+      if (item) {
+        console.log(`Current quantity: ${item.quantity}`)
+        removeOneFromCart(id)
+      }
     },
-    [removeOneFromCart],
+    [removeOneFromCart, items],
   )
 
-  // Handle removing entire item
+  // Handle removing entire item with logging
   const handleRemoveItem = useCallback(
     (id: string) => {
+      console.log(`🗑️ Removing entire item: ${id}`)
       removeFromCart(id)
     },
     [removeFromCart],
   )
 
-  // Process checkout
+  // Database lookup to determine if item is a special offer or reward
+  const determineItemType = useCallback(
+    async (itemId: string): Promise<{ isSpecialOffer: boolean; exists: boolean }> => {
+      try {
+        // First check if the item exists in special_offers table
+        const { data: specialOffer, error: specialOfferError } = await supabase
+          .from("special_offers")
+          .select("id")
+          .eq("id", itemId)
+          .single()
+
+        if (specialOffer && !specialOfferError) {
+          return { isSpecialOffer: true, exists: true }
+        }
+
+        // If not found in special_offers, check if it exists in rewards table
+        const { data: reward, error: rewardError } = await supabase
+          .from("rewards")
+          .select("id")
+          .eq("id", itemId)
+          .single()
+
+        if (reward && !rewardError) {
+          return { isSpecialOffer: false, exists: true }
+        }
+
+        // If not found in either table
+        return { isSpecialOffer: false, exists: false }
+      } catch (error) {
+        console.error(`Error determining item type for ${itemId}:`, error)
+        return { isSpecialOffer: false, exists: false }
+      }
+    },
+    [],
+  )
+
   const processCheckout = useCallback(async () => {
     setProcessing(true)
     try {
+      // Verify user is authenticated and get the session
       const {
-        data: { session },
+        data: { session }, // Get the session object
         error: authError,
       } = await supabase.auth.getSession()
 
@@ -82,73 +141,260 @@ const RewardsCheckoutScreen: React.FC = () => {
         throw new Error("User not authenticated or session not found")
       }
 
-      const accessToken = session.access_token
+      const user = session.user // Extract the user from the session
+      const accessToken = session.access_token // Get the access_token from the session
+
+      // Create a snapshot of current cart items before clearing
       const cartSnapshot = [...items]
       const snapshotTotalItems = totalItems
       const snapshotTotalPoints = totalPoints
 
       console.log("🛒 Processing checkout with items:", cartSnapshot)
+      console.log("🔐 Authenticated user:", user.id)
 
-      const CHECKOUT_URL = process.env.EXPO_PUBLIC_SUPABASE_CHECKOUT_FUNCTION_URL
-      if (!CHECKOUT_URL) {
-        throw new Error("Checkout service not configured. Please contact support.")
-      }
+      // Determine item types for all items first
+      const itemsWithTypes = await Promise.all(
+        cartSnapshot.map(async (item) => {
+          const { isSpecialOffer, exists } = await determineItemType(item.id)
+          if (!exists) {
+            throw new Error(`Item "${item.title}" not found in database`)
+          }
+          return {
+            ...item,
+            isSpecialOffer,
+          }
+        }),
+      )
 
-      const response = await fetch(CHECKOUT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          cartItems: cartSnapshot.map((item) => ({
+      // Determine transaction subtype
+      const hasRewards = itemsWithTypes.some((item) => !item.isSpecialOffer)
+      const hasOffers = itemsWithTypes.some((item) => item.isSpecialOffer)
+
+      let transactionSubtype = "reward_only"
+      if (hasRewards && hasOffers) transactionSubtype = "mixed"
+      else if (hasOffers) transactionSubtype = "offer_only"
+
+      // Generate a unique 6-digit confirmation number
+      const confirmationNumber = Math.floor(Math.random() * 900000 + 100000).toString()
+
+      // Start a transaction - make sure to use the authenticated user's ID
+      const { data: transaction, error: transactionError } = await supabase
+        .from("reward_transactions")
+        .insert({
+          user_id: user.id, // Use the authenticated user's ID
+          transaction_type: "reward_purchase",
+          transaction_subtype: transactionSubtype,
+          total_points_used: snapshotTotalPoints,
+          items: itemsWithTypes.map((item) => ({
             id: item.id,
             title: item.title,
             points_required: item.points_required,
             quantity: item.quantity,
-            description: item.description,
-            image_url: item.image_url,
+            total_points: item.points_required * item.quantity,
+            item_type: item.isSpecialOffer ? "special_offer" : "reward",
           })),
-          totalPoints: snapshotTotalPoints,
-          totalItems: snapshotTotalItems,
-        }),
-      })
+          status: "completed",
+          confirmation_number: confirmationNumber, // Store the generated confirmation number
+        })
+        .select()
+        .single()
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error("Checkout API error:", response.status, errorText)
-        throw new Error(`Checkout failed: ${response.status} ${response.statusText}`)
+      if (transactionError) {
+        console.error("Transaction error:", transactionError)
+        throw new Error("Failed to create transaction record")
       }
 
-      const result = await response.json()
-      if (!result.success) {
-        throw new Error(result.error || "Checkout failed")
+      console.log("✅ Transaction created:", transaction.id)
+
+      // Process each item and create unified transaction items
+      for (const item of itemsWithTypes) {
+        const itemType = item.isSpecialOffer ? "special_offer" : "reward"
+        console.log(`Processing ${itemType}: ${item.title}`)
+
+        // Insert unified transaction item with correct foreign key
+        const transactionItemData = {
+          transaction_id: transaction.id,
+          quantity: item.quantity,
+          points_per_item: item.points_required,
+          total_points: item.points_required * item.quantity,
+          item_title: item.title,
+          item_type: itemType,
+          ...(item.isSpecialOffer
+            ? { special_offer_id: item.id, reward_id: null }
+            : { reward_id: item.id, special_offer_id: null }),
+        }
+
+        const { error: itemError } = await supabase.from("transaction_items").insert(transactionItemData)
+
+        if (itemError) {
+          console.error("Transaction item error:", itemError)
+          throw new Error(`Failed to create transaction item for ${item.title}`)
+        }
+
+        // Handle item-specific logic
+        if (item.isSpecialOffer) {
+          // Mark special offer as claimed
+          const { data: claimResult, error: claimError } = await supabase.rpc("mark_special_offer_as_claimed", {
+            p_offer_id: item.id,
+            p_quantity: item.quantity,
+          })
+
+          if (claimError || !claimResult) {
+            console.error("Special offer claim error:", claimError)
+            throw new Error(`Failed to claim special offer ${item.title}`)
+          }
+        } else {
+          // Mark reward as purchased using the database function
+          const { data: markResult, error: markError } = await supabase.rpc("mark_reward_as_purchased", {
+            p_reward_id: item.id,
+            p_quantity: item.quantity,
+          })
+
+          if (markError || !markResult) {
+            console.error("Reward mark error:", markError)
+            throw new Error(`Failed to update stock for reward ${item.title}`)
+          }
+        }
+
+        // Create unified redemption record
+        const redemptionData = {
+          user_id: user.id, // Use the authenticated user's ID
+          item_title: item.title,
+          item_type: itemType,
+          points_used: item.points_required * item.quantity,
+          quantity: item.quantity,
+          status: "completed",
+          ...(item.isSpecialOffer
+            ? { special_offer_id: item.id, reward_id: null }
+            : { reward_id: item.id, special_offer_id: null }),
+        }
+
+        const { error: redemptionError } = await supabase.from("user_redemptions_unified").insert(redemptionData)
+
+        if (redemptionError) {
+          console.error("Redemption error:", redemptionError)
+          throw new Error(`Failed to create redemption record for ${item.title}`)
+        }
+
+        // Record purchase history
+        const { error: purchaseHistoryError } = await supabase.rpc("record_purchase_history", {
+          p_user_id: user.id,
+          p_item_id: item.id,
+          p_item_title: item.title,
+          p_item_type: itemType,
+          p_points_used: item.points_required * item.quantity,
+          p_quantity: item.quantity,
+          p_transaction_id: transaction.id,
+        })
+
+        if (purchaseHistoryError) {
+          console.error("Purchase history error:", purchaseHistoryError)
+          // Don't throw error for purchase history as it's not critical
+        }
       }
 
-      console.log("✅ Checkout completed successfully:", result)
+      console.log("✅ All transaction items and redemptions created")
 
+      // Create points transaction record - use the authenticated user's ID
+      const pointsTransactionData = {
+        user_id: user.id, // Use the authenticated user's ID
+        points_change: -snapshotTotalPoints,
+        transaction_type: "redemption",
+        source_type: transactionSubtype,
+        source_id: transaction.id,
+        description: `Redeemed ${snapshotTotalItems} item${snapshotTotalItems > 1 ? "s" : ""} for ${snapshotTotalPoints} points`,
+      }
+
+      console.log("📝 Creating points transaction:", pointsTransactionData)
+
+      const { error: pointsTransactionError } = await supabase.from("points_transactions").insert(pointsTransactionData)
+
+      if (pointsTransactionError) {
+        console.error("Points transaction error:", pointsTransactionError)
+        throw new Error("Failed to create points transaction record")
+      }
+
+      console.log("✅ Points transaction created")
+
+      // Deduct points from user
       await redeemPoints(snapshotTotalPoints)
+
+      // NEW: Send confirmation email directly via Supabase Edge Function
+      if (userEmail && accessToken) {
+        // Ensure accessToken is available
+        const SUPABASE_EDGE_FUNCTION_EMAIL_URL = process.env.EXPO_PUBLIC_SUPABASE_EDGE_FUNCTION_EMAIL_URL // Access Expo public env var
+
+        if (!SUPABASE_EDGE_FUNCTION_EMAIL_URL) {
+          console.error("SUPABASE_EDGE_FUNCTION_EMAIL_URL is not configured. Skipping email sending.")
+          showError("Email Sending Failed", "Email service not configured. Please contact support.")
+        } else {
+          console.log("📧 Sending redemption confirmation email...")
+          const response = await fetch(SUPABASE_EDGE_FUNCTION_EMAIL_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              // Add the Authorization header with the user's access token
+              Authorization: `Bearer ${accessToken}`, // Use accessToken from the session
+            },
+            body: JSON.stringify({
+              userEmail: userEmail, // Use userEmail from the Zustand store
+              redeemedItems: itemsWithTypes.map((item) => ({
+                id: item.id,
+                title: item.title,
+                points_required: item.points_required,
+                quantity: item.quantity,
+                isSpecialOffer: item.isSpecialOffer,
+              })),
+              confirmationNumber: confirmationNumber, // Pass the generated confirmation number
+            }),
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json()
+            console.error("Failed to send redemption email via Edge Function:", errorData)
+            showError("Email Sending Failed", "Could not send confirmation email. Please check your email address.")
+          } else {
+            console.log("✅ Redemption email sent successfully.")
+          }
+        }
+      } else {
+        console.warn("User email or access token not available, skipping email confirmation.")
+      }
+
+      // Clear cart first
+      console.log("🧹 Clearing cart after successful purchase")
       await clearCart()
 
+      // Show success message
       showSuccess(
-        "Success!",
-        `You've successfully redeemed ${snapshotTotalItems} item${
-          snapshotTotalItems > 1 ? "s" : ""
-        } for ${snapshotTotalPoints} points.${
-          result.confirmation_number ? ` Confirmation #${result.confirmation_number}.` : ""
-        }`,
+        "Purchase Successful!",
+        `You've successfully redeemed ${snapshotTotalItems} item${snapshotTotalItems > 1 ? "s" : ""} for ${snapshotTotalPoints} points. A confirmation email has been sent to ${userEmail}. Your confirmation number is #${confirmationNumber}.`, // Updated success message
       )
 
+      // Navigate back after a short delay
       setTimeout(() => {
+        console.log("🚀 Navigating back to store")
         router.back()
-      }, 1000)
+      }, 3000)
     } catch (error) {
       console.error("❌ Checkout error:", error)
       showError("Purchase Failed", error instanceof Error ? error.message : "Something went wrong. Please try again.")
     } finally {
       setProcessing(false)
     }
-  }, [items, totalItems, totalPoints, redeemPoints, clearCart, showSuccess, showError, router])
+  }, [
+    items,
+    totalItems,
+    totalPoints,
+    userId,
+    userEmail, // Added to dependencies
+    redeemPoints,
+    clearCart,
+    showSuccess,
+    showError,
+    router,
+    determineItemType,
+  ])
 
   const handleCheckout = useCallback(async () => {
     if (!userId) {
@@ -192,7 +438,11 @@ const RewardsCheckoutScreen: React.FC = () => {
     const itemIsSpecialOffer = item.item_type === "special_offer" || item.category === "special_offer"
 
     return (
-      <Animated.View key={item.id} entering={FadeInUp.duration(400).delay(index * 100)} style={styles.cartItem}>
+      <Animated.View
+        key={`${item.id}-${item.quantity}`}
+        entering={FadeInUp.duration(400).delay(index * 100)}
+        style={styles.cartItem}
+      >
         <View style={styles.itemImageContainer}>
           {item.image_url ? (
             <Image source={{ uri: item.image_url }} style={styles.itemImage} resizeMode="cover" />
@@ -233,16 +483,24 @@ const RewardsCheckoutScreen: React.FC = () => {
 
         <View style={styles.itemActions}>
           <View style={styles.quantityContainer}>
-            <TouchableOpacity style={styles.quantityButton} onPress={() => handleRemoveOne(item.id)}>
-              <Feather name="minus" size={16} color={colors.primary} />
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => handleRemoveOne(item.id)}
+              disabled={processing}
+            >
+              <Feather name="minus" size={16} color={processing ? "#999" : colors.primary} />
             </TouchableOpacity>
             <Text style={styles.quantityText}>{item.quantity}</Text>
-            <TouchableOpacity style={styles.quantityButton} onPress={() => handleQuantityChange(item.id, 1)}>
-              <Feather name="plus" size={16} color={colors.primary} />
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => handleQuantityChange(item.id, 1)}
+              disabled={processing}
+            >
+              <Feather name="plus" size={16} color={processing ? "#999" : colors.primary} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.removeButton} onPress={() => handleRemoveItem(item.id)}>
-            <Feather name="trash-2" size={16} color="#EF4444" />
+          <TouchableOpacity style={styles.removeButton} onPress={() => handleRemoveItem(item.id)} disabled={processing}>
+            <Feather name="trash-2" size={16} color={processing ? "#999" : "#EF4444"} />
           </TouchableOpacity>
           <Text style={[styles.itemTotal, !itemCanAfford && styles.itemTotalWarning]}>
             {(item.points_required * item.quantity).toLocaleString()} pts
@@ -255,7 +513,6 @@ const RewardsCheckoutScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <Image source={require("../../../IMAGES/crowd.jpg")} style={styles.backgroundImage} />
-
       {hasItems ? (
         <>
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

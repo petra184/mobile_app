@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./IMAGES/LOGO.png",
-    "scheme": "GDR",
+    "scheme": "gdr",
     "deepLinking": true,
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
