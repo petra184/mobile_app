@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { Pressable, StyleSheet } from "react-native"
-import { Bell } from "lucide-react-native"
+import Feather from '@expo/vector-icons/Feather';
 import { colors } from "@/constants/colors"
 import { useNotifications, NotificationBadge } from "@/context/notification-context"
 import { NotificationCenter } from "./NotificationCenter"
@@ -22,7 +22,7 @@ export const NotificationButton: React.FC<{
         onPress={() => setShowCenter(true)}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Bell size={size} color={color} />
+        <Feather name="bell" size={size} color={color} />
         <NotificationBadge count={unreadCount} />
       </Pressable>
 

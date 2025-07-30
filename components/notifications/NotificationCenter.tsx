@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Animated, Dimensi
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { colors } from "@/constants/colors"
 import { useNotifications, type InAppNotification } from "@/context/notification-context"
-import { Bell, X, CheckCircle, AlertCircle, Info, AlertTriangle, Trash2, Check } from "lucide-react-native"
+import Feather from '@expo/vector-icons/Feather';
 
 const NotificationItem: React.FC<{
   notification: InAppNotification
@@ -15,15 +15,15 @@ const NotificationItem: React.FC<{
   const getIcon = () => {
     switch (notification.type) {
       case "success":
-        return <CheckCircle size={20} color={colors.success || "#10B981"} />
+        return <Feather name="check-circle" size={20} color={colors.success || "#10B981"} />
       case "error":
-        return <AlertCircle size={20} color={colors.error || "#EF4444"} />
+        return <Feather name="alert-circle" size={20} color={colors.error || "#EF4444"} />
       case "warning":
-        return <AlertTriangle size={20} color={colors.warning || "#F59E0B"} />
+        return <Feather name="alert-triangle" size={20} color={colors.error || "#EF4444"} />
       case "info":
-        return <Info size={20} color={colors.info || "#3B82F6"} />
+        return <Feather name="info" size={20} color={colors.info || "#3B82F6"} />
       default:
-        return <Bell size={20} color={colors.primary} />
+        return <Feather name="bell" size={20} color={colors.primary} />
     }
   }
 
@@ -56,7 +56,7 @@ const NotificationItem: React.FC<{
             onPress={onRemove}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Trash2 size={16} color={colors.textSecondary} />
+            <Feather name="trash-2" size={16} color= {colors.textSecondary} />
           </Pressable>
         </View>
 
@@ -139,12 +139,12 @@ export const NotificationCenter: React.FC<{
             <View style={styles.headerActions}>
               {unreadCount > 0 && (
                 <Pressable style={styles.headerButton} onPress={markAllAsRead}>
-                  <Check size={20} color={colors.primary} />
+                  <Feather name="check-circle" size={20} color={colors.primary} />
                 </Pressable>
               )}
 
               <Pressable style={styles.headerButton} onPress={onClose}>
-                <X size={20} color={colors.textSecondary} />
+                <Feather name="x" size={20} color={colors.textSecondary} />
               </Pressable>
             </View>
           </View>
@@ -153,7 +153,7 @@ export const NotificationCenter: React.FC<{
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {notifications.length === 0 ? (
               <View style={styles.emptyState}>
-                <Bell size={48} color={colors.textSecondary} />
+                <Feather name="bell" size={48} color={colors.textSecondary} />
                 <Text style={[styles.emptyStateTitle, { color: colors.text }]}>No notifications</Text>
                 <Text style={[styles.emptyStateMessage, { color: colors.textSecondary }]}>
                   You're all caught up! New notifications will appear here.

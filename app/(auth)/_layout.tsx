@@ -1,9 +1,10 @@
 import { Stack } from "expo-router";
 import { colors } from "@/constants/colors";
-
+import { NotificationProvider } from "@/context/notification-context";
 
 export default function AuthLayout() {
   return (
+    <NotificationProvider>
     <Stack
       screenOptions={{
         headerStyle: {
@@ -39,6 +40,21 @@ export default function AuthLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="reset_password"
+        options={{
+          title: "Reset Password",
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="confirm_signup"
+        options={{
+          title: "Manhattan University",
+          headerShown: false,
+        }}
+      />
     </Stack>
+    </NotificationProvider>
   );
 }

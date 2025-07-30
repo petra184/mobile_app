@@ -13,13 +13,14 @@ import { Link, useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors } from '@/constants/colors'
+import Auth from '@/utils/linking'
 
 
 const { width, height } = Dimensions.get('window')
 
 export default function IndexScreen() {
   const router = useRouter();
-
+  
   return (
     <>
       <StatusBar barStyle="dark-content" />
@@ -73,9 +74,6 @@ export default function IndexScreen() {
             </TouchableOpacity>
           </View>
 
-          <Link href="/(tabs)" style={styles.skipLink}>
-            <Text style={styles.skipLinkText}>Skip to explore</Text>
-          </Link>
         </View>
 
         <Text style={styles.footerText}>
@@ -102,8 +100,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     resizeMode: 'cover',
-    opacity: 0.8,
-    height: '70%',
+    opacity: 0.6,
   },
   gradient: {
     position: 'absolute',
@@ -182,7 +179,7 @@ const styles = StyleSheet.create({
     marginBottom: height * 0.02,
   },
   button: {
-    borderRadius: 14,
+    borderRadius: 32,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

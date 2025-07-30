@@ -1,92 +1,101 @@
 import { supabase } from '@/lib/supabase';
 
 export async function signUpWithEmail(
-  email: string, 
-  password: string, 
-  first_name: string, 
-  last_name: string, 
-  username: string, 
-  phone_number: string
+  email: string,
+  password: string,
+  first_name: string,
+  last_name: string,
+  username: string,
+  phone_number: string,
+  birthday: string,
 ) {
   try {
-    // Sign up the user with Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name,
-          last_name,
-          username,
-          phone_number,
-        },
-      },
-    });
+    // Format birthday to ISO string (YYYY-MM-DD) if provided
+    let birthdayISO: string | null = null
+    if (birthday && birthday.trim() !== "") {
+      const parts = birthday.split("/")
+      if (parts.length === 3) {
+        const month = Number(parts[0]) - 1
+        const day = Number(parts[1])
+        const year = Number(parts[2])
+        if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
+          birthdayISO = new Date(year, month, day).toISOString().split("T")[0]
+        }
+      }
+    }
 
-    if (error) {
-      console.error('Error signing up:', error.message);
+    console.log("🚀 Starting signup process...")
+
+    // Step 1: Create auth user (without metadata to avoid trigger issues)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: email.toLowerCase(),
+      password,
+    })
+
+    console.log("✅ Auth signup result:", { user: authData.user?.id, error: authError })
+
+    if (authError) {
+      console.error("❌ Auth signup failed:", authError)
+      return { success: false, message: authError.message }
+    }
+
+    if (!authData?.user) {
+      console.error("❌ No user returned from auth signup")
+      return { success: false, message: "Signup failed. No user returned." }
+    }
+
+    // Step 2: Create user profile in public.users table
+    console.log("📝 Creating user profile...")
+
+    // Generate unique username if needed
+    let finalUsername = username.toLowerCase().trim()
+
+    // Check if username exists and make it unique
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("username")
+      .eq("username", finalUsername)
+      .single()
+
+    if (existingUser) {
+      finalUsername = `${finalUsername}_${Date.now()}`
+      console.log("🔄 Username exists, using:", finalUsername)
+    }
+
+    const { error: profileError } = await supabase.from("users").insert({
+      user_id: authData.user.id,
+      email: authData.user.email!,
+      first_name: first_name.trim(),
+      last_name: last_name.trim() || null,
+      username: finalUsername,
+      phone_number: phone_number.trim() || null,
+      birthday: birthdayISO,
+      points: 0,
+    })
+
+    if (profileError) {
+      console.error("❌ Profile creation failed:", profileError)
+      // Auth user was created but profile failed
+      // You might want to clean up the auth user here
       return {
         success: false,
-        message: error.message,
-      };
+        message: `Profile creation failed: ${profileError.message}`,
+      }
     }
 
-    // Check if user was created successfully
-    if (data && data.user) {
-      // For email confirmation flow
-      if (data.user.identities && data.user.identities.length === 0) {
-        return {
-          success: false,
-          message: 'This email is already registered.',
-        };
-      }
+    console.log("✅ User profile created successfully")
 
-      // Insert user data into the "users" table
-      const { error: dbError } = await supabase.from("users").insert({
-        email,
-        user_id: data.user.id,
-        username,
-        first_name,
-        last_name,
-        phone_number,
-      });
-
-      if (dbError) {
-        console.error("Database Insert Error:", dbError.message);
-        return {
-          success: false,
-          message: "Sign-up failed. Please try again.",
-        };
-      }
-
-      // If email confirmation is enabled in Supabase
-      if (data.session === null) {
-        return {
-          success: true,
-          message: 'Check your email for the confirmation link.',
-        };
-      }
-
-      // If email confirmation is disabled, user is signed in immediately
-      return {
-        success: true,
-        message: 'Account created successfully!',
-        user: data.user,
-      };
+    return {
+      success: true,
+      message: "Account created successfully!",
+      user: authData.user,
     }
-
-    return {
-      success: false,
-      message: 'Something went wrong. Please try again.',
-    };
-  } catch (error) {
-    console.error('Unexpected error during signup:', error);
-    return {
-      success: false,
-      message: 'An unexpected error occurred.',
-    };
+  } catch (err: any) {
+    console.error("💥 Unexpected error in signUpWithEmail:", err)
+    return { success: false, message: "Unexpected error occurred." }
   }
 }
+
 
 
 /**
@@ -244,7 +253,7 @@ export async function upsertProfile(userId: string, profileData: {
 }) {
   try {
     const { error } = await supabase
-      .from('profiles')
+      .from('users')
       .upsert({
         id: userId,
         updated_at: new Date().toISOString(),
@@ -280,7 +289,7 @@ export async function upsertProfile(userId: string, profileData: {
 export async function getProfile(userId: string) {
   try {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('*')
       .eq('id', userId)
       .single();

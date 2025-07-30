@@ -1,37 +1,17 @@
-import { Stack, useRouter } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
-import { NotificationProvider } from "@/context/notification-context"; // Adjust path as needed
-
-function RootLayoutNav() {
-    const router = useRouter();
-    return (
-      <Stack>
-            <Stack.Screen 
-            name="(tabs)" 
-            options={{ 
-            headerShown: false,
-            }} 
-        />
-        <Stack.Screen 
-            name="(auth)" 
-            options={{ 
-            headerShown: false,
-            }} 
-        />
-        <Stack.Screen 
-          name = "index"
-          options={{ 
-            headerShown: false,
-          }} 
-        />
-      </Stack>
-    )
-}
+import { Stack } from "expo-router";
+import { NotificationProvider } from "@/context/notification-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 export default function RootLayout() {
   return (
     <NotificationProvider>
-      <RootLayoutNav />
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(main)" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          </Stack>
+        </GestureHandlerRootView>
     </NotificationProvider>
   );
 }

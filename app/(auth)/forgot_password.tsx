@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
   TouchableWithoutFeedback,
   Keyboard,
   Image,
@@ -18,103 +17,139 @@ import {
 } from "react-native"
 import { useRouter } from "expo-router"
 import { Ionicons } from "@expo/vector-icons"
-import { signInWithEmailOrUsername } from "@/app/actions/main_actions"
+import Entypo from '@expo/vector-icons/Entypo';
+import { useNotifications } from "@/context/notification-context"
+import { sendPasswordResetEmail } from "@/app/actions/password" // Import the action
+import { colors } from "@/constants/colors"
 
-// Define the main color from the logo
-const MAIN_COLOR = "#035e32"
-
-export default function LoginScreen() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [identifier, setIdentifier] = useState("")
-  const [password, setPassword] = useState("")
-
-  const goHome = () => {
-    router.push("/")
-  }
-
-  async function handleLogin() {
-    if (!identifier || !password) {
-      Alert.alert("Error", "Please enter both email/username and password")
-      return
+export default function ForgotPasswordScreen() {
+    const router = useRouter()
+    const [loading, setLoading] = useState(false)
+    const [email, setEmail] = useState("")
+    const [emailSent, setEmailSent] = useState(false)
+    
+    const { showSuccess, showError, showWarning } = useNotifications()
+  
+    const goBack = () => {
+      router.back()
     }
-
-    setLoading(true)
-    try {
-      const { success, message, user } = await signInWithEmailOrUsername(identifier, password)
-
-      if (success && user) {
-        // Navigate to home or dashboard
-        router.push("/(tabs)")
-      } else {
-        Alert.alert("Login failed", message || "Invalid credentials")
+  
+    async function handleResetPassword() {
+      if (!email) {
+        showWarning("Missing Email", "Please enter your email address")
+        return
       }
-    } catch (error) {
-      console.error("Login error:", error)
-      Alert.alert("Error", "An unexpected error occurred")
-    } finally {
-      setLoading(false)
+
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(email)) {
+        showWarning("Invalid Email", "Please enter a valid email address")
+        return
+      }
+  
+      setLoading(true)
+      try {
+        // Use the Supabase action
+        const { success, message } = await sendPasswordResetEmail(email)
+        
+        if (success) {
+          setEmailSent(true)
+          showSuccess("Email Sent!", message)
+        } else {
+          showError("Reset Failed", message)
+        }
+      } catch (error) {
+        console.error("Password reset error:", error)
+        showError("Connection Error", "Unable to connect to the server. Please check your internet connection and try again.")
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+
+    if (emailSent) {
+      return (
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <SafeAreaView style={styles.container}>
+            <Image
+              source={require("../../IMAGES/crowd.jpg")}
+              style={styles.backgroundImage}
+            />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoid}>
+              <View style={styles.header}>
+                <TouchableOpacity onPress={goBack} style={styles.backButton}>
+                    <Entypo name="chevron-left" size={24} color="black" />
+                </TouchableOpacity>
+                <Text style={styles.title}>Check Your Email</Text>
+                <Text style={styles.subtitle}>We've sent password reset instructions to {email}</Text>
+              </View>
+
+              <View style={styles.formContainer}>
+                <View style={styles.successContainer}>
+                  <Ionicons name="mail-outline" size={80} color={colors.primary} />
+                  <Text style={styles.successText}>
+                    If an account with that email exists, you'll receive password reset instructions shortly.
+                  </Text>
+                  <Text style={styles.instructionText}>
+                    Check your spam folder if you don't see the email in your inbox.
+                  </Text>
+                  <Text style={styles.instructionText}>
+                    The reset link will expire in 1 hour for security.
+                  </Text>
+                </View>
+
+                <TouchableOpacity style={styles.backToLoginButton} onPress={() => router.push("./login")}>
+                  <Text style={styles.backToLoginButtonText}>Back to Login</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.resendButton} onPress={() => setEmailSent(false)}>
+                  <Text style={styles.resendButtonText}>Try Different Email</Text>
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        </TouchableWithoutFeedback>
+      )
+    }
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={styles.container}>
         <Image
-          source={require("../../IMAGES/crowd.jpg")} // Update path as needed
+          source={require("../../IMAGES/crowd.jpg")}
           style={styles.backgroundImage}
         />
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoid}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={goHome} style={styles.backButton}>
-              <Text style={styles.backButtonText}>←</Text>
+            <TouchableOpacity onPress={goBack} style={styles.backButton}>
+                <Entypo name="chevron-left" size={24} color="black" />
             </TouchableOpacity>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Log in to your account</Text>
+            <Text style={styles.title}>Forgot Password?</Text>
+            <Text style={styles.subtitle}>Enter your email to reset your password</Text>
           </View>
 
           <View style={styles.formContainer}>
-            {/* Email or Username */}
+            {/* Email Input */}
             <TextInput
               style={styles.input}
-              placeholder="Email or Username"
-              value={identifier}
-              onChangeText={setIdentifier}
+              placeholder="Email Address"
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
+              keyboardType="email-address"
               placeholderTextColor="#A0A0A0"
             />
 
-            {/* Password */}
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={[styles.input, styles.passwordInput]}
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                placeholderTextColor="#A0A0A0"
-              />
-              <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#A0A0A0" />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            <TouchableOpacity style={styles.resetButton} onPress={handleResetPassword} disabled={loading}>
+              {loading ? <ActivityIndicator color="white" /> : <Text style={styles.resetButtonText}>Send Reset Email</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
-              {loading ? <ActivityIndicator color="white" /> : <Text style={styles.loginButtonText}>Log In</Text>}
-            </TouchableOpacity>
           </View>
-
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push("./signup")}>
-              <Text style={styles.signupText}>Sign Up</Text>
-            </TouchableOpacity>
-          </View>
+                      <Text style={styles.footerText}>Remember your password? </Text>
+                      <TouchableOpacity onPress={() => router.push("./login")}>
+                        <Text style={styles.backToLoginLinkText}>Log In</Text>
+                      </TouchableOpacity>
+                    </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </TouchableWithoutFeedback>
@@ -125,6 +160,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    paddingTop: Platform.OS === "ios" ? 0 : 74,
   },
   backgroundImage: {
     position: "absolute",
@@ -133,6 +169,18 @@ const styles = StyleSheet.create({
     height: "65%",
     opacity: 0.1,
     zIndex: 0,
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    position: "absolute",
+    bottom:40,
+    left: 0,
+    right: 0,
+  },
+  footerText: {
+    color: "#666",
+    fontSize: 16,
   },
   header: {
     padding: 24,
@@ -143,14 +191,9 @@ const styles = StyleSheet.create({
         top: -10,
       },
       android: {
-        top: -20,
+        top: -35,
       },
     }),
-  },
-  backButtonText: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#333",
   },
   keyboardAvoid: {
     flex: 1,
@@ -167,6 +210,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     textAlign: "center",
+    paddingHorizontal: 20,
   },
   formContainer: {
     padding: 24,
@@ -177,69 +221,82 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     color: "black",
-    marginBottom: 16,
+    marginBottom: 24,
     shadowColor: "gray",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 1,
   },
-  passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    position: "relative",
-  },
-  passwordInput: {
-    flex: 1,
-    paddingRight: 50, // Space for the eye icon
-  },
-  eyeIcon: {
-    position: "absolute",
-    right: 16,
-    height: "100%",
-    justifyContent: "center",
-    paddingBottom: 15,
-  },
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginBottom: 24,
-  },
-  forgotPasswordText: {
-    color: MAIN_COLOR,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  loginButton: {
-    backgroundColor: MAIN_COLOR,
+  resetButton: {
+    backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
-    marginTop: 8,
-    shadowColor: MAIN_COLOR,
+    marginBottom: 24,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    marginTop:20
+  },
+  resetButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  backToLoginLink: {
+    alignItems: "center",
+  },
+  backToLoginLinkText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  
+  // Success screen styles
+  successContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  successText: {
+    fontSize: 16,
+    color: "#333",
+    textAlign: "center",
+    marginTop: 24,
+    marginBottom: 16,
+    lineHeight: 24,
+  },
+  instructionText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 40,
+    lineHeight: 20,
+  },
+  backToLoginButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 32,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
   },
-  loginButtonText: {
+  backToLoginButtonText: {
     color: "white",
     fontSize: 18,
     fontWeight: "600",
   },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
+  resendButton: {
+    alignItems: "center",
+    padding: 12,
   },
-  footerText: {
-    color: "#666",
-    fontSize: 16,
-  },
-  signupText: {
-    color: MAIN_COLOR,
+  resendButtonText: {
+    color: colors.primary,
     fontSize: 16,
     fontWeight: "600",
   },

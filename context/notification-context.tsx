@@ -2,10 +2,10 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, Animated, Pressable, Dimensions } from "react-native"
+import { View, Text, StyleSheet, Animated, Pressable, Platform } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import { CheckCircle, AlertCircle, Info, X, Bell, AlertTriangle } from "lucide-react-native"
+import Feather from "@expo/vector-icons/Feather"
+import { BlurView } from "expo-blur"
 
 // Types
 export type NotificationType = "success" | "error" | "warning" | "info" | "default"
@@ -42,6 +42,8 @@ interface NotificationContextType {
   showToast: (notification: Omit<ToastNotification, "id">) => void
   hideToast: (id: string) => void
   clearAllToasts: () => void
+  // Quick notification function (for compatibility)
+  showNotification: (message: string, type?: NotificationType) => void
 
   // In-app notifications
   notifications: InAppNotification[]
@@ -61,34 +63,34 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
 
-// Toast Component
+// Modern Toast Component
 const ToastItem: React.FC<{
   notification: ToastNotification
   onDismiss: (id: string) => void
 }> = ({ notification, onDismiss }) => {
   const translateY = useRef(new Animated.Value(-100)).current
   const opacity = useRef(new Animated.Value(0)).current
-  const scale = useRef(new Animated.Value(0.9)).current
+  const scale = useRef(new Animated.Value(0.8)).current
 
   useEffect(() => {
-    // Entrance animation
+    // Smooth entrance animation
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
         useNativeDriver: true,
-        tension: 100,
-        friction: 8,
+        tension: 120,
+        friction: 7,
       }),
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.spring(scale, {
         toValue: 1,
         useNativeDriver: true,
-        tension: 100,
-        friction: 8,
+        tension: 120,
+        friction: 7,
       }),
     ]).start()
 
@@ -106,18 +108,19 @@ const ToastItem: React.FC<{
     Animated.parallel([
       Animated.timing(translateY, {
         toValue: -100,
-        duration: 250,
+        duration: 300,
         useNativeDriver: true,
       }),
       Animated.timing(opacity, {
         toValue: 0,
-        duration: 250,
+        duration: 300,
         useNativeDriver: true,
       }),
-      Animated.timing(scale, {
-        toValue: 0.9,
-        duration: 250,
+      Animated.spring(scale, {
+        toValue: 0.8,
         useNativeDriver: true,
+        tension: 120,
+        friction: 7,
       }),
     ]).start(() => {
       onDismiss(notification.id)
@@ -125,47 +128,48 @@ const ToastItem: React.FC<{
   }, [notification.id, onDismiss])
 
   const getIcon = () => {
+    const iconProps = { size: 22, strokeWidth: 2.5 }
     switch (notification.type) {
       case "success":
-        return <CheckCircle size={20} color={colors.success || "#10B981"} />
+        return <Feather name="check-circle" {...iconProps} color="#10B981" />
       case "error":
-        return <AlertCircle size={20} color={colors.error || "#EF4444"} />
+        return <Feather name="x-circle" {...iconProps} color="#EF4444" />
       case "warning":
-        return <AlertTriangle size={20} color={colors.warning || "#F59E0B"} />
+        return <Feather name="alert-triangle" {...iconProps} color="#F59E0B" />
       case "info":
-        return <Info size={20} color={colors.info || "#3B82F6"} />
+        return <Feather name="info" {...iconProps} color="#3B82F6" />
       default:
-        return <Bell size={20} color={colors.primary} />
+        return <Feather name="bell" {...iconProps} color="#6B7280" />
     }
   }
 
-  const getBackgroundColor = () => {
+  const getAccentColor = () => {
     switch (notification.type) {
       case "success":
-        return colors.success || "#ECFDF5"
+        return "#10B981"
       case "error":
-        return colors.error || "#FEF2F2"
+        return "#EF4444"
       case "warning":
-        return colors.warning || "#FFFBEB"
+        return "#F59E0B"
       case "info":
-        return colors.info || "#EFF6FF"
+        return "#3B82F6"
       default:
-        return colors.card
+        return "#6B7280"
     }
   }
 
-  const getBorderColor = () => {
+  const getGradientColors = () => {
     switch (notification.type) {
       case "success":
-        return colors.success || "#10B981"
+        return ["rgba(16, 185, 129, 0.1)", "rgba(16, 185, 129, 0.05)"]
       case "error":
-        return colors.error || "#EF4444"
+        return ["rgba(239, 68, 68, 0.1)", "rgba(239, 68, 68, 0.05)"]
       case "warning":
-        return colors.warning || "#F59E0B"
+        return ["rgba(245, 158, 11, 0.1)", "rgba(245, 158, 11, 0.05)"]
       case "info":
-        return colors.info || "#3B82F6"
+        return ["rgba(59, 130, 246, 0.1)", "rgba(59, 130, 246, 0.05)"]
       default:
-        return colors.primary
+        return ["rgba(107, 114, 128, 0.1)", "rgba(107, 114, 128, 0.05)"]
     }
   }
 
@@ -176,35 +180,51 @@ const ToastItem: React.FC<{
         {
           transform: [{ translateY }, { scale }],
           opacity,
-          backgroundColor: getBackgroundColor(),
-          borderLeftColor: getBorderColor(),
         },
       ]}
     >
-      <View style={styles.toastContent}>
-        <View style={styles.toastIcon}>{getIcon()}</View>
+      {/* Glassmorphism background */}
+      <BlurView intensity={20} style={styles.blurBackground}>
+        <View
+          style={[
+            styles.gradientOverlay,
+            {
+              backgroundColor: getGradientColors()[0],
+            },
+          ]}
+        />
 
-        <View style={styles.toastText}>
-          <Text style={[styles.toastTitle, { color: colors.text }]}>{notification.title}</Text>
-          {notification.message && (
-            <Text style={[styles.toastMessage, { color: colors.textSecondary }]}>{notification.message}</Text>
-          )}
+        {/* Accent border */}
+        <View style={[styles.accentBorder, { backgroundColor: getAccentColor() }]} />
+
+        <View style={styles.toastContent}>
+          <View style={styles.iconContainer}>{getIcon()}</View>
+
+          <View style={styles.textContainer}>
+            <Text style={styles.toastTitle}>{notification.title}</Text>
+            {notification.message && <Text style={styles.toastMessage}>{notification.message}</Text>}
+          </View>
+
+          <Pressable
+            style={styles.dismissButton}
+            onPress={handleDismiss}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Feather name="x" size={18} color="#6B7280" strokeWidth={2} />
+          </Pressable>
         </View>
 
-        <Pressable
-          style={styles.dismissButton}
-          onPress={handleDismiss}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <X size={18} color={colors.textSecondary} />
-        </Pressable>
-      </View>
-
-      {notification.action && (
-        <Pressable style={styles.toastAction} onPress={notification.action.onPress}>
-          <Text style={[styles.toastActionText, { color: getBorderColor() }]}>{notification.action.label}</Text>
-        </Pressable>
-      )}
+        {notification.action && (
+          <View style={styles.actionContainer}>
+            <Pressable
+              style={[styles.actionButton, { borderColor: getAccentColor() }]}
+              onPress={notification.action.onPress}
+            >
+              <Text style={[styles.actionText, { color: getAccentColor() }]}>{notification.action.label}</Text>
+            </Pressable>
+          </View>
+        )}
+      </BlurView>
     </Animated.View>
   )
 }
@@ -217,29 +237,40 @@ const ToastContainer: React.FC<{
   const insets = useSafeAreaInsets()
 
   return (
-    <View style={[styles.toastWrapper, { top: insets.top + 10 }]} pointerEvents="box-none">
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} notification={toast} onDismiss={onDismiss} />
+    <View style={[styles.toastWrapper, { top: insets.top + 16 }]} pointerEvents="box-none">
+      {toasts.map((toast, index) => (
+        <Animated.View key={toast.id} style={[styles.toastItemWrapper, { zIndex: 1000 - index }]}>
+          <ToastItem notification={toast} onDismiss={onDismiss} />
+        </Animated.View>
       ))}
     </View>
   )
 }
 
-// Notification Badge Component
+// Modern Notification Badge Component
 export const NotificationBadge: React.FC<{
   count: number
   size?: number
-}> = ({ count, size = 18 }) => {
+}> = ({ count, size = 20 }) => {
   if (count === 0) return null
 
   return (
-    <View style={[styles.badge, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Text style={[styles.badgeText, { fontSize: size * 0.6 }]}>{count > 99 ? "99+" : count}</Text>
+    <View
+      style={[
+        styles.badge,
+        {
+          width: Math.max(size, count > 9 ? size + 4 : size),
+          height: size,
+          borderRadius: size / 2,
+        },
+      ]}
+    >
+      <Text style={[styles.badgeText, { fontSize: size * 0.55 }]}>{count > 99 ? "99+" : count}</Text>
     </View>
   )
 }
 
-// Provider Component
+// Provider Component (unchanged)
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastNotification[]>([])
   const [notifications, setNotifications] = useState<InAppNotification[]>([])
@@ -262,6 +293,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const clearAllToasts = useCallback(() => {
     setToasts([])
   }, [])
+
+  // Quick notification function (for compatibility)
+  const showNotification = useCallback(
+    (message: string, type: NotificationType = "default") => {
+      showToast({ type, title: message })
+    },
+    [showToast],
+  )
 
   // In-app notification functions
   const addNotification = useCallback((notification: Omit<InAppNotification, "id" | "timestamp" | "read">) => {
@@ -327,6 +366,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     showToast,
     hideToast,
     clearAllToasts,
+    showNotification, // Add this line
     notifications,
     unreadCount,
     addNotification,
@@ -357,77 +397,132 @@ export const useNotifications = () => {
   return context
 }
 
-const { width } = Dimensions.get("window")
-
 const styles = StyleSheet.create({
   toastWrapper: {
     position: "absolute",
-    left: 16,
-    right: 16,
+    left: 20,
+    right: 20,
     zIndex: 9999,
     pointerEvents: "box-none",
   },
+  toastItemWrapper: {
+    marginBottom: 12,
+  },
   toastContainer: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderLeftWidth: 4,
+    borderRadius: 20,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 8,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  blurBackground: {
+    borderRadius: 20,
     overflow: "hidden",
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
+  },
+  gradientOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  accentBorder: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
   },
   toastContent: {
     flexDirection: "row",
     alignItems: "flex-start",
-    padding: 16,
+    padding: 20,
+    paddingLeft: 24, // Account for accent border
   },
-  toastIcon: {
-    marginRight: 12,
+  iconContainer: {
+    ...Platform.select({
+      android: {
+        // Adjust for Android alignment
+      },
+    }),
+    marginRight: 16,
     marginTop: 2,
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  toastText: {
+  textContainer: {
     flex: 1,
+    paddingRight: 8,
   },
   toastTitle: {
     fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 2,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+    lineHeight: 20,
   },
   toastMessage: {
     fontSize: 14,
+    color: "#6B7280",
     lineHeight: 20,
+    fontWeight: "400",
   },
   dismissButton: {
-    padding: 4,
-    marginLeft: 8,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(107, 114, 128, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  toastAction: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+  actionContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
     paddingTop: 0,
   },
-  toastActionText: {
+  actionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    alignItems: "center",
+  },
+  actionText: {
     fontSize: 14,
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
   badge: {
-    backgroundColor: colors.error || "#EF4444",
+    backgroundColor: "#EF4444",
     justifyContent: "center",
     alignItems: "center",
     position: "absolute",
-    top: -6,
-    right: -6,
-    minWidth: 18,
+    top: -8,
+    right: -8,
+    minWidth: 20,
+    shadowColor: "#EF4444",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   badgeText: {
     color: "white",
-    fontWeight: "600",
+    fontWeight: "700",
     textAlign: "center",
+    letterSpacing: 0.2,
   },
 })

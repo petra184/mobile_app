@@ -14,6 +14,22 @@ export const colors = {
     error: "#EF4444",
     warning: "#F59E0B",
     info: "#3B82F6",
+
+    textPrimary: '#333333', // Dark text for main content
+    textPlaceholder: '#999999', // Even lighter for placeholder or strikethrough text
+    textDark: '#1a1a1a', // Very dark for prominent text (e.g., large prices)
+
+    backgroundLight: '#F9F9F9', // Light background for cards/modals
+    backgroundMuted: '#F0F2F5', // Muted background for detail sections
+    buttonDisabledBackground: '#EAEAEA',
+    buttonDisabledText: '#B0B0B0',
+
+    successBackground: '#D4EDDA',
+    successText: '#155724',
+    warningBackground: '#FFF3CD',
+    warningText: '#856404',
+    errorBackground: '#F8D7DA',
+    errorText: '#721C24',
   };
   
   
