@@ -3,5 +3,5 @@
 
 ```bash
 npm install
-npm install expo-secure-store uuid expo-auth-session expo-auth-session/build/QueryParams react-native-qrcode-svg @react-native-community/datetimepicker expo-camera
+npm install expo-secure-store uuid expo-auth-session react-native-qrcode-svg @react-native-community/datetimepicker expo-camera
 ```
