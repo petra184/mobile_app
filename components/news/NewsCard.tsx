@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, Pressable, Image } from "react-native"
-import { colors } from "@/constants/colors"
-import { Feather } from "@expo/vector-icons"
+import { colors } from "@/constants/Colors"
 import type { NewsArticle } from "@/types/updated_types"
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
+import { Feather } from "@expo/vector-icons"
+import { Image, Pressable, StyleSheet, Text, View } from "react-native"
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated"
 
 interface NewsCardProps {
   article: NewsArticle

@@ -1,5 +1,5 @@
 import { Stack } from "expo-router";
-import { colors } from "@/constants/colors";
+import { colors } from "@/constants/Colors";
 import { NotificationProvider } from "@/context/notification-context";
 
 export default function AuthLayout() {

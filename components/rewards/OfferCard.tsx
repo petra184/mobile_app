@@ -1,8 +1,8 @@
-import React from 'react';
-import { StyleSheet, Text, View, Image, Pressable, Dimensions, Platform } from 'react-native';
+import { colors } from '@/constants/Colors';
 import { SpecialOffer } from '@/types/updated_types';
-import { colors } from '@/constants/colors';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import React from 'react';
+import { Dimensions, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
 

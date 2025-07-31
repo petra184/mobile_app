@@ -1,18 +1,18 @@
 "use client"
 
+import { colors } from "@/constants/Colors"
 import React from "react"
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
   Animated,
   Dimensions,
-  Pressable,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native"
-import { colors } from "@/constants/colors"
 
 const { height, width } = Dimensions.get("window")
 

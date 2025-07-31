@@ -1,42 +1,41 @@
 "use client"
-import type React from "react"
-import { useState, useEffect, useCallback } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Pressable,
-  Image,
-} from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore"
-import { Feather } from "@expo/vector-icons"
-import { useRouter } from "expo-router"
+import OfferCard from "@/components/rewards/OfferCard"
+import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
+import RedeemModal from "@/components/rewards/RedeemModal"
+import RewardCard from "@/components/rewards/RewardCard"
+import { colors } from "@/constants/Colors"
 import { useCart } from "@/context/cart-context"
 import { useNotifications } from "@/context/notification-context"
-import Animated, { FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated"
-import { StatusBar } from "expo-status-bar"
-import { PointsStatusCard } from "@/components/rewards/ProgressPoints"
-import OfferCard from "@/components/rewards/OfferCard"
-import RewardCard from "@/components/rewards/RewardCard"
-import RedeemModal from "@/components/rewards/RedeemModal"
+import { useUserStore } from "@/hooks/userStore"
 import {
-  fetchRewards,
-  fetchSpecialOffers,
-  fetchScanHistory,
-  fetchUserStatus,
-  fetchUserAchievements,
   checkUserAchievements,
-} from "@/app/actions/points"
-import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, ScanHistory } from "@/types/updated_types"
+  fetchRewards,
+  fetchScanHistory,
+  fetchSpecialOffers,
+  fetchUserAchievements,
+  fetchUserStatus,
+} from "@/lib/actions/points"
 import { supabase } from "@/lib/supabase"
+import type { Reward, ScanHistory, SpecialOffer, UserAchievement, UserStatusWithLevel } from "@/types/updated_types"
+import { Feather } from "@expo/vector-icons"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
-import { useLocalSearchParams } from "expo-router"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { StatusBar } from "expo-status-bar"
+import type React from "react"
+import { useCallback, useEffect, useState } from "react"
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
+import Animated, { FadeIn, FadeInDown, FadeInUp } from "react-native-reanimated"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 type PurchaseHistory = {
   id: string

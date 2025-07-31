@@ -1,25 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { colors } from "@/constants/Colors";
+import { useUserStore } from "@/hooks/userStore"; // Updated import path
+import { getTeams } from "@/lib/actions/teams";
+import type { Team } from "@/types/updated_types";
+import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  Pressable,
-  Image,
   ActivityIndicator,
-  TextInput,
+  FlatList,
+  Image,
   Platform,
-} from "react-native"
-import { useRouter } from "expo-router"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore" // Updated import path
-import { getTeams } from "@/app/actions/teams"
-import type { Team } from "@/types/updated_types" 
-import { Feather } from "@expo/vector-icons"
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // Separate component for each team item with individual animation
 const AnimatedTeamItem = ({

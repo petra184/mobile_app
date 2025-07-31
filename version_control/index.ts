@@ -1,6 +1,6 @@
 "use client"
 
-// Main export file for the version control system
+// Main export file for the current sync system
 export { StorageManager } from "./storage-manager"
 export { SyncManager } from "./sync-manager"
 export { DataAccessLayer, dataAccess } from "./data-access-layer"
@@ -60,25 +60,57 @@ export function useSync() {
   return { triggerSync, isLoading, error }
 }
 
-// Initialize version control system
-export async function initializeVersionControl(userId: string) {
+// Initialize current sync system for signup
+export async function initializeCurrentSync(userId: string) {
   try {
     const syncManager = SyncManager.getInstance()
-    console.log("🚀 Initializing version control system...")
+    console.log("🚀 Initializing current sync system for signup...")
 
-    // Perform initial sync
+    // Perform initial sync (only for new users)
     const result = await syncManager.performInitialSync(userId)
 
     if (result.success) {
-      console.log("✅ Version control system initialized successfully")
+      console.log("✅ Current sync system initialized successfully")
       console.log(`📊 Synced ${result.itemsAdded} items`)
     } else {
-      console.warn("⚠️ Version control initialization completed with errors:", result.errors)
+      console.warn("⚠️ Current sync initialization completed with errors:", result.errors)
     }
 
     return result
   } catch (error) {
-    console.error("❌ Failed to initialize version control:", error)
+    console.error("❌ Failed to initialize current sync:", error)
+    throw error
+  }
+}
+
+// Load cached data for login
+export async function loadCurrentSyncData(userId: string) {
+  try {
+    const syncManager = SyncManager.getInstance()
+    console.log("📱 Loading current sync data for login...")
+
+    // Check if there are server updates
+    const hasUpdates = await syncManager.hasServerUpdates(userId)
+
+    if (hasUpdates) {
+      console.log("🔄 Server updates detected, performing sync...")
+      const result = await syncManager.performIncrementalSync()
+      return {
+        success: result.success,
+        hasData: true,
+        message: `Synced ${result.itemsUpdated + result.itemsAdded} updates`,
+        hadUpdates: true,
+      }
+    } else {
+      console.log("📱 No server updates, loading cached data...")
+      const result = await syncManager.loadCachedData(userId)
+      return {
+        ...result,
+        hadUpdates: false,
+      }
+    }
+  } catch (error) {
+    console.error("❌ Failed to load current sync data:", error)
     throw error
   }
 }

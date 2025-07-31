@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet } from "react-native";
-import {colors} from "@/constants/colors";
+import { colors } from "@/constants/Colors";
+import { StyleSheet, Text, View } from "react-native";
 
 type InfoItemProps = {
   label: string;

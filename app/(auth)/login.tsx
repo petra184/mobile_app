@@ -1,26 +1,26 @@
 "use client"
-import { useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Image,
-  TextInput,
-} from "react-native"
-import { useRouter } from "expo-router"
-import { Ionicons } from "@expo/vector-icons"
-import Entypo from "@expo/vector-icons/Entypo"
-import { signInWithEmailOrUsername } from "@/app/actions/main_actions"
+import { colors } from "@/constants/Colors"
 import { useNotifications } from "@/context/notification-context"
 import { useUserStore } from "@/hooks/userStore"
-import { colors } from "@/constants/colors"
+import { signInWithEmailOrUsername } from "@/lib/actions/main_actions"
+import { Ionicons } from "@expo/vector-icons"
+import Entypo from "@expo/vector-icons/Entypo"
+import { useRouter } from "expo-router"
+import { useState } from "react"
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native"
 
 export default function LoginScreen() {
   const router = useRouter()

@@ -1,34 +1,34 @@
 "use client"
-import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  Image,
-  ScrollView,
-  Platform,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  TouchableOpacity,
-} from "react-native"
-import { useRouter } from "expo-router"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import * as ImagePicker from "expo-image-picker"
-import Feather from "@expo/vector-icons/Feather"
-import { Ionicons } from "@expo/vector-icons"
-import DateTimePicker from "@react-native-community/datetimepicker"
+import { colors } from "@/constants/Colors"
+import { useNotifications } from "@/context/notification-context"
 import { useUserStore } from "@/hooks/userStore"
-import { getCurrentUser } from "@/app/actions/main_actions"
+import { getCurrentUser } from "@/lib/actions/main_actions"
 import {
-  updateProfileWithImage,
-  updateUserProfileData,
   checkUsernameAvailability,
   getUserById,
-} from "@/app/actions/users"
-import { useNotifications } from "@/context/notification-context"
+  updateProfileWithImage,
+  updateUserProfileData,
+} from "@/lib/actions/users"
+import { Ionicons } from "@expo/vector-icons"
+import Feather from "@expo/vector-icons/Feather"
+import DateTimePicker from "@react-native-community/datetimepicker"
+import * as ImagePicker from "expo-image-picker"
+import { useRouter } from "expo-router"
+import { useEffect, useState } from "react"
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 function capitalize(name: string) {
   return name.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())

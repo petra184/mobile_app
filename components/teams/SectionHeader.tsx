@@ -1,8 +1,8 @@
-import type React from "react"
-import { StyleSheet, Text, View } from "react-native"
-import { colors } from "@/constants/colors"
-import { Feather } from "@expo/vector-icons"
+import { colors } from "@/constants/Colors";
+import { Feather } from "@expo/vector-icons";
 import AntDesign from '@expo/vector-icons/AntDesign';
+import type React from "react";
+import { StyleSheet, Text, View } from "react-native";
 
 interface SectionHeaderProps {
   title: string

@@ -1,40 +1,40 @@
 "use client"
-import type React from "react"
-import { useState, useEffect, useCallback } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  StatusBar,
-  TextInput,
-  Platform,
-  ActivityIndicator,
-  RefreshControl,
-  Image,
-} from "react-native"
-import { Feather } from "@expo/vector-icons"
-import { SafeAreaView } from "react-native-safe-area-context"
 import BirthdayBanner from "@/components/rewards/BirthdayBanner"
 import { HorizontalRewardItem } from "@/components/rewards/HorizontalReward"
-import { colors } from "@/constants/colors"
-import { useRouter, useFocusEffect } from "expo-router"
-import { useUserStore } from "@/hooks/userStore"
-import { useNotifications } from "@/context/notification-context"
-import { useCart } from "@/context/cart-context"
-import {
-  fetchRewards,
-  fetchSpecialOffers,
-  fetchScanHistory,
-  fetchUserStatus,
-  fetchUserAchievements,
-  checkUserAchievements,
-} from "@/app/actions/points"
-import type { Reward, SpecialOffer, UserAchievement, UserStatusWithLevel, ScanHistory } from "@/types/updated_types"
 import OfferCard from "@/components/rewards/OfferCard"
 import RedeemModal from "@/components/rewards/RedeemModal"
+import { colors } from "@/constants/Colors"
+import { useCart } from "@/context/cart-context"
+import { useNotifications } from "@/context/notification-context"
+import { useUserStore } from "@/hooks/userStore"
+import {
+  checkUserAchievements,
+  fetchRewards,
+  fetchScanHistory,
+  fetchSpecialOffers,
+  fetchUserAchievements,
+  fetchUserStatus,
+} from "@/lib/actions/points"
 import { supabase } from "@/lib/supabase"
+import type { Reward, ScanHistory, SpecialOffer, UserAchievement, UserStatusWithLevel } from "@/types/updated_types"
+import { Feather } from "@expo/vector-icons"
+import { useFocusEffect, useRouter } from "expo-router"
+import type React from "react"
+import { useCallback, useEffect, useState } from "react"
+import {
+  ActivityIndicator,
+  Image,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 type SortOption = "none" | "points_low_high" | "points_high_low" | "newest" | "popular"
 

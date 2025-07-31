@@ -1,14 +1,14 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, Image, Pressable, ActivityIndicator } from "react-native"
-import { colors } from "@/constants/colors"
-import type { Player, Coach } from "@/types/updated_types"
-import { getTeamData } from "@/app/actions/info_teams"
-import { useRouter } from "expo-router"
-import Animated, { FadeInDown } from "react-native-reanimated"
+import { colors } from "@/constants/Colors"
+import { getTeamData } from "@/lib/actions/info_teams"
+import type { Coach, Player } from "@/types/updated_types"
 import { Feather } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
+import type React from "react"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native"
+import Animated, { FadeInDown } from "react-native-reanimated"
 
 type RosterItem = (Player & { type: "player" }) | (Coach & { type: "coach" }) | { type: "label"; label: string }
 

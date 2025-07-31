@@ -1,33 +1,33 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  ScrollView,
-  RefreshControl,
-  Modal,
-  FlatList,
-  Image,
-} from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { CameraView, Camera } from "expo-camera"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import { useUserStore } from "@/hooks/userStore"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import { useRouter } from "expo-router"
-import { LinearGradient } from "expo-linear-gradient"
 import {
   checkAdminStatusAction,
   loadAdminGamesAction,
   loadScanHistoryAction,
   processQRCodeScanAction,
   validateQRCodeFormatAction,
-} from "@/app/actions/qr_scanning"
+} from "@/lib/actions/qr_scanning"
 import type { Game, ScanHistoryItem } from "@/types/updated_types"
+import Ionicons from "@expo/vector-icons/Ionicons"
+import { Camera, CameraView } from "expo-camera"
+import { LinearGradient } from "expo-linear-gradient"
+import { useRouter } from "expo-router"
+import { useCallback, useEffect, useState } from "react"
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 // Custom notification component
 const ScanNotification = ({

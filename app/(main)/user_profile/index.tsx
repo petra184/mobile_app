@@ -1,21 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, Pressable, Switch, Image, Platform, ActivityIndicator } from "react-native"
-import { useRouter } from "expo-router"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore" // Updated import path
-import { getTeams } from "@/app/actions/teams"
-import type { Team } from "@/types/updated_types" // Ensure this matches your types
-import { signOut } from "@/app/actions/main_actions"
-import { getProfileImageDataUrl } from "@/app/actions/users"
-import Feather from "@expo/vector-icons/Feather"
 import ProfileImageWithFallback from "@/components/ui/profile_fallback"
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
-import { check_if_admin } from "@/app/actions/qr_scanning"
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { colors } from "@/constants/Colors"
+import { useUserStore } from "@/hooks/userStore"; // Updated import path
+import { signOut } from "@/lib/actions/main_actions"
+import { check_if_admin } from "@/lib/actions/qr_scanning"
+import { getTeams } from "@/lib/actions/teams"
+import { getProfileImageDataUrl } from "@/lib/actions/users"
+import type { Team } from "@/types/updated_types"; // Ensure this matches your types
+import Feather from "@expo/vector-icons/Feather"
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons'
 import { LinearGradient } from "expo-linear-gradient"
+import { useRouter } from "expo-router"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 // Separate component for each team item with individual animation
 const AnimatedTeamItem = ({ team, onPress }: { team: Team; onPress: (team: Team) => void }) => {

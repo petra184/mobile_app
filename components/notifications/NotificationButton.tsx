@@ -1,12 +1,12 @@
 "use client"
 
-import type React from "react"
-import { useState } from "react"
-import { Pressable, StyleSheet } from "react-native"
+import { colors } from "@/constants/Colors";
+import { NotificationBadge, useNotifications } from "@/context/notification-context";
 import Feather from '@expo/vector-icons/Feather';
-import { colors } from "@/constants/colors"
-import { useNotifications, NotificationBadge } from "@/context/notification-context"
-import { NotificationCenter } from "./NotificationCenter"
+import type React from "react";
+import { useState } from "react";
+import { Pressable, StyleSheet } from "react-native";
+import { NotificationCenter } from "./NotificationCenter";
 
 export const NotificationButton: React.FC<{
   size?: number

@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import {
-  getStoreProducts,
-  getFeaturedProducts,
   getActivePromotions,
+  getFeaturedProducts,
   getProductCategories,
   getProductPriceRange,
+  getStoreProducts,
   type ProductFilters,
   type SortOptions,
-} from "@/app/actions/store"
+} from "@/lib/actions/store"
 import type { Database } from "@/types/database"
+import { useEffect, useState } from "react"
 
 type StoreProduct = Database["public"]["Tables"]["store_products"]["Row"]
 type Promotion = Database["public"]["Tables"]["promotions"]["Row"]

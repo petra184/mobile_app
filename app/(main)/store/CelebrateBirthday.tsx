@@ -1,35 +1,33 @@
 "use client"
 
-import { useState, useLayoutEffect, useRef, useEffect } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  ScrollView,
-  Dimensions,
-  Platform,
-  TextInput,
-  KeyboardAvoidingView,
-  Animated,
-  ActivityIndicator,
-} from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { Image } from "expo-image"
-import { useNavigation } from "expo-router"
-import { Feather } from "@expo/vector-icons"
-import { getBirthdayPackages } from "@/app/actions/birthdays"
-import { getFAQsForMobile, submitBirthdayContactMessage, type FAQ } from "@/app/actions/birthdays"
 import PackageCard from "@/components/rewards/PackageCard"
 import ReservationForm from "@/components/rewards/ReservationForm"
-import { colors } from "@/constants/colors"
-import { LinearGradient } from "expo-linear-gradient"
-import { useRouter } from "expo-router"
-import { useUserStore } from "@/hooks/userStore"
+import { colors } from "@/constants/Colors"
 import { useNotifications } from "@/context/notification-context"
-import { getSchoolById } from "@/app/actions/school_info"
-import type { SchoolInfo, BirthdayPackage } from "@/types/updated_types"
+import { useUserStore } from "@/hooks/userStore"
+import { getBirthdayPackages, getFAQsForMobile, submitBirthdayContactMessage, type FAQ } from "@/lib/actions/birthdays"
+import { getSchoolById } from "@/lib/actions/school_info"
+import type { BirthdayPackage, SchoolInfo } from "@/types/updated_types"
+import { Feather } from "@expo/vector-icons"
+import { Image } from "expo-image"
+import { LinearGradient } from "expo-linear-gradient"
+import { useNavigation, useRouter } from "expo-router"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 const { width, height } = Dimensions.get("window")
 const HERO_HEIGHT = 260

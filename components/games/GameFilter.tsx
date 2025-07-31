@@ -1,12 +1,12 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Pressable, Modal, ScrollView, SafeAreaView } from "react-native"
-import { colors } from "@/constants/colors"
-import Feather from "@expo/vector-icons/Feather"
+import { colors } from "@/constants/Colors"
 import { supabase } from "@/lib/supabase"
 import type { GameFilterOptions } from "@/types/updated_types"
+import Feather from "@expo/vector-icons/Feather"
+import type React from "react"
+import { useEffect, useState } from "react"
+import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native"
 
 interface GameFilterProps {
   onFilterChange: (filters: GameFilterOptions) => void

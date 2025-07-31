@@ -1,19 +1,19 @@
 "use client"
-import { StyleSheet, Text, View, ScrollView, Platform, TouchableOpacity, Image, ActivityIndicator } from "react-native"
-import { LinearGradient } from "expo-linear-gradient"
-import { colors } from "@/constants/colors"
 import InfoItem from "@/components/teams/InfoItem"
 import SectionHeader from "@/components/teams/SectionHeader"
-import { StatusBar } from "expo-status-bar"
-import { useState, useEffect } from "react"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { getPlayerDetails } from "@/app/actions/info_teams"
+import { colors } from "@/constants/Colors"
+import { getPlayerDetails } from "@/lib/actions/info_teams"
+import type { Player as PlayerData } from "@/types/updated_types"
 import AntDesign from "@expo/vector-icons/AntDesign"
 import Feather from "@expo/vector-icons/Feather"
+import FontAwesome from '@expo/vector-icons/FontAwesome'
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import type { Player as PlayerData } from "@/types/updated_types"
+import { LinearGradient } from "expo-linear-gradient"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { StatusBar } from "expo-status-bar"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 export default function PlayerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()

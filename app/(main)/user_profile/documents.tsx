@@ -1,11 +1,11 @@
 "use client"
 
-import { View, Text, ScrollView, StyleSheet, Image, Pressable, Animated } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { useState, useEffect, useRef } from "react"
-import { useLocalSearchParams } from "expo-router"
+import { colors } from "@/constants/Colors"
 import Feather from "@expo/vector-icons/Feather"
-import { colors } from "@/constants/colors"
+import { useLocalSearchParams } from "expo-router"
+import { useEffect, useRef, useState } from "react"
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 // FAQ data structure
 const faqData = [

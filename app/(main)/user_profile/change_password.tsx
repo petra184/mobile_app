@@ -1,24 +1,24 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { colors } from "@/constants/Colors"
+import { useNotifications } from "@/context/notification-context"
+import { useUserStore } from "@/hooks/userStore"
+import { updateUserPassword } from "@/lib/actions/users"
+import Ionicons from "@expo/vector-icons/Ionicons"
+import { useRouter } from "expo-router"
+import { useEffect, useState } from "react"
 import {
-  View,
-  Text,
-  TextInput,
   Image,
-  Pressable,
-  StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native"
-import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore"
-import { updateUserPassword } from "@/app/actions/users"
-import { useNotifications } from "@/context/notification-context"
 
 interface PasswordValidation {
   minLength: boolean

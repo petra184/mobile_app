@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { getBirthdayPackages } from "@/lib/actions/birthdays"
 import type { BirthdayPackage, BirthdayPackageFilters } from "@/types/updated_types"
-import { getBirthdayPackages } from "@/app/actions/birthdays"
+import { useEffect, useState } from "react"
 
 export function useBirthdayPackages(filters?: BirthdayPackageFilters) {
   const [packages, setPackages] = useState<BirthdayPackage[]>([])

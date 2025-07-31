@@ -1,12 +1,12 @@
 "use client"
-import { useState } from "react"
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { colors } from "@/constants/colors"
 import type { FormData } from "@/app/(auth)/signup"
-import {SwipeableTeamSelector} from "@/components/teams/SwipingCard" // Assuming this path is correct
-import { TeamSelector } from "@/components/teams/TeamSelector" // Assuming this path is correct
+import { SwipeableTeamSelector } from "@/components/teams/SwipingCard"; // Assuming this path is correct
+import { TeamSelector } from "@/components/teams/TeamSelector"; // Assuming this path is correct
+import { colors } from "@/constants/Colors"
 import type { Team } from "@/types/updated_types"
+import { Ionicons } from "@expo/vector-icons"
+import { useState } from "react"
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 interface TeamSelectionStepProps {
   formData: FormData

@@ -1,7 +1,7 @@
+import { getGameById, getUpcomingGames } from "@/lib/actions/games"
 import { supabase } from "@/lib/supabase"
-import { Alert } from "react-native"
 import type { Game, QRCodeData, ScanHistoryItem, ScannedUser } from "@/types/updated_types"
-import { getUpcomingGames, getGameById } from "@/app/actions/games"
+import { Alert } from "react-native"
 
 // Generate unique QR code data
 const generateQRCodeData = (userId: string, gameId: string): string => {

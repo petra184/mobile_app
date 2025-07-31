@@ -1,14 +1,14 @@
 "use client"
-import type React from "react"
-import { View, Text, StyleSheet, Pressable, Image } from "react-native"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
+import { getStoryByGameId } from "@/lib/actions/news"
 import type { Game } from "@/types/updated_types"
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons"
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
-import { useState, useEffect } from "react"
-import { getStoryByGameId } from "@/app/actions/news"
-import { router } from "expo-router"
 import { LinearGradient } from "expo-linear-gradient"
+import { router } from "expo-router"
+import type React from "react"
+import { useEffect, useState } from "react"
+import { Image, Pressable, StyleSheet, Text, View } from "react-native"
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated"
 
 interface GameCardProps {
   game: Game

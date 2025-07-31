@@ -1,10 +1,10 @@
 "use client"
-import { useState, useEffect, useCallback, useRef } from "react"
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { colors } from "@/constants/colors"
 import type { FormData } from "@/app/(auth)/signup"
-import { checkEmailAvailability, checkUsernameAvailability } from "@/app/actions/users"
+import { colors } from "@/constants/Colors"
+import { checkEmailAvailability, checkUsernameAvailability } from "@/lib/actions/users"
+import { Ionicons } from "@expo/vector-icons"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 
 interface AccountCreationStepProps {
   formData: FormData

@@ -1,13 +1,12 @@
-import { Stack, useRouter } from "expo-router";
+import { colors } from "@/constants/Colors";
+import { CartProvider } from "@/context/cart-context";
 import { NotificationProvider } from "@/context/notification-context";
 import { useUserStore } from "@/hooks/userStore";
+import { Feather } from '@expo/vector-icons';
+import Entypo from '@expo/vector-icons/Entypo';
+import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { Pressable } from "react-native";
-import Entypo from '@expo/vector-icons/Entypo';
-import { colors } from "@/constants/colors";
-import { Feather } from '@expo/vector-icons';
-import { CartProvider } from "@/context/cart-context"
-import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 function RootLayoutNav() {
     const router = useRouter();

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { ActivityIndicator, View, StyleSheet } from "react-native"
+import { colors } from "@/constants/Colors"
 import Feather from "@expo/vector-icons/Feather"
-import { colors } from "@/constants/colors"
-import {Image} from "expo-image"
+import { Image } from "expo-image"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, StyleSheet, View } from "react-native"
 
 interface ProfileImageWithFallbackProps {
   imageUrl: string | null

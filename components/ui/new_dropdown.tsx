@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { View, Text, Pressable, StyleSheet, Modal, FlatList, Platform, Animated, Dimensions } from "react-native"
+import { colors } from "@/constants/Colors"
 import { Feather } from "@expo/vector-icons"
 import { LinearGradient } from "expo-linear-gradient"
-import { colors } from "@/constants/colors"
+import { useRef, useState } from "react"
+import { Animated, FlatList, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native"
 
 interface DropdownOption {
   label: string

@@ -1,24 +1,24 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  Pressable,
-  Image,
-  ActivityIndicator,
-  RefreshControl,
-  Dimensions,
-} from "react-native"
-import { getTeams, getTeamsByGender } from "@/app/actions/teams"
-import type { Team } from "@/types/updated_types"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import { useUserStore } from "@/hooks/userStore"
+import { getTeams, getTeamsByGender } from "@/lib/actions/teams"
+import type { Team } from "@/types/updated_types"
 import AntDesign from "@expo/vector-icons/AntDesign"
 import Feather from "@expo/vector-icons/Feather"
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, withSpring } from "react-native-reanimated"
+import React, { useCallback, useEffect, useState } from "react"
+import {
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native"
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated"
 
 const { width: screenWidth } = Dimensions.get("window")
 const cardWidth = (screenWidth - 50) / 2 // 56 = padding (16*2) + gap (24)

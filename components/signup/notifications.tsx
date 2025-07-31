@@ -1,9 +1,9 @@
 "use client"
 
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { colors } from "@/constants/colors"
 import type { FormData } from "@/app/(auth)/signup"
+import { colors } from "@/constants/Colors"
+import { Ionicons } from "@expo/vector-icons"
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native"
 
 interface NotificationSettingsStepProps {
   formData: FormData

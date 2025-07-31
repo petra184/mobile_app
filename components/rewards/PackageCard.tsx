@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
-import { Image } from "expo-image"
+import { colors } from "@/constants/Colors"
 import type { BirthdayPackage } from "@/types/updated_types"
-import { colors } from "@/constants/colors"
-import { LinearGradient } from "expo-linear-gradient"
 import { Feather } from "@expo/vector-icons"
+import { Image } from "expo-image"
+import { LinearGradient } from "expo-linear-gradient"
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 interface PackageCardProps {
   package: BirthdayPackage

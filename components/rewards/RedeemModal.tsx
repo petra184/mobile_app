@@ -1,8 +1,8 @@
-import React from 'react';
-import { StyleSheet, Text, View, Image, Pressable, Modal, ScrollView } from 'react-native';
+import { colors } from '@/constants/Colors';
 import { Reward, SpecialOffer } from '@/types/updated_types';
-import { colors } from '@/constants/colors';
 import { Feather } from '@expo/vector-icons';
+import React from 'react';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 type RewardOrSpecial = Reward | SpecialOffer;
 

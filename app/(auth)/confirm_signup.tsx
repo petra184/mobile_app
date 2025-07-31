@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { colors } from '@/constants/colors';
+import { colors } from '@/constants/Colors';
 
 export default function ConfirmSignupScreen() {
   const [loading, setLoading] = useState(true);

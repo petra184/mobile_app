@@ -1,23 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, Platform, ActivityIndicator } from "react-native"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import { getNewsById } from "@/app/actions/news"
+import { colors } from "@/constants/Colors"
+import { getNewsById } from "@/lib/actions/news"
 import type { NewsArticle } from "@/types/updated_types"
 import { Feather } from "@expo/vector-icons"
+import { useLocalSearchParams, useRouter } from "expo-router"
 import { StatusBar } from "expo-status-bar"
-import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler"
 import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  runOnJS,
-  interpolate,
-  Extrapolation,
 } from "react-native-reanimated"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 export default function NewsDetailsScreen() {
   const router = useRouter()

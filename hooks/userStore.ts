@@ -1,20 +1,20 @@
-import { create } from "zustand"
-import { persist, createJSONStorage } from "zustand/middleware"
-import AsyncStorage from "@react-native-async-storage/async-storage"
 import type { QRCodeScan } from "@/types/updated_types"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import { v4 as uuidv4 } from "uuid"
+import { create } from "zustand"
+import { createJSONStorage, persist } from "zustand/middleware"
 
 // Import your database actions
+import { getCurrentUser } from "@/lib/actions/main_actions"
 import {
-  getUserProfile,
-  updateUserPoints,
-  getUserScanHistory,
   addUserScan,
-  updateUserPreferences,
-  getUserPreferences,
   getUserById,
-} from "@/app/actions/users"
-import { getCurrentUser } from "@/app/actions/main_actions"
+  getUserPreferences,
+  getUserProfile,
+  getUserScanHistory,
+  updateUserPoints,
+  updateUserPreferences,
+} from "@/lib/actions/users"
 
 // Updated UserPreferences type
 type UserPreferences = {

@@ -1,14 +1,14 @@
 "use client"
 
-import type React from "react"
-import { useState } from "react"
-import { View, Text, StyleSheet, StatusBar, TouchableOpacity, Image } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
 import { TeamSelector } from "@/components/teams/TEAMSELECTOR2"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import type { Team } from "@/types/updated_types"
 import { useRouter } from "expo-router"
-import Animated, { FadeInDown} from "react-native-reanimated"
+import type React from "react"
+import { useState } from "react"
+import { Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import Animated, { FadeInDown } from "react-native-reanimated"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 type GenderFilter = "all" | "men" | "women"
 

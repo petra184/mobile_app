@@ -1,23 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { colors } from "@/constants/Colors"
+import { useNotifications } from "@/context/notification-context"
+import { supabase } from "@/lib/supabase"
+import Ionicons from "@expo/vector-icons/Ionicons"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { useEffect, useState } from "react"
 import {
-  View,
-  Text,
-  TextInput,
   Image,
-  Pressable,
-  StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native"
-import { useRouter, useLocalSearchParams } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import { colors } from "@/constants/colors"
-import { supabase } from "@/lib/supabase"
-import { useNotifications } from "@/context/notification-context"
 
 interface PasswordValidation {
   minLength: boolean

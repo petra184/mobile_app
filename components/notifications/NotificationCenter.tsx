@@ -1,11 +1,11 @@
 "use client"
 
-import React from "react"
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Animated, Dimensions } from "react-native"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import { useNotifications, type InAppNotification } from "@/context/notification-context"
-import Feather from '@expo/vector-icons/Feather';
+import Feather from '@expo/vector-icons/Feather'
+import React from "react"
+import { Animated, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 const NotificationItem: React.FC<{
   notification: InAppNotification

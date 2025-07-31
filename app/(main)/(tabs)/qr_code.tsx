@@ -1,32 +1,32 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  Animated,
-  Dimensions,
-  RefreshControl,
-  TouchableOpacity,
-  FlatList,
-  Image,
-} from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { useLocalSearchParams } from "expo-router"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import { useUserStore } from "@/hooks/userStore"
+import { checkIfAlreadyScannedAction, generateOrGetQRCodeAction, loadGamesAction } from "@/lib/actions/qr_scanning"
+import type { Game, QRCodeData } from "@/types/updated_types"
+import { sortGamesByPriority } from "@/utils/sortGame"
 import Ionicons from "@expo/vector-icons/Ionicons"
 import { LinearGradient } from "expo-linear-gradient"
+import { useLocalSearchParams } from "expo-router"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native"
 import QRCode from "react-native-qrcode-svg"
-import { sortGamesByPriority } from "@/utils/sortGame"
-import { loadGamesAction, generateOrGetQRCodeAction, checkIfAlreadyScannedAction } from "@/app/actions/qr_scanning"
-import type { Game, QRCodeData } from "@/types/updated_types"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 interface GameSelectionModalProps {
   visible: boolean

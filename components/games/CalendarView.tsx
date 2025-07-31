@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native"
-import { LinearGradient } from "expo-linear-gradient"
-import { colors } from "@/constants/colors"
-import { getGamesByMonth } from "@/app/actions/games"
-import { Feather } from "@expo/vector-icons"
+import { colors } from "@/constants/Colors"
+import { getGamesByMonth } from "@/lib/actions/games"
 import type { Game, Team } from "@/types/updated_types"
+import { Feather } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native"
 
 // Transform types for your UI components
 export interface TeamForUI {

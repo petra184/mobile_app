@@ -1,28 +1,28 @@
 "use client"
-import { useState } from "react"
+import { colors } from "@/constants/Colors";
+import { useNotifications } from "@/context/notification-context";
+import { signUpWithEmail } from "@/lib/actions/main_actions"; // Your existing import
+import { updateUserPreferences } from "@/lib/actions/users";
+import Entypo from "@expo/vector-icons/Entypo";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
+  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   TouchableWithoutFeedback,
-  Keyboard,
-  Image,
-} from "react-native"
-import { useRouter } from "expo-router"
-import { SafeAreaView } from "react-native-safe-area-context"
-import Entypo from "@expo/vector-icons/Entypo"
-import { useNotifications } from "@/context/notification-context"
-import { colors } from "@/constants/colors"
-import { signUpWithEmail } from "@/app/actions/main_actions" // Your existing import
-import { updateUserPreferences } from "@/app/actions/users"
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import PersonalInfoStep from "@/components/signup/personal_info"
-import AccountCreationStep from "@/components/signup/account_settings"
-import TeamSelectionStep from "@/components/signup/team_select"
-import NotificationSettingsStep from "@/components/signup/notifications"
+import AccountCreationStep from "@/components/signup/account_settings";
+import NotificationSettingsStep from "@/components/signup/notifications";
+import PersonalInfoStep from "@/components/signup/personal_info";
+import TeamSelectionStep from "@/components/signup/team_select";
 
 // Define the form data type
 export type FormData = {

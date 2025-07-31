@@ -1,10 +1,10 @@
-import type React from "react"
-import { View, Text, StyleSheet } from "react-native"
-import { LinearGradient } from "expo-linear-gradient"
-import { MaterialCommunityIcons } from "@expo/vector-icons"
-import Animated, { FadeInUp } from "react-native-reanimated"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import type { UserStatusWithLevel } from "@/types/updated_types"
+import { MaterialCommunityIcons } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
+import type React from "react"
+import { StyleSheet, Text, View } from "react-native"
+import Animated, { FadeInUp } from "react-native-reanimated"
 
 interface PointsStatusCardProps {
   userFirstName: string

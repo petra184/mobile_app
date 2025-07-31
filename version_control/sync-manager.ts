@@ -18,6 +18,335 @@ export class SyncManager {
     return SyncManager.instance
   }
 
+  // Check if user needs initial sync (only runs once per user)
+  async needsInitialSync(userId: string): Promise<boolean> {
+    try {
+      const isInitialized = await this.storageManager.isUserInitialized(userId)
+      const hasCachedData = await this.storageManager.hasCachedData()
+
+      console.log("🔍 Checking sync needs:", { isInitialized, hasCachedData, userId })
+
+      return !isInitialized || !hasCachedData
+    } catch (error) {
+      console.error("Error checking initial sync need:", error)
+      return true // Default to needing sync if we can't determine
+    }
+  }
+
+  // Check if database has updates since last sync (for login)
+  async hasServerUpdates(userId: string): Promise<boolean> {
+    try {
+      const config = await this.storageManager.getConfig()
+      const lastSync = config.lastSyncTimestamp
+
+      console.log("🔍 Checking for server updates since:", lastSync)
+
+      // Use the database function to check for changes
+      const { data, error } = await supabase.rpc("get_latest_updates_for_cache", {
+        data_types: [
+          "teams",
+          "players",
+          "coaches",
+          "game_schedule",
+          "stories",
+          "rewards",
+          "special_offers",
+          "birthday_packages",
+          "birthday_faqs",
+          "promotions",
+          "halftime_activities",
+          "SCHOOLS",
+        ],
+      })
+
+      if (error) {
+        console.error("Error checking server updates:", error)
+        return false
+      }
+
+      // Filter changes that occurred after our last sync
+      const lastSyncDate = new Date(lastSync)
+      const updates = (data || []).filter((change: any) => new Date(change.latest_update) > lastSyncDate)
+
+      console.log(`📊 Found ${updates.length} server updates`)
+      return updates.length > 0
+    } catch (error) {
+      console.error("Error checking server updates:", error)
+      return false
+    }
+  }
+
+  // Initial data fetch - only runs once per user on signup
+  async performInitialSync(userId: string): Promise<SyncResult> {
+    console.log("🔄 Starting initial sync for user:", userId)
+
+    if (this.syncInProgress) {
+      throw new Error("Sync already in progress")
+    }
+
+    // Check if user already has data
+    const needsSync = await this.needsInitialSync(userId)
+    if (!needsSync) {
+      console.log("✅ User already has cached data, skipping initial sync")
+      return {
+        success: true,
+        itemsUpdated: 0,
+        itemsAdded: 0,
+        itemsDeleted: 0,
+        conflicts: [],
+        errors: [],
+      }
+    }
+
+    this.syncInProgress = true
+    await this.storageManager.updateConfig({ syncInProgress: true })
+
+    try {
+      const result: SyncResult = {
+        success: true,
+        itemsUpdated: 0,
+        itemsAdded: 0,
+        itemsDeleted: 0,
+        conflicts: [],
+        errors: [],
+      }
+
+      // Set current user
+      await this.storageManager.setCurrentUserId(userId)
+
+      // Fetch all data types
+      const dataTypes: DataType[] = [
+        "teams",
+        "players",
+        "coaches",
+        "games",
+        "stories",
+        "rewards",
+        "special_offers",
+        "birthday_packages",
+        "birthday_faqs",
+        "promotions",
+        "halftime_activities",
+        "schools",
+      ]
+
+      for (const dataType of dataTypes) {
+        try {
+          const data = await this.fetchDataFromSupabase(dataType)
+          const entities = this.transformToVersionedEntities(data, dataType)
+
+          await this.storageManager.storeEntities(dataType, entities)
+          result.itemsAdded += entities.length
+
+          console.log(`✅ Synced ${entities.length} ${dataType}`)
+        } catch (error) {
+          console.error(`❌ Error syncing ${dataType}:`, error)
+          result.errors.push(`Failed to sync ${dataType}: ${error}`)
+        }
+      }
+
+      // Fetch user preferences
+      try {
+        const userPrefs = await this.fetchUserPreferences(userId)
+        if (userPrefs) {
+          const prefEntity = this.transformToVersionedEntities([userPrefs], "user_preferences")
+          await this.storageManager.storeEntities("user_preferences", prefEntity)
+          result.itemsAdded += 1
+        }
+      } catch (error) {
+        console.error("❌ Error syncing user preferences:", error)
+        result.errors.push(`Failed to sync user preferences: ${error}`)
+      }
+
+      // Mark user as initialized and update config
+      await this.storageManager.markUserAsInitialized(userId)
+      await this.storageManager.updateConfig({
+        lastSyncTimestamp: new Date().toISOString(),
+        lastFullSync: new Date().toISOString(),
+        syncInProgress: false,
+        isInitialized: true,
+      })
+
+      // Consider successful if we synced at least some data
+      result.success = result.itemsAdded > 0
+
+      console.log("✅ Initial sync completed:", result)
+      return result
+    } catch (error) {
+      console.error("❌ Initial sync failed:", error)
+      await this.storageManager.updateConfig({ syncInProgress: false })
+      throw error
+    } finally {
+      this.syncInProgress = false
+    }
+  }
+
+  // Load cached data without syncing (for login when no updates)
+  async loadCachedData(userId: string): Promise<{
+    success: boolean
+    hasData: boolean
+    message: string
+  }> {
+    try {
+      console.log("📱 Loading cached data for user:", userId)
+
+      const isInitialized = await this.storageManager.isUserInitialized(userId)
+      const hasCachedData = await this.storageManager.hasCachedData()
+
+      if (!isInitialized || !hasCachedData) {
+        return {
+          success: false,
+          hasData: false,
+          message: "No cached data found. Initial sync required.",
+        }
+      }
+
+      // Set current user
+      await this.storageManager.setCurrentUserId(userId)
+
+      // Get storage stats to verify data
+      const stats = await this.storageManager.getStorageStats()
+
+      console.log("✅ Cached data loaded:", stats)
+
+      return {
+        success: true,
+        hasData: stats.totalEntities > 0,
+        message: `Loaded ${stats.totalEntities} cached items`,
+      }
+    } catch (error) {
+      console.error("❌ Error loading cached data:", error)
+      return {
+        success: false,
+        hasData: false,
+        message: "Error loading cached data",
+      }
+    }
+  }
+
+  // Incremental sync - only when changes detected or forced
+  async performIncrementalSync(force = false): Promise<SyncResult> {
+    console.log("🔄 Starting incremental sync", force ? "(forced)" : "")
+
+    if (this.syncInProgress) {
+      throw new Error("Sync already in progress")
+    }
+
+    this.syncInProgress = true
+    await this.storageManager.updateConfig({ syncInProgress: true })
+
+    try {
+      const config = await this.storageManager.getConfig()
+      const lastSync = config.lastSyncTimestamp
+
+      const result: SyncResult = {
+        success: true,
+        itemsUpdated: 0,
+        itemsAdded: 0,
+        itemsDeleted: 0,
+        conflicts: [],
+        errors: [],
+      }
+
+      // Check for server changes since last sync (unless forced)
+      if (!force) {
+        const serverChanges = await this.getServerChangesSince(lastSync)
+        const pendingChanges = await this.storageManager.getPendingChanges()
+
+        if (serverChanges.length === 0 && Object.keys(pendingChanges).length === 0) {
+          console.log("✅ No changes detected, skipping sync")
+          await this.storageManager.updateConfig({ syncInProgress: false })
+          this.syncInProgress = false
+          return result
+        }
+
+        console.log(
+          `📊 Found ${serverChanges.length} server changes, ${Object.keys(pendingChanges).length} local changes`,
+        )
+      }
+
+      // Get server changes
+      const serverChanges = await this.getServerChangesSince(lastSync)
+
+      // Process server changes
+      for (const change of serverChanges) {
+        try {
+          await this.processServerChange(change, result)
+        } catch (error) {
+          console.error(`❌ Error processing change for ${change.data_type}:`, error)
+          result.errors.push(`Failed to process ${change.data_type}: ${error}`)
+        }
+      }
+
+      // Push local changes to server
+      const pendingChanges = await this.storageManager.getPendingChanges()
+      for (const [dataType, entities] of Object.entries(pendingChanges)) {
+        try {
+          await this.pushChangesToServer(dataType as DataType, entities)
+
+          // Mark as synced
+          for (const entity of entities) {
+            entity.syncStatus = "synced"
+          }
+          await this.storageManager.storeEntities(dataType as DataType, entities)
+        } catch (error) {
+          console.error(`❌ Error pushing ${dataType} changes:`, error)
+          result.errors.push(`Failed to push ${dataType}: ${error}`)
+        }
+      }
+
+      // Update sync timestamp
+      await this.storageManager.updateConfig({
+        lastSyncTimestamp: new Date().toISOString(),
+        syncInProgress: false,
+      })
+
+      result.success = result.errors.length === 0
+
+      console.log("✅ Incremental sync completed:", result)
+      return result
+    } catch (error) {
+      console.error("❌ Incremental sync failed:", error)
+      await this.storageManager.updateConfig({ syncInProgress: false })
+      throw error
+    } finally {
+      this.syncInProgress = false
+    }
+  }
+
+  // Check if sync is needed (for background checks)
+  async isSyncNeeded(): Promise<boolean> {
+    try {
+      const config = await this.storageManager.getConfig()
+      const pendingChanges = await this.storageManager.getPendingChanges()
+
+      // Check if there are local pending changes
+      const hasPendingChanges = Object.keys(pendingChanges).length > 0
+
+      // Check if it's been more than 6 hours since last sync
+      const lastSync = new Date(config.lastSyncTimestamp)
+      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000)
+      const isStale = lastSync < sixHoursAgo
+
+      // Only check server if we have pending changes or it's been a while
+      if (hasPendingChanges) {
+        console.log("🔄 Sync needed: pending local changes")
+        return true
+      }
+
+      if (isStale) {
+        console.log("🔄 Sync needed: data is stale")
+        const hasServerChanges = await this.hasServerChanges(config.lastSyncTimestamp)
+        return hasServerChanges
+      }
+
+      return false
+    } catch (error) {
+      console.error("Error checking sync need:", error)
+      return false
+    }
+  }
+
   // Table configuration based on your actual database schema
   private getTableConfig(dataType: DataType) {
     const configs = {
@@ -121,197 +450,6 @@ export class SyncManager {
     return configs[dataType]
   }
 
-  // Initial data fetch on user signup
-  async performInitialSync(userId: string): Promise<SyncResult> {
-    console.log("🔄 Starting initial sync for user:", userId)
-
-    if (this.syncInProgress) {
-      throw new Error("Sync already in progress")
-    }
-
-    this.syncInProgress = true
-    await this.storageManager.updateConfig({ syncInProgress: true })
-
-    try {
-      const result: SyncResult = {
-        success: true,
-        itemsUpdated: 0,
-        itemsAdded: 0,
-        itemsDeleted: 0,
-        conflicts: [],
-        errors: [],
-      }
-
-      // Fetch all data types
-      const dataTypes: DataType[] = [
-        "teams",
-        "players",
-        "coaches",
-        "games",
-        "stories",
-        "rewards",
-        "special_offers",
-        "birthday_packages",
-        "birthday_faqs",
-        "promotions",
-        "halftime_activities",
-        "schools",
-      ]
-
-      for (const dataType of dataTypes) {
-        try {
-          const data = await this.fetchDataFromSupabase(dataType)
-          const entities = this.transformToVersionedEntities(data, dataType)
-
-          await this.storageManager.storeEntities(dataType, entities)
-          result.itemsAdded += entities.length
-
-          console.log(`✅ Synced ${entities.length} ${dataType}`)
-        } catch (error) {
-          console.error(`❌ Error syncing ${dataType}:`, error)
-          result.errors.push(`Failed to sync ${dataType}: ${error}`)
-          // Don't mark as failed for individual table errors
-        }
-      }
-
-      // Fetch user preferences
-      try {
-        const userPrefs = await this.fetchUserPreferences(userId)
-        if (userPrefs) {
-          const prefEntity = this.transformToVersionedEntities([userPrefs], "user_preferences")
-          await this.storageManager.storeEntities("user_preferences", prefEntity)
-          result.itemsAdded += 1
-        }
-      } catch (error) {
-        console.error("❌ Error syncing user preferences:", error)
-        result.errors.push(`Failed to sync user preferences: ${error}`)
-      }
-
-      // Update sync timestamp
-      await this.storageManager.updateConfig({
-        lastSyncTimestamp: new Date().toISOString(),
-        lastFullSync: new Date().toISOString(),
-        syncInProgress: false,
-      })
-
-      // Only mark as failed if ALL syncs failed
-      result.success = result.itemsAdded > 0 || result.errors.length === 0
-
-      console.log("✅ Initial sync completed:", result)
-      return result
-    } catch (error) {
-      console.error("❌ Initial sync failed:", error)
-      await this.storageManager.updateConfig({ syncInProgress: false })
-      throw error
-    } finally {
-      this.syncInProgress = false
-    }
-  }
-
-  // Incremental sync - only fetch changes
-  async performIncrementalSync(): Promise<SyncResult> {
-    console.log("🔄 Starting incremental sync")
-
-    if (this.syncInProgress) {
-      throw new Error("Sync already in progress")
-    }
-
-    this.syncInProgress = true
-    await this.storageManager.updateConfig({ syncInProgress: true })
-
-    try {
-      const config = await this.storageManager.getConfig()
-      const lastSync = config.lastSyncTimestamp
-
-      const result: SyncResult = {
-        success: true,
-        itemsUpdated: 0,
-        itemsAdded: 0,
-        itemsDeleted: 0,
-        conflicts: [],
-        errors: [],
-      }
-
-      // Check for server changes since last sync
-      const serverChanges = await this.getServerChangesSince(lastSync)
-
-      if (serverChanges.length === 0) {
-        console.log("✅ No server changes detected")
-        await this.storageManager.updateConfig({ syncInProgress: false })
-        this.syncInProgress = false
-        return result
-      }
-
-      // Process server changes
-      for (const change of serverChanges) {
-        try {
-          await this.processServerChange(change, result)
-        } catch (error) {
-          console.error(`❌ Error processing change for ${change.data_type}:`, error)
-          result.errors.push(`Failed to process ${change.data_type}: ${error}`)
-        }
-      }
-
-      // Push local changes to server
-      const pendingChanges = await this.storageManager.getPendingChanges()
-      for (const [dataType, entities] of Object.entries(pendingChanges)) {
-        try {
-          await this.pushChangesToServer(dataType as DataType, entities)
-
-          // Mark as synced
-          for (const entity of entities) {
-            entity.syncStatus = "synced"
-          }
-          await this.storageManager.storeEntities(dataType as DataType, entities)
-        } catch (error) {
-          console.error(`❌ Error pushing ${dataType} changes:`, error)
-          result.errors.push(`Failed to push ${dataType}: ${error}`)
-        }
-      }
-
-      // Update sync timestamp
-      await this.storageManager.updateConfig({
-        lastSyncTimestamp: new Date().toISOString(),
-        syncInProgress: false,
-      })
-
-      result.success = result.errors.length === 0
-
-      console.log("✅ Incremental sync completed:", result)
-      return result
-    } catch (error) {
-      console.error("❌ Incremental sync failed:", error)
-      await this.storageManager.updateConfig({ syncInProgress: false })
-      throw error
-    } finally {
-      this.syncInProgress = false
-    }
-  }
-
-  // Check if sync is needed
-  async isSyncNeeded(): Promise<boolean> {
-    try {
-      const config = await this.storageManager.getConfig()
-      const pendingChanges = await this.storageManager.getPendingChanges()
-
-      // Check if there are local pending changes
-      const hasPendingChanges = Object.keys(pendingChanges).length > 0
-
-      // Check if it's been more than 1 hour since last sync
-      const lastSync = new Date(config.lastSyncTimestamp)
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-      const isStale = lastSync < oneHourAgo
-
-      // Check server for changes (lightweight check)
-      const hasServerChanges = await this.hasServerChanges(config.lastSyncTimestamp)
-
-      return hasPendingChanges || isStale || hasServerChanges
-    } catch (error) {
-      console.error("Error checking sync need:", error)
-      return false
-    }
-  }
-
   // Private helper methods
   private async fetchDataFromSupabase(dataType: DataType): Promise<any[]> {
     const config = this.getTableConfig(dataType)
@@ -322,7 +460,6 @@ export class SyncManager {
     try {
       let query = supabase.from(config.tableName).select(config.selectFields)
 
-      // Add ordering if the column exists
       if (config.orderBy) {
         query = query.order(config.orderBy, { ascending: false })
       }
@@ -352,7 +489,6 @@ export class SyncManager {
 
   private transformToVersionedEntities(data: any[], entityType: DataType): VersionedEntity[] {
     return data.map((item) => {
-      // Determine the ID field based on the entity type
       let id: string
       switch (entityType) {
         case "games":
@@ -368,7 +504,6 @@ export class SyncManager {
           id = item.id
       }
 
-      // Determine the last modified field
       let lastModified: string
       if (item.updated_at) {
         lastModified = item.updated_at
@@ -393,7 +528,6 @@ export class SyncManager {
 
   private async getServerChangesSince(timestamp: string): Promise<any[]> {
     try {
-      // Use the database function to check for changes
       const { data, error } = await supabase.rpc("get_latest_updates_for_cache", {
         data_types: [
           "teams",
@@ -416,7 +550,6 @@ export class SyncManager {
         return []
       }
 
-      // Filter changes that occurred after our last sync
       const lastSyncDate = new Date(timestamp)
       return (data || []).filter((change: any) => new Date(change.latest_update) > lastSyncDate)
     } catch (error) {
@@ -454,23 +587,18 @@ export class SyncManager {
     const dataType = dataTypeMap[change.data_type]
     if (!dataType) return
 
-    // Fetch updated data for this type
     const serverData = await this.fetchDataFromSupabase(dataType)
     const entities = this.transformToVersionedEntities(serverData, dataType)
 
-    // Get existing local data
     const localEntities = await this.storageManager.getEntities(dataType)
     const localMap = new Map(localEntities.map((e) => [e.id, e]))
 
-    // Process each server entity
     for (const serverEntity of entities) {
       const localEntity = localMap.get(serverEntity.id)
 
       if (!localEntity) {
-        // New entity from server
         result.itemsAdded++
       } else if (localEntity.syncStatus === "pending") {
-        // Conflict: both local and server have changes
         result.conflicts.push({
           id: serverEntity.id,
           type: dataType,
@@ -480,12 +608,10 @@ export class SyncManager {
         })
         continue
       } else {
-        // Update from server
         result.itemsUpdated++
       }
     }
 
-    // Store updated entities
     await this.storageManager.storeEntities(dataType, entities)
   }
 
@@ -498,14 +624,10 @@ export class SyncManager {
     for (const entity of entities) {
       try {
         if (entity.isDeleted) {
-          // Delete from server
           const { error } = await supabase.from(config.tableName).delete().eq("id", entity.id)
-
           if (error) throw error
         } else {
-          // Upsert to server
           const { error } = await supabase.from(config.tableName).upsert(entity.data)
-
           if (error) throw error
         }
       } catch (error) {
@@ -516,19 +638,6 @@ export class SyncManager {
   }
 
   // Public utility methods
-  async forceSyncEntity(entityType: DataType, entityId: string): Promise<void> {
-    try {
-      const entity = await this.storageManager.getEntity(entityType, entityId)
-      if (entity) {
-        entity.syncStatus = "pending"
-        await this.storageManager.storeEntities(entityType, [entity])
-      }
-    } catch (error) {
-      console.error(`Error forcing sync for ${entityType}:${entityId}:`, error)
-      throw error
-    }
-  }
-
   async getSyncStatus(): Promise<{
     isInProgress: boolean
     lastSync: string
@@ -545,7 +654,7 @@ export class SyncManager {
         isInProgress: config.syncInProgress,
         lastSync: config.lastSyncTimestamp,
         pendingChanges: totalPending,
-        conflicts: 0, // TODO: Implement conflict tracking
+        conflicts: 0,
       }
     } catch (error) {
       console.error("Error getting sync status:", error)

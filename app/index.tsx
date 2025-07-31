@@ -1,19 +1,18 @@
-import React from 'react'
-import { 
-  StyleSheet, 
-  View, 
-  Text,
-  TouchableOpacity, 
-  Image,
-  StatusBar,
-  Dimensions,
-  Platform
-} from 'react-native'
-import { Link, useRouter } from 'expo-router'
+import { colors } from '@/constants/Colors'
 import { LinearGradient } from 'expo-linear-gradient'
+import { useRouter } from 'expo-router'
+import React from 'react'
+import {
+  Dimensions,
+  Image,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { colors } from '@/constants/colors'
-import Auth from '@/utils/linking'
 
 
 const { width, height } = Dimensions.get('window')

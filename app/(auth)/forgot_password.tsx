@@ -1,26 +1,26 @@
 "use client"
 
+import { colors } from "@/constants/Colors"
+import { useNotifications } from "@/context/notification-context"
+import { sendPasswordResetEmail } from "@/lib/actions/password"; // Import the action
+import { Ionicons } from "@expo/vector-icons"
+import Entypo from '@expo/vector-icons/Entypo'
+import { useRouter } from "expo-router"
 import { useState } from "react"
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  SafeAreaView,
+  ActivityIndicator,
+  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Image,
+  SafeAreaView,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native"
-import { useRouter } from "expo-router"
-import { Ionicons } from "@expo/vector-icons"
-import Entypo from '@expo/vector-icons/Entypo';
-import { useNotifications } from "@/context/notification-context"
-import { sendPasswordResetEmail } from "@/app/actions/password" // Import the action
-import { colors } from "@/constants/colors"
 
 export default function ForgotPasswordScreen() {
     const router = useRouter()

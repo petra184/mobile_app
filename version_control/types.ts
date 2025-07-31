@@ -4,6 +4,8 @@ export interface VersionControlConfig {
   syncInProgress: boolean
   lastFullSync: string
   conflictResolutionStrategy: "server-wins" | "client-wins" | "merge"
+  currentUserId: string | null
+  isInitialized: boolean
 }
 
 export interface DataEntity {

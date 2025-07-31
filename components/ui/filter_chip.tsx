@@ -1,8 +1,8 @@
 "use client"
 
-import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native"
+import { colors } from "@/constants/Colors"
 import { Feather } from "@expo/vector-icons"
-import { colors } from "@/constants/colors"
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
 
 interface FilterChip {
   id: string

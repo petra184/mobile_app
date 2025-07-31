@@ -3,15 +3,61 @@ import type { VersionControlConfig, VersionedEntity, CacheMetadata, DataType } f
 
 export class StorageManager {
   private static instance: StorageManager
-  private readonly CONFIG_KEY = "version_control_config"
-  private readonly CACHE_PREFIX = "vc_cache_"
-  private readonly METADATA_PREFIX = "vc_meta_"
+  private readonly CONFIG_KEY = "current_sync_config"
+  private readonly CACHE_PREFIX = "cs_cache_"
+  private readonly METADATA_PREFIX = "cs_meta_"
+  private readonly USER_INIT_KEY = "cs_user_initialized_"
 
   static getInstance(): StorageManager {
     if (!StorageManager.instance) {
       StorageManager.instance = new StorageManager()
     }
     return StorageManager.instance
+  }
+
+  // Check if user has been initialized before
+  async isUserInitialized(userId: string): Promise<boolean> {
+    try {
+      const key = `${this.USER_INIT_KEY}${userId}`
+      const initialized = await AsyncStorage.getItem(key)
+      return initialized === "true"
+    } catch (error) {
+      console.error("Error checking user initialization:", error)
+      return false
+    }
+  }
+
+  // Mark user as initialized
+  async markUserAsInitialized(userId: string): Promise<void> {
+    try {
+      const key = `${this.USER_INIT_KEY}${userId}`
+      await AsyncStorage.setItem(key, "true")
+      console.log("✅ User marked as initialized:", userId)
+    } catch (error) {
+      console.error("Error marking user as initialized:", error)
+      throw error
+    }
+  }
+
+  // Get the current user ID from config
+  async getCurrentUserId(): Promise<string | null> {
+    try {
+      const config = await this.getConfig()
+      return config.currentUserId || null
+    } catch (error) {
+      console.error("Error getting current user ID:", error)
+      return null
+    }
+  }
+
+  // Set the current user ID
+  async setCurrentUserId(userId: string): Promise<void> {
+    try {
+      await this.updateConfig({ currentUserId: userId })
+    } catch (error) {
+      console.error("Error setting current user ID:", error)
+      throw error
+    }
   }
 
   // Configuration management
@@ -46,6 +92,34 @@ export class StorageManager {
       syncInProgress: false,
       lastFullSync: new Date(0).toISOString(),
       conflictResolutionStrategy: "server-wins",
+      currentUserId: null,
+      isInitialized: false,
+    }
+  }
+
+  // Check if we have any cached data
+  async hasCachedData(): Promise<boolean> {
+    try {
+      const keys = await AsyncStorage.getAllKeys()
+      const cacheKeys = keys.filter((key) => key.startsWith(this.CACHE_PREFIX))
+
+      if (cacheKeys.length === 0) return false
+
+      // Check if any cache has data
+      for (const key of cacheKeys.slice(0, 3)) {
+        // Check first 3 for performance
+        const data = await AsyncStorage.getItem(key)
+        if (data) {
+          const parsed = JSON.parse(data)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return true
+          }
+        }
+      }
+      return false
+    } catch (error) {
+      console.error("Error checking cached data:", error)
+      return false
     }
   }
 
@@ -185,14 +259,37 @@ export class StorageManager {
     return pendingChanges
   }
 
+  // Clear data for specific user (when switching users)
+  async clearUserData(userId: string): Promise<void> {
+    try {
+      const keys = await AsyncStorage.getAllKeys()
+      const userKeys = keys.filter(
+        (key) =>
+          key.startsWith(this.CACHE_PREFIX) ||
+          key.startsWith(this.METADATA_PREFIX) ||
+          key === `${this.USER_INIT_KEY}${userId}`,
+      )
+      await AsyncStorage.multiRemove(userKeys)
+      console.log("✅ Cleared user data for:", userId)
+    } catch (error) {
+      console.error("Error clearing user data:", error)
+      throw error
+    }
+  }
+
   // Clear all data
   async clearAllData(): Promise<void> {
     try {
       const keys = await AsyncStorage.getAllKeys()
       const vcKeys = keys.filter(
-        (key) => key.startsWith(this.CACHE_PREFIX) || key.startsWith(this.METADATA_PREFIX) || key === this.CONFIG_KEY,
+        (key) =>
+          key.startsWith(this.CACHE_PREFIX) ||
+          key.startsWith(this.METADATA_PREFIX) ||
+          key.startsWith(this.USER_INIT_KEY) ||
+          key === this.CONFIG_KEY,
       )
       await AsyncStorage.multiRemove(vcKeys)
+      console.log("✅ Cleared all current sync data")
     } catch (error) {
       console.error("Error clearing all data:", error)
       throw error
@@ -205,6 +302,7 @@ export class StorageManager {
     pendingSync: number
     lastSync: string
     cacheSize: string
+    isInitialized: boolean
   }> {
     try {
       const config = await this.getConfig()
@@ -250,6 +348,7 @@ export class StorageManager {
         pendingSync,
         lastSync: config.lastSyncTimestamp,
         cacheSize: `${(totalSize / 1024).toFixed(2)} KB`,
+        isInitialized: config.isInitialized || false,
       }
     } catch (error) {
       console.error("Error getting storage stats:", error)
@@ -258,6 +357,7 @@ export class StorageManager {
         pendingSync: 0,
         lastSync: "Never",
         cacheSize: "0 KB",
+        isInitialized: false,
       }
     }
   }

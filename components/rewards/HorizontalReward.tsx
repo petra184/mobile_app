@@ -1,9 +1,8 @@
-import type React from "react"
-import { View, Text, StyleSheet, Image, Pressable, Alert } from "react-native"
-import { colors } from "@/constants/colors"
-import { Feather } from "@expo/vector-icons"
+import { colors } from "@/constants/Colors"
 import type { Reward } from "@/types/updated_types"
-import { MaterialCommunityIcons } from "@expo/vector-icons"
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons"
+import type React from "react"
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native"
 
 interface HorizontalRewardItemProps {
   reward: Reward

@@ -4,19 +4,19 @@ import React, { useState, useEffect, useCallback, useRef } from "react"
 import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, Dimensions } from "react-native"
 import { Gesture, GestureDetector } from "react-native-gesture-handler"
 import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
   withSpring,
-  runOnJS,
-  interpolate,
-  Extrapolation,
+  withTiming,
 } from "react-native-reanimated"
-import { getTeams, getTeamsByGender } from "@/app/actions/teams"
+import { getTeams, getTeamsByGender } from "@/lib/actions/teams"
 import type { Team } from "@/types/updated_types"
-import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore" // Updated import path
-import { useNotifications } from "@/context/notification-context" // Add notifications import
+import { colors } from "@/constants/Colors"
+import { useUserStore } from "@/hooks/userStore"
+import { useNotifications } from "@/context/notification-context"
 import AntDesign from "@expo/vector-icons/AntDesign"
 import Feather from "@expo/vector-icons/Feather"
 
@@ -32,7 +32,7 @@ interface SwipeableTeamSelectorProps {
   filterByGender?: "men" | "women" | "all"
   autoAdvance?: boolean
   autoAdvanceDelay?: number
-  overlayOnSelect?: boolean;
+  overlayOnSelect?: boolean
 }
 
 const SwipeableCard = React.memo(
@@ -48,7 +48,7 @@ const SwipeableCard = React.memo(
     onSwipePrevious,
     showFavorites,
     totalCards,
-    overlayOnSelect = false, // Destructure and default here
+    overlayOnSelect = false,
   }: {
     team: Team
     index: number
@@ -61,7 +61,7 @@ const SwipeableCard = React.memo(
     onSwipePrevious: () => void
     showFavorites: boolean
     totalCards: number
-    overlayOnSelect?: boolean // Mark as optional
+    overlayOnSelect?: boolean
   }) => {
     const translateX = useSharedValue(0)
     const translateY = useSharedValue(0)
@@ -69,11 +69,9 @@ const SwipeableCard = React.memo(
     const scale = useSharedValue(1)
     const opacity = useSharedValue(1)
 
-    // Calculate card position relative to current
     const cardOffset = index - currentIndex
     const isVisible = Math.abs(cardOffset) <= 2
 
-    // Set initial positions based on card offset
     useEffect(() => {
       if (cardOffset === 0) {
         translateX.value = withSpring(0)
@@ -92,9 +90,8 @@ const SwipeableCard = React.memo(
         translateX.value = withSpring(cardOffset < 0 ? -screenWidth : screenWidth)
         opacity.value = withTiming(0)
       }
-    }, [currentIndex, index, translateX, translateY, rotate, scale, opacity]) // Added dependencies
+    }, [currentIndex, index, translateX, translateY, rotate, scale, opacity])
 
-    // Create the pan gesture with bidirectional support
     const panGesture = Gesture.Pan()
       .onStart(() => {
         if (cardOffset !== 0) return
@@ -114,7 +111,6 @@ const SwipeableCard = React.memo(
       })
       .onEnd((event) => {
         if (cardOffset !== 0) return
-
         const shouldSwipeRight = event.translationX > SWIPE_THRESHOLD && event.velocityX > 0
         const shouldSwipeLeft = event.translationX < -SWIPE_THRESHOLD && event.velocityX < 0
 
@@ -150,50 +146,47 @@ const SwipeableCard = React.memo(
 
     if (!isVisible) return null
 
-    // Determine background color based on selection and overlay setting
-    const baseBackgroundColor =
-        isSelected && overlayOnSelect ? `${team.primaryColor}20` : colors.card;
-
-    const borderColor = isSelected ? team.primaryColor : colors.border;
+    // Only show border color when overlayOnSelect is true AND team is selected
+    const borderColor = overlayOnSelect && isSelected ? team.primaryColor : colors.border
 
     return (
       <GestureDetector gesture={panGesture}>
         <Animated.View style={[styles.cardContainer, animatedStyle]}>
-          {/* Ensure Pressable has only ONE direct child, which is a View */}
           <Pressable
-            style={styles.teamCard}
-            onPress={onPress}
+            style={[
+              styles.teamCard,
+              {
+                borderColor: borderColor,
+                borderWidth: overlayOnSelect && isSelected ? 3 : 1, // Only thick border when overlayOnSelect is true
+                backgroundColor: overlayOnSelect && isSelected ? `${team.primaryColor}08` : colors.card, // Only background tint when overlayOnSelect is true
+              },
+              overlayOnSelect && isSelected && styles.selectedTeamCard,
+            ]}
+            onPress={() => {
+              // Removed console.log for team selection
+              onPress()
+            }}
             android_ripple={{ color: "rgba(0, 0, 0, 0.1)", borderless: false }}
           >
-            {/* All content inside the Pressable should be wrapped in a single View */}
             <View style={{ flex: 1 }}>
-              {/* Team Logo Section */}
               <View style={styles.logoSection}>
                 <Image source={{ uri: team.logo }} style={styles.teamLogo} resizeMode="cover" />
-
-                {/* Selection Indicator - Show ONLY when selected and overlay is enabled */}
-                {isSelected && overlayOnSelect && (
-                  <View style={[styles.selectedIndicator, { backgroundColor: team.primaryColor }]}>
-                    <Feather name="check" size={16} color="white" />
-                  </View>
-                )}
               </View>
 
-              <View style={[
-                    styles.infoSection,
-                    {
-                    backgroundColor: baseBackgroundColor,
-                    borderColor: borderColor,
-                    borderWidth: 1, // ensure the border shows
-                    borderRadius: 8 // optional, for visual polish
-                    }
-                ]}>
+              <View style={styles.infoSection}>
                 <View style={styles.teamHeader}>
                   <View style={[styles.colorAccent, { backgroundColor: team.primaryColor }]} />
                   <View style={styles.teamDetails}>
-                    {/* Team Name Row with Heart */}
                     <View style={styles.teamNameRow}>
-                      <Text style={[styles.teamName, { color: isSelected ? team.primaryColor : colors.text }]}>
+                      <Text
+                        style={[
+                          styles.teamName,
+                          {
+                            color: overlayOnSelect && isSelected ? team.primaryColor : colors.text, // Only change color when overlayOnSelect is true
+                            fontWeight: overlayOnSelect && isSelected ? "900" : "800", // Only make bolder when overlayOnSelect is true
+                          },
+                        ]}
+                      >
                         {team.name}
                       </Text>
                       {showFavorites && (
@@ -214,13 +207,17 @@ const SwipeableCard = React.memo(
                   </View>
                 </View>
               </View>
+
+              {isSelected && overlayOnSelect && (
+                <View style={[styles.overlayEffect, { backgroundColor: `${team.primaryColor}40` }]} />
+              )}
             </View>
           </Pressable>
         </Animated.View>
       </GestureDetector>
-    );
+    )
   },
-);
+)
 
 export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
   onSelectTeam,
@@ -229,19 +226,16 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
   filterByGender = "all",
   autoAdvance = false,
   autoAdvanceDelay = 3000,
-  overlayOnSelect = false, // Default overlayOnSelect to false here
+  overlayOnSelect = false,
 }) => {
   const { preferences, toggleFavoriteTeam } = useUserStore()
   const { showSuccess, showInfo } = useNotifications()
-
-  // State
   const [teams, setTeams] = useState<Team[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([])
   const [loadingTeams, setLoadingTeams] = useState(true)
   const autoAdvanceRef = useRef<number | null>(null)
 
-  // Load teams from database
   const loadTeams = useCallback(async () => {
     try {
       setLoadingTeams(true)
@@ -263,9 +257,7 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
     }
   }, [filterByGender])
 
-  // Auto advance functionality
   useEffect(() => {
-    
     if (autoAdvance && teams.length > 1) {
       autoAdvanceRef.current = setInterval(() => {
         setCurrentIndex((prev) => (prev + 1) % teams.length)
@@ -278,7 +270,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
     }
   }, [autoAdvance, autoAdvanceDelay, teams.length])
 
-  // Navigation functions
   const goToNext = useCallback(() => {
     if (teams.length > 0) {
       setCurrentIndex((prev) => (prev + 1) % teams.length)
@@ -291,33 +282,53 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
     }
   }, [teams.length])
 
-  // Handle team selection
-  const handleSelectTeam = (team: Team) => {
-    // This logic ensures only one team can be selected at a time for this component's internal state
-    // If you need multi-select, you'd adjust this to add/remove from the array.
-    setSelectedTeamIds([team.id])
-    if (onSelectTeam) {
-      onSelectTeam(team)
-    }
-  }
+  // Fixed handleSelectTeam - no notifications for team selection
+  const handleSelectTeam = useCallback(
+    (team: Team) => {
+      setSelectedTeamIds((prevSelectedTeamIds) => {
+        const isCurrentlySelected = prevSelectedTeamIds.includes(team.id)
 
-  const handleTeamPress = (team: Team) => {
-    if (onTeamPress) {
-      onTeamPress(team)
-    } else {
+        let newSelectedIds: string[]
+        if (isCurrentlySelected) {
+          // If the tapped team is already selected, deselect it
+          newSelectedIds = []
+        } else {
+          // If the tapped team is not selected, select it (and deselect any other)
+          newSelectedIds = [team.id]
+        }
+
+        return newSelectedIds
+      })
+
+      // Always call onSelectTeam if provided
+      if (onSelectTeam) {
+        onSelectTeam(team)
+      }
+    },
+    [onSelectTeam],
+  )
+
+  // Fixed handleTeamPress - always update selection state
+  const handleTeamPress = useCallback(
+    (team: Team) => {
+      // Always update the internal selection state
       handleSelectTeam(team)
-    }
-  }
 
-  // Handle favorite toggle with notifications
+      // Also call the external onTeamPress handler if provided
+      if (onTeamPress) {
+        onTeamPress(team)
+      }
+    },
+    [handleSelectTeam, onTeamPress],
+  )
+
   const handleToggleFavorite = async (teamId: string) => {
     try {
       const team = teams.find((t) => t.id === teamId)
       const wasAlreadyFavorite = preferences.favoriteTeams.includes(teamId)
-
       await toggleFavoriteTeam(teamId)
 
-      // Show appropriate notification
+      // Show notifications for favorite actions
       if (team) {
         if (wasAlreadyFavorite) {
           showInfo("Removed from Favorites", `${team.name} has been removed from your favorite teams.`)
@@ -329,13 +340,11 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
       console.error("Error toggling favorite team:", error)
     }
   }
-  
-  // Effects
+
   useEffect(() => {
     loadTeams()
   }, [loadTeams])
 
-  // Loading state
   if (loadingTeams) {
     return (
       <View style={styles.loadingContainer}>
@@ -345,7 +354,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
     )
   }
 
-  // Empty state
   if (teams.length === 0) {
     return (
       <View style={styles.emptyState}>
@@ -362,11 +370,11 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Card Stack */}
       <View style={styles.cardStack}>
         {teams.map((team, index) => {
           const isSelected = selectedTeamIds.includes(team.id)
           const isFavorite = preferences.favoriteTeams.includes(team.id)
+
           return (
             <SwipeableCard
               key={team.id}
@@ -381,13 +389,12 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
               onSwipePrevious={goToPrevious}
               showFavorites={showFavorites}
               totalCards={teams.length}
-              overlayOnSelect={overlayOnSelect} // Pass the prop here
+              overlayOnSelect={overlayOnSelect}
             />
           )
         })}
       </View>
 
-      {/* Navigation Controls */}
       <View style={styles.navigationControls}>
         <Pressable style={styles.navButton} onPress={goToPrevious}>
           <Feather name="chevron-left" size={24} color={colors.primary} />
@@ -396,7 +403,6 @@ export const SwipeableTeamSelector: React.FC<SwipeableTeamSelectorProps> = ({
           <Text style={styles.counterText}>
             {currentIndex + 1} of {teams.length}
           </Text>
-          {/* Dots Indicator */}
           <View style={styles.dotsContainer}>
             {teams.slice(0, Math.min(teams.length, 5)).map((_, index) => {
               const dotIndex =
@@ -440,7 +446,7 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     position: "relative",
-    alignItems:"center",
+    alignItems: "center",
     marginBottom: 20,
   },
   cardContainer: {
@@ -451,9 +457,10 @@ const styles = StyleSheet.create({
   teamCard: {
     width: screenWidth * 0.8,
     height: "100%",
+    backgroundColor: colors.card,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor:colors.border,
+    borderColor: colors.border,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
@@ -462,8 +469,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   selectedTeamCard: {
-    shadowOpacity: 0.25,
-    elevation: 12,
+    shadowOpacity: 0.3,
+    elevation: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 15,
   },
   logoSection: {
     height: 180,
@@ -492,6 +502,16 @@ const styles = StyleSheet.create({
   infoSection: {
     flex: 1,
     padding: 20,
+    backgroundColor: colors.card,
+  },
+  overlayEffect: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    pointerEvents: "none",
   },
   teamHeader: {
     flexDirection: "row",
@@ -671,4 +691,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default SwipeableTeamSelector;
+export default SwipeableTeamSelector

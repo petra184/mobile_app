@@ -1,12 +1,12 @@
 "use client"
-import { View, Text, StyleSheet, Switch, Pressable, Alert, ScrollView, Image, Platform } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { useState } from "react"
-import { colors } from "@/constants/colors"
-import { useUserStore } from "@/hooks/userStore" // Corrected import path
-import { useRouter } from "expo-router"
+import { colors } from "@/constants/Colors"
+import { useUserStore } from "@/hooks/userStore"; // Corrected import path
 import Feather from "@expo/vector-icons/Feather"
 import SimpleLineIcons from "@expo/vector-icons/SimpleLineIcons"
+import { useRouter } from "expo-router"
+import { useState } from "react"
+import { Alert, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 export default function AccountSettingsScreen() {
   const router = useRouter()

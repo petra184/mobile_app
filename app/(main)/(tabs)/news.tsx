@@ -1,16 +1,16 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator, RefreshControl } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { useRouter } from "expo-router"
-import { colors } from "@/constants/colors"
-import { getAllNews, getNewsByTeam, searchNews } from "@/app/actions/news"
-import { getTeams } from "@/app/actions/teams"
-import type { Team, NewsArticle } from "@/types/updated_types"
-import { EnhancedDropdown } from "@/components/ui/new_dropdown"
 import { NewsCard } from "@/components/news/NewsCard"
+import { EnhancedDropdown } from "@/components/ui/new_dropdown"
+import { colors } from "@/constants/Colors"
+import { getAllNews, getNewsByTeam, searchNews } from "@/lib/actions/news"
+import { getTeams } from "@/lib/actions/teams"
+import type { NewsArticle, Team } from "@/types/updated_types"
 import { Feather } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
+import { useEffect, useMemo, useState } from "react"
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 export default function NewsScreen() {
   const router = useRouter()

@@ -1,15 +1,15 @@
 "use client"
-import type React from "react"
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, Linking, Dimensions, FlatList } from "react-native"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
+import { getTeamPhotos } from "@/lib/actions/teams"
 import type { Team } from "@/types/updated_types"
-import { getTeamPhotos } from "@/app/actions/teams"
 import { Feather } from "@expo/vector-icons"
-import Animated, { FadeInDown, withTiming, withSpring, useAnimatedStyle, useSharedValue } from "react-native-reanimated"
 import AntDesign from "@expo/vector-icons/AntDesign"
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
-import { useState, useEffect, useRef } from "react"
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import type React from "react"
+import { useEffect, useRef, useState } from "react"
+import { Dimensions, FlatList, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated"
 
 const { width: screenWidth } = Dimensions.get("window")
 

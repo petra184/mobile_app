@@ -1,23 +1,22 @@
 "use client"
 
-import { View, Text, StyleSheet, ScrollView, Image, Pressable, ActivityIndicator, Alert } from "react-native"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { SafeAreaView } from "react-native-safe-area-context"
-import { colors } from "@/constants/colors"
-import type { Game, Team } from "@/types/updated_types"
-import Feather from "@expo/vector-icons/Feather"
-import { Linking } from "react-native"
-import Animated, { FadeInDown } from "react-native-reanimated"
-import { useState, useEffect, useCallback } from "react" // Added useCallback
-import { getGameById } from "@/app/actions/games"
-import { getTeamById } from "@/app/actions/teams"
+import { colors } from "@/constants/Colors"
 import { useNotifications } from "@/context/notification-context"
-import { LinearGradient } from "expo-linear-gradient"
-import Ionicons from "@expo/vector-icons/Ionicons"
-import { StatusBar } from "expo-status-bar"
+import { getGameById } from "@/lib/actions/games"
+import { getTeamById } from "@/lib/actions/teams"
 import { supabase } from "@/lib/supabase"
+import type { Game, Team } from "@/types/updated_types"
 import { MaterialCommunityIcons } from "@expo/vector-icons"
+import Feather from "@expo/vector-icons/Feather"
+import Ionicons from "@expo/vector-icons/Ionicons"
+import { LinearGradient } from "expo-linear-gradient"
+import { useLocalSearchParams, useRouter } from "expo-router"
+import { StatusBar } from "expo-status-bar"
 import * as WebBrowser from "expo-web-browser"
+import { useCallback, useEffect, useState } from "react"; // Added useCallback
+import { ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import Animated, { FadeInDown } from "react-native-reanimated"
+import { SafeAreaView } from "react-native-safe-area-context"
 
 // Type for news story
 type NewsStory = {

@@ -1,14 +1,14 @@
 "use client"
-import type React from "react"
-import { useMemo, useCallback } from "react"
-import { View, Text, StyleSheet, Image, ActivityIndicator, SectionList } from "react-native"
-import { useRouter } from "expo-router"
-import { colors } from "@/constants/colors"
-import type { Game } from "@/types/updated_types"
 import { GameCard } from "@/components/games/new_game_card"
-import Animated, { FadeInDown } from "react-native-reanimated"
-import { Feather } from "@expo/vector-icons"
+import { colors } from "@/constants/Colors"
 import { useNotifications } from "@/context/notification-context"
+import type { Game } from "@/types/updated_types"
+import { Feather } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
+import type React from "react"
+import { useCallback, useMemo } from "react"
+import { ActivityIndicator, Image, SectionList, StyleSheet, Text, View } from "react-native"
+import Animated, { FadeInDown } from "react-native-reanimated"
 
 interface ScheduleTabProps {
   games: Game[]

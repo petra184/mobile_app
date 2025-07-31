@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase"
 import { formatTimeString } from "@/utils/dateUtils"
-import { colors } from "@/constants/colors"
+import { colors } from "@/constants/Colors"
 import type {GameScheduleRow, OpposingTeamRow, TeamsRow, Game, Team} from "@/types/updated_types"
 import { getGameTimings } from "@/utils/time"
 
